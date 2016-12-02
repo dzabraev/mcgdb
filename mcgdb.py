@@ -9,15 +9,15 @@ import re
 import errno
 
 class window_type:
-  main_mc_window = "main_mc_window"
-  mc_window      = "mc_window"
+  MCGDB_MAIN_WINDOW     = "mcgdb_main_window"
+  MCGDB_SOURCE_WINDOW   = "mcgdb_source_window"
 
 
 gdb_listen_port=None
 stop_event_loop_flag=False
 local_w_fd=None #В этот дескриптор можно писать команды из gdb
 event_thread=None #данный поток обрабатывает команды из окон с mcedit и из gdb
-PATH_TO_MC="~/bin/mcedit"
+PATH_TO_MC="/home/dza/bin/mcedit"
 window_queue=[]
 
 FP={
@@ -50,16 +50,22 @@ def recv_cmd(fd):
   return (cmd,args)
 
 def cmd_mouse_click(entities,fd,args):
-  gdb.post_event(lambda : gdb.execute("echo mouse click in mc\n"))
+  gdb_print("echo mouse click in mc\n")
 
-def cmd_open_main_mc(entities,fd,args):
-  window_queue.append(window_type.main_window_mc)
+def cmd_mcgdb_main_window(entities,fd,args):
+  window_queue.append({
+    'type':window_type.MCGDB_MAIN_WINDOW,
+  })
   gdb_print("echo open main mc command\n")
   os.system('gnome-terminal -e "{path_to_mc} --gdb-port={gdb_port}"'.format(
     path_to_mc=PATH_TO_MC,gdb_port=gdb_listen_port))
 
-def cmd_open_mc(entities,fd,args):
-  window_queue.append(window_type.window_mc)
+def cmd_mcgdb_source_window(entities,fd,args):
+  window_queue.append({
+    'type':window_type.MCGDB_SOURCE_WINDOW,
+    'filename':args[0],
+    'line':args[1],
+  })
   gdb_print("echo open mc command\n")
 
 def fetch_and_process_command(entities,fd,cmds):
@@ -67,7 +73,7 @@ def fetch_and_process_command(entities,fd,cmds):
   try:
     callback=cmds[cmd]
   except KeyError:
-    gdb.post_event(lambda : gdb.execute("echo bad command: `{}`\n".format(cmd)))
+    gdb_print("echo bad command: `{}`\n".format(cmd))
     return
   return callback(entities,fd,args)
 
@@ -176,10 +182,10 @@ def cmd_terminate_event_loop(entities,fd,cmds):
 
 def process_command_from_gdb(entities,fd):
   cmds={
-    'open_main_mc': cmd_open_main_mc,
-    'open_mc':      cmd_open_mc,
-    'check_frame':  cmd_check_frame,
-    'terminate':    cmd_terminate_event_loop,
+    'mcgdb_main_window':    cmd_mcgdb_main_window,
+    'mcgdb_source_window':  cmd_mcgdb_source_window,
+    'check_frame':          cmd_check_frame,
+    'terminate':            cmd_terminate_event_loop,
   }
   return fetch_and_process_command(entities,fd,cmds)
 
@@ -192,30 +198,38 @@ def process_command_from_mc(entities,fd):
 
 def new_connection(entities,fd):
   actions={
-    'main_window_mc':process_command_from_mc,
+    window_type.MCGDB_MAIN_WINDOW:  process_command_from_mc,
+    window_type.MCGDB_SOURCE_WINDOW:process_command_from_mc,
   }
   lsock=entities[fd]['sock']
   conn,addr=lsock.accept()
-  cmd,args=recv_cmd(conn.fileno())
-  if len(args)==0:
-    gdb.post_event(lambda : \
-      gdb.execute("echo bad args received in `new_connection`\nconnection discard\n args:{}\n".format(args)))
-    return
-  if cmd=='worker_type':
-    wtype=args[0]
-    if wtype not in ('main_window_mc',):
-      gdb.post_event(lambda : \
-        gdb.execute("echo bad args received in `new_connection`\nconnection discard\n args:{}\n".format(args)))
-      return
-    entities[conn.fileno()]={
-      'type':wtype,
+  wt=window_queue.pop(0)
+  cmd='set_window_type:{};'.format(wt['type'])
+  if wt['type']==window_type.MCGDB_MAIN_WINDOW:
+    filename=FP['filename']
+    line=FP['filename']
+  elif wt['type']==window_type.MCGDB_SOURCE_WINDOW:
+    filename=wt['filename']
+    line=wt['line']
+  if filename:
+    cmd+='fopen:{fname},{line};'.format(
+      fname=filename,
+      line=line
+    )
+    if FP['filename']==filename:
+      cmd+='mark:{line};'.format(
+        filename=FP['filename'],
+        line=FP['line']
+      )
+  newfd=conn.fileno()
+  os.write(newfd,cmd)
+  entities[newfd]={
+      'type':wt['type'],
       'sock':conn,
-      'action':actions[wtype]
-    }
-    gdb.post_event(lambda : gdb.execute("echo new worker type:{}\n".format(wtype)))
-  else:
-    gdb.post_event(lambda : \
-      gdb.execute("echo bad cmd received in `new_connection`\nconnection discard\n cmd:{}\n".format(cmd)))
+      'action':actions[wt['type']]
+  }
+  gdb_print("echo new worker type:{}\n".format(wt['type']))
+  
 
 def event_loop(lsock,local_r_fd):
   listen_fd=lsock.fileno()
@@ -281,12 +295,12 @@ def check_frame():
   command='check_frame:;'
   os.write(local_w_fd,command)
 
-def open_main_mc():
-  command='open_main_mc:;'
+def mcgdb_main_window():
+  command='mcgdb_main_window:;'
   os.write(local_w_fd,command)
 
-def open_mc(filename):
-  command='open_mc:{fname};'.format(fname=filename)
+def mcgdb_source_window(filename,line=0):
+  command='mcgdb_source_window:{fname},{line};'.format(fname=filename,line=line)
   os.write(local_w_fd,command)
 
 

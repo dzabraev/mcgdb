@@ -11,7 +11,14 @@ enum gdb_cmd {
   MCGDB_GOTO,
   MCGDB_FOPEN,
   MCGDB_FCLOSE,
-  MCGDB_SHOW_LINE_NUMBERS
+  MCGDB_SHOW_LINE_NUMBERS,
+  MCGDB_SET_WINDOW_TYPE
+};
+
+enum window_type {
+  MCGDB_UNKNOWN_WINDOW_TYPE=0,
+  MCGDB_MAIN_WINDOW,
+  MCGDB_SOURCE_WINDOW
 };
 
 #define MCGDB_OK 0
@@ -25,6 +32,7 @@ struct gdb_action {
   char   *filename;
 };
 
+void mcgdb_error(void);
 
 static inline int write_all(int fd, const void *buf, size_t count)
 {

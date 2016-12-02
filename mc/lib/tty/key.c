@@ -1385,8 +1385,8 @@ init_key (void)
 void
 init_key_input_fd (void)
 {
+  open_gdb_input_fd();
 #ifdef HAVE_SLANG
-    gdb_input_fd = open_gdb_input_fd();
     input_fd = SLang_TT_Read_FD;
 #endif
 }
