@@ -8,9 +8,18 @@ import sys
 import re
 import errno
 
+class window_type:
+  main_mc_window = "main_mc_window"
+  mc_window      = "mc_window"
+
+
+gdb_listen_port=None
 stop_event_loop_flag=False
 local_w_fd=None #В этот дескриптор можно писать команды из gdb
 event_thread=None #данный поток обрабатывает команды из окон с mcedit и из gdb
+PATH_TO_MC="~/bin/mcedit"
+window_queue=[]
+
 FP={
   'filename':   None,
   'line':       None,
@@ -20,7 +29,7 @@ class CommandReadFailure(Exception): pass
 class StopEventThread(Exception): pass
 
 def get_available_port():
-  return 9090
+  return 9091
 
 def gdb_print(msg):
   #thread safe
@@ -44,10 +53,14 @@ def cmd_mouse_click(entities,fd,args):
   gdb.post_event(lambda : gdb.execute("echo mouse click in mc\n"))
 
 def cmd_open_main_mc(entities,fd,args):
-  gdb.post_event(lambda : gdb.execute("echo open main mc command\n"))
+  window_queue.append(window_type.main_window_mc)
+  gdb_print("echo open main mc command\n")
+  os.system('gnome-terminal -e "{path_to_mc} --gdb-port={gdb_port}"'.format(
+    path_to_mc=PATH_TO_MC,gdb_port=gdb_listen_port))
 
 def cmd_open_mc(entities,fd,args):
-  gdb.post_event(lambda : gdb.execute("echo open mc command\n"))
+  window_queue.append(window_type.window_mc)
+  gdb_print("echo open mc command\n")
 
 def fetch_and_process_command(entities,fd,cmds):
   cmd,args=recv_cmd(fd)
@@ -217,7 +230,7 @@ def event_loop(lsock,local_r_fd):
     if len(rfds)==0:
       #nothing to be doing
       return
-    timeout=10
+    timeout=0.1
     #timeout ставится чтобы проверять, нужно ли останавливать этот цикл
     try:
       fds=select.select(rfds,[],[],timeout)
@@ -249,8 +262,9 @@ def stop_event_loop():
     event_thread=None
 
 def mc():
-  global local_w_fd,event_thread
+  global local_w_fd,event_thread,gdb_listen_port
   port=get_available_port()
+  gdb_listen_port=port
   lsock=socket.socket()
   lsock.bind( ('',port) )
   lsock.listen(1)
@@ -271,8 +285,8 @@ def open_main_mc():
   command='open_main_mc:;'
   os.write(local_w_fd,command)
 
-def open_mc():
-  command='open_mc:;'
+def open_mc(filename):
+  command='open_mc:{fname};'.format(fname=filename)
   os.write(local_w_fd,command)
 
 
