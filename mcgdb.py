@@ -20,10 +20,13 @@ event_thread=None #данный поток обрабатывает команд
 PATH_TO_MC="/home/dza/bin/mcedit"
 window_queue=[]
 
-FP={
-  'filename':   None,
-  'line':       None,
-}
+class _FP(object):
+  fnew=None
+  fold=None
+  lnew=None
+  lold=None
+
+FP=_FP()
 
 class CommandReadFailure(Exception): pass
 class StopEventThread(Exception): pass
@@ -111,7 +114,7 @@ def get_abspath(filename):
   return abspath
 
 
-def process_file_location():
+def update_FP():
   #Данную функцию можно вызывать только из main pythread или
   #через функцию exec_in_main_pythread
   global FP
@@ -126,7 +129,14 @@ def process_file_location():
     line=frame.find_sal().line-1
   except gdb.exceptions.AttributeError:
     #maybe inferior exited
-    return
+    filename=None
+    line=None
+  FP.fold=FP.fnew
+  FP.fnew=filename
+  FP.lold=FP.lnew
+  FP.lnew=line
+
+  '''
   msg=''
   if FP['filename']!=filename:
     if FP['filename']!=None:
@@ -147,7 +157,7 @@ def process_file_location():
     return msg
   else:
     return None
-
+  '''
 
 def cmd_check_frame(entities,fd,args):
   # Нужно изменить файл и/или позицию в файле
@@ -162,16 +172,28 @@ def cmd_check_frame(entities,fd,args):
   for fd in entities:
     entity=entities[fd]
     gdb_print('TYPE:`{}`\n'.format(entity['type']))
-    if entity['type']=='main_window_mc':
+    if entity['type']==window_type.MCGDB_MAIN_WINDOW:
       main_mc_window_fd=fd
-    elif entity['type']=='mc_window':
+    elif entity['type']==window_type.MCGDB_SOURCE_WINDOW:
       mc_windows_fds.append(fd)
+  exec_in_main_pythread(update_FP,())
   if main_mc_window_fd!=None:
-    gdb_print('THIS\n')
-    msgs=exec_in_main_pythread(process_file_location,())
-    gdb_print('MESSAGES {}\n'.format(msgs))
-    if msgs and msgs!='':
-      os.write(main_mc_window_fd,msgs)
+    msg=''
+    if FP.fnew and FP.fnew!=FP.fold:
+      if FP.lold:
+        msg+='unmark:{line};'.format(line=FP.lold)
+      if FP.fold:
+        msg+='fclose:;'
+      msg+='fopen:{fname},{line};'.format(fname=FP.fnew,line=FP.lnew)
+      msg+='mark:{line};'.format(line=FP.lnew)
+    elif FP.lnew and FP.lnew!=FP.lold:
+      if FP.lold:
+        msg+='unmark:{line};'.format(line=FP.lold)
+      msg+='mark:{line};'.format(line=FP.lnew)
+      msg+='goto:{line};'.format(line=FP.lnew)
+    gdb_print('MESSAGES {}\n'.format(msg))
+    if msg and msg!='':
+      os.write(main_mc_window_fd,msg)
   for fd in mc_windows_fds:
     pass
 
@@ -206,8 +228,8 @@ def new_connection(entities,fd):
   wt=window_queue.pop(0)
   cmd='set_window_type:{};'.format(wt['type'])
   if wt['type']==window_type.MCGDB_MAIN_WINDOW:
-    filename=FP['filename']
-    line=FP['filename']
+    filename=FP.fnew
+    line=FP.lnew
   elif wt['type']==window_type.MCGDB_SOURCE_WINDOW:
     filename=wt['filename']
     line=wt['line']
@@ -216,11 +238,9 @@ def new_connection(entities,fd):
       fname=filename,
       line=line
     )
-    if FP['filename']==filename:
-      cmd+='mark:{line};'.format(
-        filename=FP['filename'],
-        line=FP['line']
-      )
+    if FP.fnew==filename:
+      cmd+='mark:{line};'.format(line=FP.lnew)
+      cmd+='goto:{line};'.format(line=FP.lnew)
   newfd=conn.fileno()
   os.write(newfd,cmd)
   entities[newfd]={
@@ -277,10 +297,11 @@ def stop_event_loop():
 
 def mc():
   global local_w_fd,event_thread,gdb_listen_port
-  port=get_available_port()
-  gdb_listen_port=port
+  #port=get_available_port()
   lsock=socket.socket()
-  lsock.bind( ('',port) )
+  lsock.bind( ('',0) )
+  port=lsock.getsockname()[1]
+  gdb_listen_port=port
   lsock.listen(1)
   gdb.execute('echo gdb listen port:{}\n'.format(port))
   local_r_fd,local_w_fd=os.pipe()

@@ -18,7 +18,7 @@ enum window_type mcgdb_wtype; /*temporary unused*/
 
 
 static void
-read_bytes_from_gdb(char *buf, char stop_char);
+read_bytes_from_gdb(char *buf, char stop_char, size_t size);
 
 static void
 parse_action_from_gdb(struct gdb_action * act);
@@ -34,7 +34,7 @@ get_command_num(const char *command);
 
 void
 mcgdb_error(void) {
-  exit(EXIT_FAILURE);
+  abort();
 }
 
 static enum window_type
@@ -57,12 +57,12 @@ int open_gdb_input_fd(void) {
   enum gdb_cmd cmd;
   if(mcgdb_listen_port==0) {
     printf("you must specify `--gdb-port port`\n");
-    exit(EXIT_FAILURE);
+    mcgdb_error();
   }
   sockfd = socket(AF_INET, SOCK_STREAM, 0);
   if (sockfd < 0) {
     perror("ERROR opening socket");
-    exit(EXIT_FAILURE);
+    mcgdb_error();
   }
   memset(&serv_addr, 0, sizeof(serv_addr)); 
   serv_addr.sin_family=AF_INET;
@@ -70,20 +70,20 @@ int open_gdb_input_fd(void) {
   serv_addr.sin_port=htons(mcgdb_listen_port);
   if( connect(sockfd,(struct sockaddr *)&serv_addr,sizeof(serv_addr)) < 0) {
     perror("ERROR connect");
-    exit(EXIT_FAILURE);
+    mcgdb_error();
   }
   gdb_input_fd=sockfd;
   while (1) {
     bzero(buf,sizeof(buf));
-    read_bytes_from_gdb(buf,':');
+    read_bytes_from_gdb(buf,':',sizeof(buf));
     cmd=get_command_num(buf);
     if(cmd!=MCGDB_SET_WINDOW_TYPE) {
       printf("bad command received: `%s`\n",buf);
-      read_bytes_from_gdb(buf,';');
+      read_bytes_from_gdb(buf,';',sizeof(buf));
       continue;
     }
     else {
-      read_bytes_from_gdb(buf,';');
+      read_bytes_from_gdb(buf,';',sizeof(buf));
       mcgdb_wtype=get_win_type(buf);
       if(mcgdb_wtype==MCGDB_UNKNOWN_WINDOW_TYPE) {
         continue;
@@ -100,21 +100,29 @@ int open_gdb_input_fd(void) {
 
 
 static void
-read_bytes_from_gdb(char *buf, char stop_char) {
+read_bytes_from_gdb(char *buf, char stop_char, size_t size) {
   int rc;
+  size_t l=0;
   while(1) {
-    rc=read(gdb_input_fd,buf,1);
-    if(rc<0) {
-      perror("read");
-      exit(EXIT_FAILURE);
+    if(l==size-1) {
+      *buf=0;
+      return;
     }
-    if(rc==0 && errno==EINTR) { // todo: maybe -1?
-      continue;
+    rc=read(gdb_input_fd,buf,1);
+    if(rc<=0) {
+      if(errno==EINTR) {
+        continue;
+      }
+      else {
+        perror("read");
+        mcgdb_error();
+      }
     }
     if( (*buf)==stop_char ) {
       *buf=0;
       return;
     }
+    l++;
     buf++;
   }
 }
@@ -156,24 +164,24 @@ parse_action_from_gdb(struct gdb_action * act) {
   // fopen:filename;
   static char command[100],argstr[100],argstr2[100];
   int cmd;
-  read_bytes_from_gdb(command,':');
+  read_bytes_from_gdb(command,':',sizeof(command));
   cmd=get_command_num(command);
   act->command=cmd;
   switch(cmd) {
     case MCGDB_MARK:
     case MCGDB_UNMARK:
     case MCGDB_GOTO:
-      read_bytes_from_gdb(argstr,';');
+      read_bytes_from_gdb(argstr,';',sizeof(argstr));
       act->line=atoi(argstr);
       break;
     case MCGDB_FOPEN:
-      read_bytes_from_gdb(argstr,',');
+      read_bytes_from_gdb(argstr,',',sizeof(argstr));
       act->filename=argstr;
-      read_bytes_from_gdb(argstr2,';');
+      read_bytes_from_gdb(argstr2,';',sizeof(argstr));
       act->line=atoi(argstr2);
       break;
     default:
-      read_bytes_from_gdb(argstr,';');/*remove ';' from stream*/
+      read_bytes_from_gdb(argstr,';',sizeof(argstr));/*remove ';' from stream*/
   }
 }
 
