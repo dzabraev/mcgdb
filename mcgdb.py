@@ -27,7 +27,7 @@ class DebugPrint(object):
   mcgdb_communicate_protocol=3
 
 verbose=[
-  DebugPrint.mcgdb_communicate_protocol,
+#  DebugPrint.mcgdb_communicate_protocol,
 ] # Данный массив используется для регулирования
 #отладочного вывода. Данный массив должен заполняться
 # свойствами класса DebugPrint
@@ -66,6 +66,8 @@ def recv_cmd(fd):
     except IOError as e:
       if e.errno == errno.EINTR:
         continue
+      else:
+        raise CommandReadFailure
     if len(b)==0:
       raise CommandReadFailure
     if b==';':
@@ -193,6 +195,8 @@ def cmd_check_frame(entities,fd,args):
       #позицию исполнения(отмеченную строку) в mcedit
       if FP.lold:
         cmd_for_main_window+='unmark:{line};'.format(line=FP.lold)
+      if FP.fold:
+        cmd_for_main_window+='fclose:;'
     if FP.fnew and FP.fnew!=FP.fold:
       if FP.lold:
         cmd_for_main_window+='unmark:{line};'.format(line=FP.lold)
@@ -214,7 +218,8 @@ def cmd_check_frame(entities,fd,args):
 
 
 def cmd_terminate_event_loop(entities,fd,cmds):
-  gdb_print('event loop stopped\n')
+  if DebugPrint.called in verbose:
+    gdb_print('called cmd_terminate_event_loop\n')
   sys.exit(0)
 
 def process_command_from_gdb(entities,fd):
