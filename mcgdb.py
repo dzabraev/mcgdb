@@ -183,23 +183,28 @@ def cmd_check_frame(entities,fd,args):
       mc_windows_fds.append(fd)
   exec_in_main_pythread(update_FP,())
   if main_mc_window_fd!=None:
-    msg=''
+    cmd_for_main_window=''
+    if not FP.fnew:
+      #Новый файл отсутствует. Возможно исполнение
+      #отлаживаемой программы завершилось. Необходимо убрать
+      #позицию исполнения(отмеченную строку) в mcedit
+      cmd_for_main_window+='unmark:{line};'.format(line=FP.lold)
     if FP.fnew and FP.fnew!=FP.fold:
       if FP.lold:
-        msg+='unmark:{line};'.format(line=FP.lold)
+        cmd_for_main_window+='unmark:{line};'.format(line=FP.lold)
       if FP.fold:
-        msg+='fclose:;'
-      msg+='fopen:{fname},{line};'.format(fname=FP.fnew,line=FP.lnew)
-      msg+='mark:{line};'.format(line=FP.lnew)
+        cmd_for_main_window+='fclose:;'
+      cmd_for_main_window+='fopen:{fname},{line};'.format(fname=FP.fnew,line=FP.lnew)
+      cmd_for_main_window+='mark:{line};'.format(line=FP.lnew)
     elif FP.lnew and FP.lnew!=FP.lold:
       if FP.lold:
-        msg+='unmark:{line};'.format(line=FP.lold)
-      msg+='mark:{line};'.format(line=FP.lnew)
-      msg+='goto:{line};'.format(line=FP.lnew)
+        cmd_for_main_window+='unmark:{line};'.format(line=FP.lold)
+      cmd_for_main_window+='mark:{line};'.format(line=FP.lnew)
+      cmd_for_main_window+='goto:{line};'.format(line=FP.lnew)
     if DebugPrint.mcgdb_communicate_protocol in verbose:
-      gdb_print('MESSAGES {}\n'.format(msg))
-    if msg and msg!='':
-      os.write(main_mc_window_fd,msg)
+      gdb_print('MESSAGES {}\n'.format(cmd_for_main_window))
+    if cmd_for_main_window and cmd_for_main_window!='':
+      os.write(main_mc_window_fd,cmd_for_main_window)
   for fd in mc_windows_fds:
     pass
 
