@@ -18,7 +18,9 @@ stop_event_loop_flag=False
 local_w_fd=None #В этот дескриптор можно писать команды из gdb
 event_thread=None #данный поток обрабатывает команды из окон с mcedit и из gdb
 PATH_TO_MC="/home/dza/bin/mcedit"
+PATH_TO_DEFINES_MCGDB="~/bin/defines-mcgdb.gdb"
 window_queue=[]
+verbose=0
 
 class _FP(object):
   fnew=None
@@ -41,11 +43,15 @@ def gdb_print(msg):
 def recv_cmd(fd):
   data=''
   while True:
-    b=os.read(fd,1)
-    if b==';':
-      break
+    try:
+      b=os.read(fd,1)
+    except IOError as e:
+      if e.errno == errno.EINTR:
+        continue
     if len(b)==0:
       raise CommandReadFailure
+    if b==';':
+      break
     data+=b
   sp=data.split(':')
   cmd=sp[0]
@@ -56,6 +62,12 @@ def cmd_mouse_click(entities,fd,args):
   gdb_print("echo mouse click in mc\n")
 
 def cmd_mcgdb_main_window(entities,fd,args):
+  #chech whether main_window exists
+  for entity_fd in entities:
+    entity=entities[entity_fd]
+    if entity['type']==window_type.MCGDB_MAIN_WINDOW:
+      gdb_print('main window already exists\n')
+      return
   window_queue.append({
     'type':window_type.MCGDB_MAIN_WINDOW,
   })
@@ -136,28 +148,6 @@ def update_FP():
   FP.lold=FP.lnew
   FP.lnew=line
 
-  '''
-  msg=''
-  if FP['filename']!=filename:
-    if FP['filename']!=None:
-      msg+='fclose:;'
-    msg+='fopen:{filename},{line};'.format(
-      filename=filename,
-      line=line,
-    )
-    msg+='mark:{line};'.format(line=line)
-  elif FP['line']!=line:
-    msg+='goto:{line};'.format(line=line)
-    if FP['line']:
-      msg+='unmark:{line};'.format(line=FP['line'])
-    msg+='mark:{line};'.format(line=line)
-  FP['filename']=filename
-  FP['line']=line
-  if msg!='':
-    return msg
-  else:
-    return None
-  '''
 
 def cmd_check_frame(entities,fd,args):
   # Нужно изменить файл и/или позицию в файле
@@ -281,6 +271,7 @@ def event_loop(lsock,local_r_fd):
       except SystemExit:
         raise
       except CommandReadFailure:
+        #if read return 0 => connection was closed.
         entities.pop(fd)
       except:
         #something is bad
@@ -307,7 +298,7 @@ def mc():
   local_r_fd,local_w_fd=os.pipe()
   event_thread=threading.Thread(target=event_loop,args=(lsock,local_r_fd))
   event_thread.start()
-  gdb.execute('source defines-mcgdb.gdb')
+  gdb.execute('source {}'.format(PATH_TO_DEFINES_MCGDB))
   gdb.events.stop.connect( lambda x:check_frame() )
   #gdb.events.exited.connect(stop_event_loop)
 
