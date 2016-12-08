@@ -38,7 +38,11 @@ def get_available_port():
 
 def gdb_print(msg):
   #thread safe
+  if msg[-1]=='\n':
+   msg=msg[:-1]
+  msg='\n{origmsg}\n{prompt}'.format(origmsg=msg,prompt=gdb.parameter("prompt"))
   gdb.post_event(lambda : gdb.write(msg))
+
 
 def recv_cmd(fd):
   data=''
@@ -59,7 +63,7 @@ def recv_cmd(fd):
   return (cmd,args)
 
 def cmd_mouse_click(entities,fd,args):
-  gdb_print("echo mouse click in mc\n")
+  gdb_print("mouse click in mc\n")
 
 def cmd_mcgdb_main_window(entities,fd,args):
   #chech whether main_window exists
@@ -238,7 +242,7 @@ def new_connection(entities,fd):
       'sock':conn,
       'action':actions[wt['type']]
   }
-  gdb_print("echo new worker type:{}\n".format(wt['type']))
+  gdb_print("new worker type:{}\n".format(wt['type']))
   
 
 def event_loop(lsock,local_r_fd):
