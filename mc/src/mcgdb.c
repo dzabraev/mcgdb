@@ -132,6 +132,9 @@ get_command_num(const char *command) {
   if(!strncmp(command,"mark",strlen("mark"))) {
     return MCGDB_MARK;
   }
+  else if(!strncmp(command,"unmark_all",strlen("unmark_all"))) {
+    return MCGDB_UNMARK_ALL;
+  }
   else if(!strncmp(command,"unmark",strlen("unmark"))) {
     return MCGDB_UNMARK;
   }
@@ -150,9 +153,6 @@ get_command_num(const char *command) {
   else if(!strncmp(command,"set_window_type",strlen("set_window_type"))) {
     return MCGDB_SET_WINDOW_TYPE;
   }
-  else if(!strncmp(command,"unmark_all",strlen("unmark_all"))) {
-    return MCGDB_UNMARK_ALL;
-  }
   else {
     return MCGDB_UNKNOWN;
   }
@@ -166,7 +166,7 @@ parse_action_from_gdb(struct gdb_action * act) {
   // goto:lineno;
   // fopen:filename;
   static char command[100],argstr[100],argstr2[100];
-  int cmd;
+  enum gdb_cmd cmd;
   read_bytes_from_gdb(command,':',sizeof(command));
   cmd=get_command_num(command);
   act->command=cmd;
@@ -201,6 +201,7 @@ process_action_from_gdb(WDialog * h, struct gdb_action * act) {
       break;
     case MCGDB_UNMARK_ALL:
       book_mark_flush( find_editor(h), -1);
+      break;
     case MCGDB_FOPEN:
       edit_file(vfs_path_build_filename(act->filename, (char *) NULL),act->line);
       //TODO нужно ли очищать vfs_path ?

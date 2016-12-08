@@ -27,7 +27,7 @@ class DebugPrint(object):
   mcgdb_communicate_protocol=3
 
 verbose=[
-#  DebugPrint.mcgdb_communicate_protocol,
+  #DebugPrint.mcgdb_communicate_protocol,
 ] # Данный массив используется для регулирования
 #отладочного вывода. Данный массив должен заполняться
 # свойствами класса DebugPrint
@@ -68,6 +68,8 @@ def recv_cmd(fd):
         continue
       else:
         raise CommandReadFailure
+    except OSError:
+      raise CommandReadFailure
     if len(b)==0:
       raise CommandReadFailure
     if b==';':
@@ -203,6 +205,10 @@ def cmd_check_frame(entities,fd,args):
       if FP.fold:
         cmd_for_main_window+='fclose:;'
       cmd_for_main_window+='fopen:{fname},{line};'.format(fname=FP.fnew,line=FP.lnew)
+      cmd_for_main_window+='unmark_all:;' #Нужно очищать bookmark сразу после открытия файла,
+      #поскольку может быть ситуация, когда редактор мог быть закрыт не из gdb.
+      #И при закрытии mcedit может запомнить bookmark. И при повторном открытии файла
+      #будет лишняя отмеченная строка.
       cmd_for_main_window+='mark:{line};'.format(line=FP.lnew)
     elif FP.lnew and FP.lnew!=FP.lold:
       if FP.lold:
@@ -259,6 +265,7 @@ def new_connection(entities,fd):
       fname=filename,
       line=line
     )
+    cmd_for_main_window+='unmark_all:;'
     if FP.fnew==filename:
       cmd+='mark:{line};'.format(line=FP.lnew)
       cmd+='goto:{line};'.format(line=FP.lnew)
