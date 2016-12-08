@@ -239,6 +239,9 @@ void
 mcgdb_send_mouse_event_to_gdb(WDialog * h, Gpm_Event * event) {
   static char lb[512];
   WEdit *edit=find_editor(h);
-  sprintf(lb,"mouse_click:%s,%d,%d;",edit_get_file_name(edit),event->x,event->y-1);
+  sprintf(lb,"mouse_click:%s,%d,%d;",
+    edit_get_file_name(edit),
+    event->x -1 - edit->start_col,
+    event->y -1 + edit->start_line);
   write_all(gdb_input_fd,lb,strlen(lb));
 }
