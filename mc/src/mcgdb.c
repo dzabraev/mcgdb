@@ -8,6 +8,7 @@
 #include "lib/tty/tty-slang.h"
 #include "lib/tty/key.h"
 #include "lib/skin.h"
+#include "src/editor/editwidget.h"
 
 #include "src/mcgdb.h"
 
@@ -193,7 +194,6 @@ process_action_from_gdb(WDialog * h, struct gdb_action * act) {
   int alt0;
   Widget *wh;
   WEdit *edit = find_editor(h);
-  long line;
   switch(act->command) {
     case MCGDB_MARK:
       book_mark_insert( edit, act->line, BOOK_MARK_COLOR);
@@ -235,13 +235,34 @@ mcgdb_action_from_gdb(WDialog * h) {
   return process_action_from_gdb(h,&act);
 }
 
+static const char *
+stringify_click_type(Gpm_Event * event) {
+  static char buf[512];
+  size_t len=0;
+  buf[0]=0;
+# define APPEND_EVT(EVT)  if( event->type&EVT ) { len+=sprintf(buf+len, #EVT "|"); }
+  APPEND_EVT(GPM_MOVE);
+  APPEND_EVT(GPM_DRAG);
+  APPEND_EVT(GPM_DOWN);
+  APPEND_EVT(GPM_UP);
+  APPEND_EVT(GPM_SINGLE);
+  APPEND_EVT(GPM_DOUBLE);
+  APPEND_EVT(GPM_TRIPLE);
+  APPEND_EVT(GPM_MFLAG);
+  APPEND_EVT(GPM_HARD);
+# undef APPEND_EVT
+  buf[len-1]=0;
+  return buf;
+}
+
 void
 mcgdb_send_mouse_event_to_gdb(WDialog * h, Gpm_Event * event) {
   static char lb[512];
   WEdit *edit=find_editor(h);
-  sprintf(lb,"mouse_click:%s,%d,%d;",
+  sprintf(lb,"mouse_click:%s,%li,%li,%s;",
     edit_get_file_name(edit),
     event->x -1 - edit->start_col,
-    event->y -1 + edit->start_line);
+    event->y -1 + edit->start_line,
+    stringify_click_type(event));
   write_all(gdb_input_fd,lb,strlen(lb));
 }

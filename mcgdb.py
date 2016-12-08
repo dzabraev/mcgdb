@@ -80,9 +80,46 @@ def recv_cmd(fd):
   args=sp[1].split(',')
   return (cmd,args)
 
+def get_bp_location(bp):
+  location=bp.location
+  locs=exec_in_main_pythread(gdb.decode_line, (location,))[1]
+  locations=[]
+  if locs:
+    for loc in locs:
+      line=int(loc.line)
+      filename=loc.symtab.filename
+      locations.append( (filename,line) )
+  return locations
+
+
+
+def get_bp(gdb_bps,filename,line):
+  for bp in gdb_bps:
+    locations=get_bp_location(bp)
+    for lf,ll in locations: #TODO lf=main.c filename=/home/dza/source/mcgdb/tests/main.c
+      #gdb_print('{} {} {} {}\n'.format(ll,line,lf,filename))
+      if lf==filename and ll==line:
+        return bp
+  return None
+
 def cmd_mouse_click(entities,fd,args):
-  #gdb_print("mouse click in mc\n")
-  pass
+  filename=args[0] #in this file user produce click
+  col  = int(args[1])
+  line = int(args[2])
+  click_types = args[3].split('|')
+  #gdb_print("mouse click in mc col={} line={} types={}\n".format(col,line,click_types))
+  if 'GPM_DOWN' in click_types and col<=6:
+    #do breakpoint
+    #gdb_print("mouse click in mc col={} line={} types={}\n".format(col,line,click_types))
+    gdb_bps=exec_in_main_pythread( gdb.breakpoints, ())
+    bp=get_bp(gdb_bps,filename,line)
+    if bp!=None:
+      #exists bp at (filename,line)
+      exec_in_main_pythread( bp.delete, ())
+    else:
+      #create breakpoint
+      exec_in_main_pythread( gdb.Breakpoint, ('{}:{}'.format(filename,line),)   )
+
 
 def cmd_mcgdb_main_window(entities,fd,args):
   #chech whether main_window exists
@@ -256,7 +293,11 @@ def new_connection(entities,fd):
   lsock=entities[fd]['sock']
   conn,addr=lsock.accept()
   wt=window_queue.pop(0)
-  cmd='set_window_type:{};'.format(wt['type'])
+  filename=None
+  cmd=''
+  cmd+='set_window_type:{};'.format(wt['type'])
+  if wt['type'] in (window_type.MCGDB_MAIN_WINDOW,window_type.MCGDB_SOURCE_WINDOW):
+    cmd+='show_line_numbers:;'
   if wt['type']==window_type.MCGDB_MAIN_WINDOW:
     filename=FP.fnew
     line=FP.lnew
