@@ -192,15 +192,17 @@ static int
 process_action_from_gdb(WDialog * h, struct gdb_action * act) {
   int alt0;
   Widget *wh;
+  WEdit *edit = find_editor(h);
+  long line;
   switch(act->command) {
     case MCGDB_MARK:
-      book_mark_insert(find_editor(h), act->line, BOOK_MARK_COLOR);
+      book_mark_insert( edit, act->line, BOOK_MARK_COLOR);
       break;
     case MCGDB_UNMARK:
-      book_mark_clear( find_editor(h), act->line, BOOK_MARK_COLOR);
+      book_mark_clear( edit, act->line, BOOK_MARK_COLOR);
       break;
     case MCGDB_UNMARK_ALL:
-      book_mark_flush( find_editor(h), -1);
+      book_mark_flush( edit, -1);
       break;
     case MCGDB_FOPEN:
       edit_file(vfs_path_build_filename(act->filename, (char *) NULL),act->line);
@@ -217,7 +219,8 @@ process_action_from_gdb(WDialog * h, struct gdb_action * act) {
       edit_set_show_numbers_cmd(h);
       break;
     case MCGDB_GOTO:
-      edit_move_to_line(find_editor(h),act->line);
+      edit_move_display (edit, act->line - WIDGET (edit)->lines / 2 - 1);
+      edit_move_to_line (edit, act->line);
       break;
     default:
       break;

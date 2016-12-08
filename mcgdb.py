@@ -81,7 +81,8 @@ def recv_cmd(fd):
   return (cmd,args)
 
 def cmd_mouse_click(entities,fd,args):
-  gdb_print("mouse click in mc\n")
+  #gdb_print("mouse click in mc\n")
+  pass
 
 def cmd_mcgdb_main_window(entities,fd,args):
   #chech whether main_window exists
@@ -178,6 +179,7 @@ def cmd_check_frame(entities,fd,args):
   # текущую строчку. При этом если существовало не main mc window,
   # в котором была подкрашена текущая строчка, то покраску с нее
   # необходимо снять.
+  cmd_for_main_window=None
   if DebugPrint.called in verbose:
     gdb_print('called `cmd_check_frame`')
   main_mc_window_fd=None
@@ -205,6 +207,7 @@ def cmd_check_frame(entities,fd,args):
       if FP.fold:
         cmd_for_main_window+='fclose:;'
       cmd_for_main_window+='fopen:{fname},{line};'.format(fname=FP.fnew,line=FP.lnew)
+      cmd_for_main_window+='goto:{line};'.format(line=FP.lnew)
       cmd_for_main_window+='unmark_all:;' #Нужно очищать bookmark сразу после открытия файла,
       #поскольку может быть ситуация, когда редактор мог быть закрыт не из gdb.
       #И при закрытии mcedit может запомнить bookmark. И при повторном открытии файла
@@ -265,7 +268,7 @@ def new_connection(entities,fd):
       fname=filename,
       line=line
     )
-    cmd_for_main_window+='unmark_all:;'
+    cmd+='unmark_all:;'
     if FP.fnew==filename:
       cmd+='mark:{line};'.format(line=FP.lnew)
       cmd+='goto:{line};'.format(line=FP.lnew)
