@@ -20,14 +20,18 @@ event_thread=None #данный поток обрабатывает команд
 PATH_TO_MC="/home/dza/bin/mcedit"
 PATH_TO_DEFINES_MCGDB="~/bin/defines-mcgdb.gdb"
 window_queue=[]
-verbose=[] # Данный массив используется для регулирования
-#отладочного вывода. Данный массив должен заполняться
-# свойствами класса DebugPrint
-#example: verbose=[DebugPrint.called,DebugPrint.new_worker]
+
 class DebugPrint(object):
   called=1
   new_worker=2
   mcgdb_communicate_protocol=3
+
+verbose=[
+  DebugPrint.mcgdb_communicate_protocol,
+] # Данный массив используется для регулирования
+#отладочного вывода. Данный массив должен заполняться
+# свойствами класса DebugPrint
+#example: verbose=[DebugPrint.called,DebugPrint.new_worker]
 
 class _FP(object):
   fnew=None
@@ -147,15 +151,11 @@ def update_FP():
   global FP
   try:
     frame=gdb.selected_frame ()
-  except gdb.error:
-    #no frame selected?
-    return
-  try:
     filename=frame.find_sal().symtab.filename
     filename=get_abspath(filename)
     line=frame.find_sal().line-1
-  except gdb.exceptions.AttributeError:
-    #maybe inferior exited
+  except: #gdb.error:
+    #no frame selected or maybe inferior exited?
     filename=None
     line=None
   FP.fold=FP.fnew
@@ -163,6 +163,9 @@ def update_FP():
   FP.lold=FP.lnew
   FP.lnew=line
 
+def cmd_inferior_exited(entities,fd,args):
+  #exit_code=args[0]
+  cmd_check_frame(entities,fd,[])
 
 def cmd_check_frame(entities,fd,args):
   # Нужно изменить файл и/или позицию в файле
@@ -188,7 +191,8 @@ def cmd_check_frame(entities,fd,args):
       #Новый файл отсутствует. Возможно исполнение
       #отлаживаемой программы завершилось. Необходимо убрать
       #позицию исполнения(отмеченную строку) в mcedit
-      cmd_for_main_window+='unmark:{line};'.format(line=FP.lold)
+      if FP.lold:
+        cmd_for_main_window+='unmark:{line};'.format(line=FP.lold)
     if FP.fnew and FP.fnew!=FP.fold:
       if FP.lold:
         cmd_for_main_window+='unmark:{line};'.format(line=FP.lold)
@@ -201,9 +205,9 @@ def cmd_check_frame(entities,fd,args):
         cmd_for_main_window+='unmark:{line};'.format(line=FP.lold)
       cmd_for_main_window+='mark:{line};'.format(line=FP.lnew)
       cmd_for_main_window+='goto:{line};'.format(line=FP.lnew)
-    if DebugPrint.mcgdb_communicate_protocol in verbose:
-      gdb_print('MESSAGES {}\n'.format(cmd_for_main_window))
     if cmd_for_main_window and cmd_for_main_window!='':
+      if DebugPrint.mcgdb_communicate_protocol in verbose:
+        gdb_print('commands for main: {}\n'.format(cmd_for_main_window))
       os.write(main_mc_window_fd,cmd_for_main_window)
   for fd in mc_windows_fds:
     pass
@@ -219,6 +223,7 @@ def process_command_from_gdb(entities,fd):
     'mcgdb_source_window':  cmd_mcgdb_source_window,
     'check_frame':          cmd_check_frame,
     'terminate':            cmd_terminate_event_loop,
+    'inferior_exited':      cmd_inferior_exited,
   }
   return fetch_and_process_command(entities,fd,cmds)
 
@@ -320,12 +325,17 @@ def mc():
   event_thread=threading.Thread(target=event_loop,args=(lsock,local_r_fd))
   event_thread.start()
   gdb.execute('source {}'.format(PATH_TO_DEFINES_MCGDB))
-  gdb.events.stop.connect( lambda x:check_frame() )
+  gdb.events.stop.connect( lambda x: check_frame() )
+  gdb.events.exited.connect(lambda exit_code: inferior_exited(exit_code) )
   #gdb.events.exited.connect(stop_event_loop)
 
 def check_frame():
   #Данную команду нужно вызывать из hookpost-{up,down,frame,step,continue}
   command='check_frame:;'
+  os.write(local_w_fd,command)
+
+def inferior_exited(exit_code):
+  command='inferior_exited:{exit_code};'.format(exit_code=exit_code)
   os.write(local_w_fd,command)
 
 def mcgdb_main_window():
