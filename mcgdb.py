@@ -20,7 +20,14 @@ event_thread=None #данный поток обрабатывает команд
 PATH_TO_MC="/home/dza/bin/mcedit"
 PATH_TO_DEFINES_MCGDB="~/bin/defines-mcgdb.gdb"
 window_queue=[]
-verbose=0
+verbose=[] # Данный массив используется для регулирования
+#отладочного вывода. Данный массив должен заполняться
+# свойствами класса DebugPrint
+#example: verbose=[DebugPrint.called,DebugPrint.new_worker]
+class DebugPrint(object):
+  called=1
+  new_worker=2
+  mcgdb_communicate_protocol=3
 
 class _FP(object):
   fnew=None
@@ -33,14 +40,17 @@ FP=_FP()
 class CommandReadFailure(Exception): pass
 class StopEventThread(Exception): pass
 
-def get_available_port():
-  return 9091
-
-def gdb_print(msg):
+def gdb_print(msg,**kwargs):
   #thread safe
+  disable_mcgdb_prefix=kwargs.get('mcgdb_prefix',False)
+  mcgdb_prefix='' if disable_mcgdb_prefix else 'mcgdb:'
   if msg[-1]=='\n':
    msg=msg[:-1]
-  msg='\n{origmsg}\n{prompt}'.format(origmsg=msg,prompt=gdb.parameter("prompt"))
+  msg='\n{mcgdb_prefix} {origmsg}\n{prompt}'.format(
+    origmsg=msg,
+    prompt=gdb.parameter("prompt"),
+    mcgdb_prefix=mcgdb_prefix,
+  )
   gdb.post_event(lambda : gdb.write(msg))
 
 
@@ -75,7 +85,8 @@ def cmd_mcgdb_main_window(entities,fd,args):
   window_queue.append({
     'type':window_type.MCGDB_MAIN_WINDOW,
   })
-  gdb_print("echo open main mc command\n")
+  if DebugPrint.called in verbose:
+    gdb_print("called cmd_mcgdb_main_window\n")
   os.system('gnome-terminal -e "{path_to_mc} --gdb-port={gdb_port}"'.format(
     path_to_mc=PATH_TO_MC,gdb_port=gdb_listen_port))
 
@@ -85,14 +96,13 @@ def cmd_mcgdb_source_window(entities,fd,args):
     'filename':args[0],
     'line':args[1],
   })
-  gdb_print("echo open mc command\n")
 
 def fetch_and_process_command(entities,fd,cmds):
   cmd,args=recv_cmd(fd)
   try:
     callback=cmds[cmd]
   except KeyError:
-    gdb_print("echo bad command: `{}`\n".format(cmd))
+    gdb_print("bad command received: `{}`\n".format(cmd))
     return
   return callback(entities,fd,args)
 
@@ -101,7 +111,8 @@ __exec_in_main_pythread_result=None
 def __exec_in_main_pythread(func,args,evt):
   global __exec_in_main_pythread_result
   try:
-    gdb.write('called __exec_in_main_pythread\n')
+    if DebugPrint.called in verbose:
+      gdb.write('called __exec_in_main_pythread\n')
     __exec_in_main_pythread_result=func(*args)
   except Exception as ex:
     __exec_in_main_pythread_result=None
@@ -160,12 +171,12 @@ def cmd_check_frame(entities,fd,args):
   # текущую строчку. При этом если существовало не main mc window,
   # в котором была подкрашена текущая строчка, то покраску с нее
   # необходимо снять.
-  gdb.post_event(lambda : gdb.execute('echo check_frame called\n'))
+  if DebugPrint.called in verbose:
+    gdb_print('called `cmd_check_frame`')
   main_mc_window_fd=None
   mc_windows_fds=[]
   for fd in entities:
     entity=entities[fd]
-    gdb_print('TYPE:`{}`\n'.format(entity['type']))
     if entity['type']==window_type.MCGDB_MAIN_WINDOW:
       main_mc_window_fd=fd
     elif entity['type']==window_type.MCGDB_SOURCE_WINDOW:
@@ -185,7 +196,8 @@ def cmd_check_frame(entities,fd,args):
         msg+='unmark:{line};'.format(line=FP.lold)
       msg+='mark:{line};'.format(line=FP.lnew)
       msg+='goto:{line};'.format(line=FP.lnew)
-    gdb_print('MESSAGES {}\n'.format(msg))
+    if DebugPrint.mcgdb_communicate_protocol in verbose:
+      gdb_print('MESSAGES {}\n'.format(msg))
     if msg and msg!='':
       os.write(main_mc_window_fd,msg)
   for fd in mc_windows_fds:
@@ -193,7 +205,7 @@ def cmd_check_frame(entities,fd,args):
 
 
 def cmd_terminate_event_loop(entities,fd,cmds):
-  gdb.post_event(lambda : gdb.execute('echo event loop stopped\n'))
+  gdb_print('event loop stopped\n')
   sys.exit(0)
 
 def process_command_from_gdb(entities,fd):
@@ -242,8 +254,9 @@ def new_connection(entities,fd):
       'sock':conn,
       'action':actions[wt['type']]
   }
-  gdb_print("new worker type:{}\n".format(wt['type']))
-  
+  if DebugPrint.new_worker in verbose:
+    gdb_print("new worker type:{}\n".format(wt['type']))
+
 
 def event_loop(lsock,local_r_fd):
   listen_fd=lsock.fileno()
@@ -280,7 +293,7 @@ def event_loop(lsock,local_r_fd):
       except:
         #something is bad
         raise #debug
-  gdb.post_event(lambda : gdb.execute('echo event_loop stopped\n'))
+  gdb_print('event_loop stopped\n')
 
 def stop_event_loop():
   global event_thread
@@ -292,7 +305,6 @@ def stop_event_loop():
 
 def mc():
   global local_w_fd,event_thread,gdb_listen_port
-  #port=get_available_port()
   lsock=socket.socket()
   lsock.bind( ('',0) )
   port=lsock.getsockname()[1]
