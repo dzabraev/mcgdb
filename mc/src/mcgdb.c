@@ -38,6 +38,11 @@ mcgdb_error(void) {
   abort();
 }
 
+void
+mcgdb_exit() {
+  exit(0);
+}
+
 static enum window_type
 get_win_type(const char * buf) {
   if( !strncmp(buf,"mcgdb_main_window",strlen("mcgdb_main_window")) ) {
@@ -58,12 +63,12 @@ int open_gdb_input_fd(void) {
   enum gdb_cmd cmd;
   if(mcgdb_listen_port==0) {
     printf("you must specify `--gdb-port port`\n");
-    mcgdb_error();
+    mcgdb_exit();
   }
   sockfd = socket(AF_INET, SOCK_STREAM, 0);
   if (sockfd < 0) {
     perror("ERROR opening socket");
-    mcgdb_error();
+    mcgdb_exit();
   }
   memset(&serv_addr, 0, sizeof(serv_addr)); 
   serv_addr.sin_family=AF_INET;
@@ -71,7 +76,7 @@ int open_gdb_input_fd(void) {
   serv_addr.sin_port=htons(mcgdb_listen_port);
   if( connect(sockfd,(struct sockaddr *)&serv_addr,sizeof(serv_addr)) < 0) {
     perror("ERROR connect");
-    mcgdb_error();
+    mcgdb_exit();
   }
   gdb_input_fd=sockfd;
   while (1) {
@@ -116,7 +121,7 @@ read_bytes_from_gdb(char *buf, char stop_char, size_t size) {
       }
       else {
         perror("read");
-        mcgdb_error();
+        mcgdb_exit();
       }
     }
     if( (*buf)==stop_char ) {
