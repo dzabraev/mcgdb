@@ -46,11 +46,11 @@ class StopEventThread(Exception): pass
 
 def gdb_print(msg,**kwargs):
   #thread safe
-  disable_mcgdb_prefix=kwargs.get('mcgdb_prefix',False)
-  mcgdb_prefix='' if disable_mcgdb_prefix else 'mcgdb:'
-  if msg[-1]=='\n':
+  disable_mcgdb_prefix=kwargs.get('disable_mcgdb_prefix',False)
+  mcgdb_prefix='' if disable_mcgdb_prefix else '\nmcgdb: '
+  if len(msg)>0 and msg[-1]=='\n':
    msg=msg[:-1]
-  msg='\n{mcgdb_prefix} {origmsg}\n{prompt}'.format(
+  msg='{mcgdb_prefix}{origmsg}{prompt}'.format(
     origmsg=msg,
     prompt=gdb.parameter("prompt"),
     mcgdb_prefix=mcgdb_prefix,
@@ -87,7 +87,7 @@ def get_bp_location(bp):
   if locs:
     for loc in locs:
       line=int(loc.line)
-      filename=loc.symtab.filename
+      filename=loc.symtab.fullname()
       locations.append( (filename,line) )
   return locations
 
@@ -96,7 +96,7 @@ def get_bp_location(bp):
 def get_bp(gdb_bps,filename,line):
   for bp in gdb_bps:
     locations=get_bp_location(bp)
-    for lf,ll in locations: #TODO lf=main.c filename=/home/dza/source/mcgdb/tests/main.c
+    for lf,ll in locations:
       #gdb_print('{} {} {} {}\n'.format(ll,line,lf,filename))
       if lf==filename and ll==line:
         return bp
@@ -112,13 +112,17 @@ def cmd_mouse_click(entities,fd,args):
     #do breakpoint
     #gdb_print("mouse click in mc col={} line={} types={}\n".format(col,line,click_types))
     gdb_bps=exec_in_main_pythread( gdb.breakpoints, ())
+    if gdb_bps==None:
+      #maybe inferior not started
+      return
     bp=get_bp(gdb_bps,filename,line)
     if bp!=None:
       #exists bp at (filename,line)
       exec_in_main_pythread( bp.delete, ())
     else:
       #create breakpoint
-      exec_in_main_pythread( gdb.Breakpoint, ('{}:{}'.format(filename,line),)   )
+      exec_in_main_pythread( gdb.Breakpoint, ('{}:{}'.format(filename,line),) )
+      gdb_print('',disable_mcgdb_prefix=True)
 
 
 def cmd_mcgdb_main_window(entities,fd,args):
@@ -193,8 +197,9 @@ def update_FP():
   global FP
   try:
     frame=gdb.selected_frame ()
-    filename=frame.find_sal().symtab.filename
-    filename=get_abspath(filename)
+    #filename=frame.find_sal().symtab.filename
+    #filename=get_abspath(filename)
+    filename=frame.find_sal().symtab.fullname()
     line=frame.find_sal().line-1
   except: #gdb.error:
     #no frame selected or maybe inferior exited?
