@@ -44,7 +44,7 @@
 #include "src/mcgdb.h"
 
 /*** external variables **************************************************************************/
-//extern int      mcgdb_listen_port;
+
 /*** global variables ****************************************************************************/
 
 /* If true, assume we are running on an xterm terminal */

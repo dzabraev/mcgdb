@@ -11,7 +11,7 @@
 #include "src/editor/editwidget.h"
 
 #include "src/mcgdb.h"
-
+#include "src/mcgdb-bp.h"
 
 int mcgdb_listen_port;
 int gdb_input_fd;
@@ -39,7 +39,7 @@ mcgdb_error(void) {
 }
 
 void
-mcgdb_exit() {
+mcgdb_exit(void) {
   exit(0);
 }
 
@@ -135,29 +135,39 @@ read_bytes_from_gdb(char *buf, char stop_char, size_t size) {
 
 static enum gdb_cmd
 get_command_num(const char *command) {
-  if(!strncmp(command,"mark",strlen("mark"))) {
+# define compare_cmd(CMD) (!strncmp(command,(CMD),strlen( (CMD) )))
+  if(      compare_cmd("mark") ) {
     return MCGDB_MARK;
   }
-  else if(!strncmp(command,"unmark_all",strlen("unmark_all"))) {
+  else if( compare_cmd("unmark_all") ) {
     return MCGDB_UNMARK_ALL;
   }
-  else if(!strncmp(command,"unmark",strlen("unmark"))) {
+  else if( compare_cmd("unmark") ) {
     return MCGDB_UNMARK;
   }
-  else if(!strncmp(command,"goto",strlen("goto"))) {
+  else if( compare_cmd("goto") ) {
     return MCGDB_GOTO;
   }
-  else if(!strncmp(command,"fopen",strlen("fopen"))) {
+  else if( compare_cmd("fopen") ) {
     return MCGDB_FOPEN;
   }
-  else if(!strncmp(command,"fclose",strlen("fclose"))) {
+  else if( compare_cmd("fclose") ) {
     return MCGDB_FCLOSE;
   }
-  else if(!strncmp(command,"show_line_numbers",strlen("show_line_numbers"))) {
+  else if( compare_cmd("show_line_numbers") ) {
     return MCGDB_SHOW_LINE_NUMBERS;
   }
-  else if(!strncmp(command,"set_window_type",strlen("set_window_type"))) {
+  else if( compare_cmd("set_window_type") ) {
     return MCGDB_SET_WINDOW_TYPE;
+  }
+  else if( compare_cmd("remove_bp_all") ) {
+    return MCGDB_BP_REMOVE_ALL;
+  }
+  else if( compare_cmd("insert_bp") ) {
+    return MCGDB_BP_INSERT;
+  }
+  else if( compare_cmd("remove_bp") ) {
+    return MCGDB_BP_REMOVE;
   }
   else {
     return MCGDB_UNKNOWN;
@@ -180,6 +190,8 @@ parse_action_from_gdb(struct gdb_action * act) {
     case MCGDB_MARK:
     case MCGDB_UNMARK:
     case MCGDB_GOTO:
+    case MCGDB_BP_REMOVE:
+    case MCGDB_BP_INSERT:
       read_bytes_from_gdb(argstr,';',sizeof(argstr));
       act->line=atoi(argstr);
       break;
@@ -208,6 +220,15 @@ process_action_from_gdb(WDialog * h, struct gdb_action * act) {
       break;
     case MCGDB_UNMARK_ALL:
       book_mark_flush( edit, -1);
+      break;
+    case MCGDB_BP_INSERT:
+      mcgdb_bp_insert (act->line);
+      break;
+    case MCGDB_BP_REMOVE:
+      mcgdb_bp_remove (act->line);
+      break;
+    case MCGDB_BP_REMOVE_ALL:
+      mcgdb_bp_remove_all ();
       break;
     case MCGDB_FOPEN:
       edit_file(vfs_path_build_filename(act->filename, (char *) NULL),act->line);

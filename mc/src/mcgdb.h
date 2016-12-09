@@ -14,6 +14,9 @@ enum gdb_cmd {
   MCGDB_SHOW_LINE_NUMBERS,
   MCGDB_SET_WINDOW_TYPE,
   MCGDB_UNMARK_ALL,
+  MCGDB_BP_REMOVE_ALL,
+  MCGDB_BP_REMOVE,
+  MCGDB_BP_INSERT
 };
 
 enum window_type {
@@ -34,6 +37,7 @@ struct gdb_action {
 };
 
 void mcgdb_error(void);
+void mcgdb_exit(void);
 
 static inline int write_all(int fd, const void *buf, size_t count)
 {

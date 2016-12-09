@@ -58,6 +58,8 @@
 #include "edit-impl.h"
 #include "editwidget.h"
 
+#include "src/mcgdb-bp.h"
+
 /*** global variables ****************************************************************************/
 
 /* Toggles statusbar draw style */
@@ -442,7 +444,10 @@ print_to_widget (WEdit * edit, long row, int start_col, int start_col_real,
 
     if (option_line_state)
     {
-        tty_setcolor (LINE_STATE_COLOR);
+        if( mcgdb_bp_exists(row) )
+          tty_setcolor (BOOK_MARK_COLOR);
+        else
+          tty_setcolor (LINE_STATE_COLOR);
         for (i = 0; i < LINE_STATE_WIDTH; i++)
         {
             edit_move (x1 + i - option_line_state_width, y);

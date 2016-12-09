@@ -80,7 +80,8 @@ libinternal_la_SOURCES = \
 	setup.c setup.h \
 	textconf.c textconf.h \
 	util.c util.h \
-	mcgdb.c mcgdb.h
+	mcgdb.c mcgdb.h \
+	mcgdb-bp.c mcgdb-bp.h
 
 if CHARSET
     libinternal_la_SOURCES += selcodepage.c selcodepage.h
