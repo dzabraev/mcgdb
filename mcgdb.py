@@ -83,6 +83,8 @@ def recv_cmd(fd):
 def get_bp_location(bp):
   location=bp.location
   locs=exec_in_main_pythread(gdb.decode_line, (location,))[1]
+  if locs==None:
+    return []
   locations=[]
   if locs:
     for loc in locs:
@@ -95,6 +97,8 @@ def get_bp_location(bp):
 
 def get_bp(gdb_bps,filename,line):
   for bp in gdb_bps:
+    if bp==None:
+      continue
     locations=get_bp_location(bp)
     for lf,ll in locations:
       #gdb_print('{} {} {} {}\n'.format(ll,line,lf,filename))
@@ -112,10 +116,10 @@ def cmd_mouse_click(entities,fd,args):
     #do breakpoint
     #gdb_print("mouse click in mc col={} line={} types={}\n".format(col,line,click_types))
     gdb_bps=exec_in_main_pythread( gdb.breakpoints, ())
-    if gdb_bps==None:
-      #maybe inferior not started
-      return
-    bp=get_bp(gdb_bps,filename,line)
+    if gdb_bps!=None:
+      bp=get_bp(gdb_bps,filename,line)
+    else:
+      bp=None
     if bp!=None:
       #exists bp at (filename,line)
       exec_in_main_pythread( bp.delete, ())
