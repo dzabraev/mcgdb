@@ -2,19 +2,29 @@
 #include <netinet/in.h>
 #include <sys/types.h>
 #include <arpa/inet.h>
+#include <config.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+
 
 //#include "src/editor/edit.h"
+#include "lib/global.h"
 #include "src/editor/edit-impl.h"
 #include "lib/tty/tty-slang.h"
 #include "lib/tty/key.h"
 #include "lib/skin.h"
 #include "src/editor/editwidget.h"
 
+
+
 #include "src/mcgdb.h"
 #include "src/mcgdb-bp.h"
 
 int mcgdb_listen_port;
 int gdb_input_fd;
+static GList * mcgdb_event_queue;
+
 enum window_type mcgdb_wtype; /*temporary unused*/
 
 
@@ -181,7 +191,7 @@ parse_action_from_gdb(struct gdb_action * act) {
   // unmark:lineno;
   // goto:lineno;
   // fopen:filename;
-  static char command[100],argstr[100],argstr2[100];
+  static char command[512],argstr[512];
   enum gdb_cmd cmd;
   read_bytes_from_gdb(command,':',sizeof(command));
   cmd=get_command_num(command);
@@ -197,9 +207,9 @@ parse_action_from_gdb(struct gdb_action * act) {
       break;
     case MCGDB_FOPEN:
       read_bytes_from_gdb(argstr,',',sizeof(argstr));
-      act->filename=argstr;
-      read_bytes_from_gdb(argstr2,';',sizeof(argstr));
-      act->line=atoi(argstr2);
+      act->filename=strdup(argstr);
+      read_bytes_from_gdb(argstr,';',sizeof(argstr));
+      act->line=atoi(argstr);
       break;
     default:
       read_bytes_from_gdb(argstr,';',sizeof(argstr));/*remove ';' from stream*/
@@ -284,8 +294,11 @@ stringify_click_type(Gpm_Event * event) {
 void
 mcgdb_send_mouse_event_to_gdb(WDialog * h, Gpm_Event * event) {
   static char lb[512];
+  const char * filename;
   WEdit *edit=find_editor(h);
-  const char * filename = edit_get_file_name(edit);
+  if(!edit)
+    return;
+  filename = edit_get_file_name(edit);
   sprintf(lb,"mouse_click:%s,%li,%li,%s;",
     filename?filename:"",
     event->x -1 - edit->start_col,
@@ -293,3 +306,47 @@ mcgdb_send_mouse_event_to_gdb(WDialog * h, Gpm_Event * event) {
     stringify_click_type(event));
   write_all(gdb_input_fd,lb,strlen(lb));
 }
+
+
+void
+mcgdb_queue_append_event(void) {
+  struct gdb_action * gdb_evt = g_new0(struct gdb_action, 1);
+  parse_action_from_gdb(gdb_evt);
+  mcgdb_event_queue = g_list_append (mcgdb_event_queue, gdb_evt);
+}
+
+static void
+free_gdb_evt (struct gdb_action * gdb_evt) {
+  if( gdb_evt->filename )
+    free(gdb_evt->filename);
+  g_free(gdb_evt);
+}
+
+int
+mcgdb_queue_process_event(WDialog * h) {
+  struct gdb_action * gdb_evt;
+  int res=MCGDB_OK;
+
+  if( !mcgdb_event_queue && !find_editor(h) ) {
+    return MCGDB_OK;
+  }
+
+  for (GList *l=mcgdb_event_queue; l; l=l->next) {
+    gdb_evt = l->data;
+    res|=process_action_from_gdb (h,gdb_evt);
+    free_gdb_evt(gdb_evt);
+  }
+  if(mcgdb_event_queue)
+    g_list_free(mcgdb_event_queue);
+  mcgdb_event_queue=NULL;
+  dlg_redraw(h);
+  return res;
+}
+
+
+
+
+
+
+
+

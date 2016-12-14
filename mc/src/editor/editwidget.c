@@ -67,6 +67,8 @@
 #include "spell.h"
 #endif
 
+#include "src/mcgdb.h"
+
 /*** global variables ****************************************************************************/
 
 char *edit_window_state_char = NULL;

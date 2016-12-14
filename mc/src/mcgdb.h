@@ -62,11 +62,14 @@ int  open_gdb_input_fd(void);
 //void read_bytes_from_gdb(char *buf, char stop_char);
 //void parse_action_from_gdb();
 //int process_action_from_gdb(WDialog * h);
-
-void mcgdb_send_mouse_event_to_gdb(WDialog * h, Gpm_Event * event);
+typedef struct WEdit WEdit;
+void mcgdb_send_mouse_event_to_gdb(WDialog * edit, Gpm_Event * event);
 int mcgdb_action_from_gdb(WDialog * h);
 
 extern int      mcgdb_listen_port;
 extern int      gdb_input_fd;
+
+void mcgdb_queue_append_event(void);
+int  mcgdb_queue_process_event(WDialog * h);
 
 
