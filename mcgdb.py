@@ -21,13 +21,17 @@ PATH_TO_MC="/home/dza/bin/mcedit"
 PATH_TO_DEFINES_MCGDB="~/bin/defines-mcgdb.gdb"
 window_queue=[]
 
+
+need_processing_bp=[]
+need_processing_bp_mutex=threading.Lock()
+
 class DebugPrint(object):
   called=1
   new_worker=2
   mcgdb_communicate_protocol=3
 
 verbose=[
-  #DebugPrint.mcgdb_communicate_protocol,
+#  DebugPrint.mcgdb_communicate_protocol,
 ] # Данный массив используется для регулирования
 #отладочного вывода. Данный массив должен заполняться
 # свойствами класса DebugPrint
@@ -97,9 +101,10 @@ def get_bp_location(bp):
 
 def get_bp(gdb_bps,filename,line):
   for bp in gdb_bps:
-    if bp==None:
+    try:
+      locations=get_bp_location(bp)
+    except Exception:
       continue
-    locations=get_bp_location(bp)
     for lf,ll in locations:
       #gdb_print('{} {} {} {}\n'.format(ll,line,lf,filename))
       if lf==filename and ll==line:
@@ -115,18 +120,31 @@ def cmd_mouse_click(entities,fd,args):
   if 'GPM_DOWN' in click_types and col<=6:
     #do breakpoint
     #gdb_print("mouse click in mc col={} line={} types={}\n".format(col,line,click_types))
+    #check whether line belongs to file
+    try:
+      exec_in_main_pythread( gdb.decode_line, ('{}:{}'.format(filename,line),))
+    except:
+      #not belonging
+      return
     gdb_bps=exec_in_main_pythread( gdb.breakpoints, ())
-    if gdb_bps!=None:
-      bp=get_bp(gdb_bps,filename,line)
-    else:
-      bp=None
-    if bp!=None:
-      #exists bp at (filename,line)
-      exec_in_main_pythread( bp.delete, ())
-    else:
-      #create breakpoint
-      exec_in_main_pythread( gdb.Breakpoint, ('{}:{}'.format(filename,line),) )
-      gdb_print('',disable_mcgdb_prefix=True)
+    if filename!='':
+      if gdb_bps!=None:
+        try:
+          bp=get_bp(gdb_bps,filename,line)
+        except gdb.error:
+          return
+      else:
+        bp=None
+      if bp!=None:
+        #exists bp at (filename,line)
+        exec_in_main_pythread( bp.delete, ())
+      else:
+        #create breakpoint
+        try:
+          exec_in_main_pythread( gdb.Breakpoint, ('{}:{}'.format(filename,line),) )
+        except gdb.error:
+          return
+        gdb_print('',disable_mcgdb_prefix=True)
 
 
 def cmd_mcgdb_main_window(entities,fd,args):
@@ -167,22 +185,32 @@ def __exec_in_main_pythread(func,args,evt):
   try:
     if DebugPrint.called in verbose:
       gdb.write('called __exec_in_main_pythread\n')
-    __exec_in_main_pythread_result=func(*args)
-  except Exception as ex:
-    __exec_in_main_pythread_result=None
-    evt.set()
-    raise
+    __exec_in_main_pythread_result=('ok',func(*args))
+  except Exception:
+    t, v, tb = sys.exc_info()
+    __exec_in_main_pythread_result=('exception',t, v, tb)
   evt.set()
+
+def is_main_thread():
+  return threading.current_thread().ident==main_thread_ident
+
 
 def exec_in_main_pythread(func,args):
   #Данную функцию нельзя вызывать более чем из одного потока
   global __exec_in_main_pythread_result
-  evt=threading.Event()
-  gdb.post_event(
-    lambda : __exec_in_main_pythread(func,args,evt)
-  )
-  evt.wait()
-  return __exec_in_main_pythread_result
+  if is_main_thread():
+    return func(*args)
+  else:
+    evt=threading.Event()
+    gdb.post_event(
+      lambda : __exec_in_main_pythread(func,args,evt)
+    )
+    evt.wait()
+  if __exec_in_main_pythread_result[0]=='ok':
+    return __exec_in_main_pythread_result[1]
+  else:
+    _,t,v,tb=__exec_in_main_pythread_result
+    raise t,v,tb
 
 
 def get_abspath(filename):
@@ -217,6 +245,22 @@ def update_FP():
 def cmd_inferior_exited(entities,fd,args):
   #exit_code=args[0]
   cmd_check_frame(entities,fd,[])
+
+def get_cmd_insert_bp_all(fname):
+  cmd=''
+  try:
+    bps=exec_in_main_pythread(gdb.breakpoints, ())
+  except gdb.error:
+    return cmd
+  for bp in bps:
+    try:
+      locations=get_bp_location(bp)
+    except gdb.error:
+      continue
+    for bpfname,bpline in locations:
+      if bpfname==fname:
+        cmd+='insert_bp:{};'.format(bpline)
+  return cmd
 
 def cmd_check_frame(entities,fd,args):
   # Нужно изменить файл и/или позицию в файле
@@ -253,6 +297,8 @@ def cmd_check_frame(entities,fd,args):
       if FP.fold:
         cmd_for_main_window+='fclose:;'
       cmd_for_main_window+='fopen:{fname},{line};'.format(fname=FP.fnew,line=FP.lnew)
+      entities[main_mc_window_fd]['filename']=FP.fnew
+      cmd_for_main_window+=get_cmd_insert_bp_all(FP.fnew)
       cmd_for_main_window+='goto:{line};'.format(line=FP.lnew)
       cmd_for_main_window+='unmark_all:;' #Нужно очищать bookmark сразу после открытия файла,
       #поскольку может быть ситуация, когда редактор мог быть закрыт не из gdb.
@@ -277,6 +323,31 @@ def cmd_terminate_event_loop(entities,fd,cmds):
     gdb_print('called cmd_terminate_event_loop\n')
   sys.exit(0)
 
+def cmd_need_processing_bp(entities,fd,cmds):
+  global need_processing_bp_mutex, need_processing_bp
+  need_processing_bp_mutex.acquire()
+  bp_locations,typ=need_processing_bp.pop(0)
+  need_processing_bp_mutex.release()
+  if typ=='created':
+    cmd1='insert_bp'
+  elif typ=='deleted':
+    cmd1='remove_bp'
+  else:
+    #unknown command
+    return
+  for entity_fd in entities:
+    entity=entities[entity_fd]
+    if entity['type'] not in (window_type.MCGDB_MAIN_WINDOW,window_type.MCGDB_SOURCE_WINDOW):
+      continue
+    entity_fname=entity['filename']
+    if entity_fname==None:
+      continue
+    cmd=''
+    for loc_fname,loc_line in bp_locations:
+      if loc_fname==entity_fname:
+        cmd+='{cmd1}:{line};'.format(cmd1=cmd1,line=loc_line)
+    os.write(entity_fd,cmd)
+
 def process_command_from_gdb(entities,fd):
   cmds={
     'mcgdb_main_window':    cmd_mcgdb_main_window,
@@ -284,6 +355,7 @@ def process_command_from_gdb(entities,fd):
     'check_frame':          cmd_check_frame,
     'terminate':            cmd_terminate_event_loop,
     'inferior_exited':      cmd_inferior_exited,
+    'need_processing_bp':   cmd_need_processing_bp,
   }
   return fetch_and_process_command(entities,fd,cmds)
 
@@ -318,6 +390,7 @@ def new_connection(entities,fd):
       fname=filename,
       line=line
     )
+    cmd+=get_cmd_insert_bp_all(filename)
     cmd+='unmark_all:;'
     if FP.fnew==filename:
       cmd+='mark:{line};'.format(line=FP.lnew)
@@ -329,6 +402,7 @@ def new_connection(entities,fd):
       'sock':conn,
       'action':actions[wt['type']]
   }
+  entities[newfd]['filename']=filename
   if DebugPrint.new_worker in verbose:
     gdb_print("new worker type:{}\n".format(wt['type']))
 
@@ -379,20 +453,37 @@ def stop_event_loop():
     event_thread=None
 
 def mc():
-  global local_w_fd,event_thread,gdb_listen_port
+  global local_w_fd,event_thread,gdb_listen_port,main_thread_ident
   lsock=socket.socket()
   lsock.bind( ('',0) )
   port=lsock.getsockname()[1]
   gdb_listen_port=port
   lsock.listen(1)
+  main_thread_ident=threading.current_thread().ident
   gdb.execute('echo gdb listen port:{}\n'.format(port))
   local_r_fd,local_w_fd=os.pipe()
   event_thread=threading.Thread(target=event_loop,args=(lsock,local_r_fd))
   event_thread.start()
   gdb.execute('source {}'.format(PATH_TO_DEFINES_MCGDB))
   gdb.events.stop.connect( lambda x: check_frame() )
-  gdb.events.exited.connect(lambda exit_code: inferior_exited(exit_code) )
+  gdb.events.exited.connect( lambda exit_code: inferior_exited(exit_code) )
+  gdb.events.breakpoint_created.connect( lambda bp : process_bp(bp,'created') )
+  gdb.events.breakpoint_deleted.connect( lambda bp : process_bp(bp,'deleted') )
   #gdb.events.exited.connect(stop_event_loop)
+
+def process_bp(bp,typ):
+  global need_processing_bp
+  need_processing_bp_mutex.acquire()
+  try:
+    locations=get_bp_location(bp)
+    need_processing_bp.append( (locations,typ) )
+  except:
+    need_processing_bp_mutex.release()
+    return
+  need_processing_bp_mutex.release()
+  cmd='need_processing_bp:;'
+  os.write(local_w_fd,cmd)
+
 
 def check_frame():
   #Данную команду нужно вызывать из hookpost-{up,down,frame,step,continue}

@@ -73,6 +73,8 @@
 #include "spell.h"
 #endif
 
+#include "src/mcgdb-bp.h"
+
 /*** global variables ****************************************************************************/
 
 int option_word_wrap_line_length = DEFAULT_WRAP_LINE_LENGTH;
@@ -2215,7 +2217,7 @@ edit_clean (WEdit * edit)
 #endif
 
     edit_purge_widget (edit);
-
+    mcgdb_bp_free();
     return TRUE;
 }
 

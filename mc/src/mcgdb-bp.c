@@ -15,13 +15,11 @@ static GList * mcgdb_bps;
 #define MCGDB_BP(l) ((mcgdb_bp *)(l->data))
 
 void mcgdb_bp_init(void) {
-  mcgdb_bps = g_list_alloc ();
 }
 
 void mcgdb_bp_free(void) {
   if(mcgdb_bps) {
     mcgdb_bp_remove_all();
-    g_list_free (mcgdb_bps);
     mcgdb_bps=0;
   }
 }
@@ -40,17 +38,15 @@ int mcgdb_bp_exists(long line) {
 
 void mcgdb_bp_insert(long line) {
   mcgdb_bp *bp;
-  if( mcgdb_bp_exists(line-1) )
-    return;
   bp = g_new(mcgdb_bp, 1);
-  bp->line=line-1;
+  bp->line=line;
   mcgdb_bps = g_list_append (mcgdb_bps,bp);
 }
 
 void mcgdb_bp_remove(long line) {
   GList *l;
   for(l=mcgdb_bps;l!=NULL;l=l->next) {
-    if( MCGDB_BP(l)->line==line-1 ) {
+    if( MCGDB_BP(l)->line==line ) {
       mcgdb_bps = g_list_remove_link (mcgdb_bps, l);
       g_free (l->data);
       g_list_free (l);
