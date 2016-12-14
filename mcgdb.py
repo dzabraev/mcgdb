@@ -20,7 +20,7 @@ event_thread=None #данный поток обрабатывает команд
 PATH_TO_MC="/home/dza/bin/mcedit"
 PATH_TO_DEFINES_MCGDB="~/bin/defines-mcgdb.gdb"
 window_queue=[]
-
+__mcgdb_initialized=False
 
 need_processing_bp=[]
 need_processing_bp_mutex=threading.Lock()
@@ -54,7 +54,7 @@ def gdb_print(msg,**kwargs):
   mcgdb_prefix='' if disable_mcgdb_prefix else '\nmcgdb: '
   if len(msg)>0 and msg[-1]=='\n':
    msg=msg[:-1]
-  msg='{mcgdb_prefix}{origmsg}{prompt}'.format(
+  msg='{mcgdb_prefix}{origmsg}\n{prompt}'.format(
     origmsg=msg,
     prompt=gdb.parameter("prompt"),
     mcgdb_prefix=mcgdb_prefix,
@@ -452,8 +452,41 @@ def stop_event_loop():
     #event_thread.join()
     event_thread=None
 
+def get_gdb_version():
+  try:
+    s=gdb.execute('show version',False,True)
+    major,minor=re.compile(r"GNU gdb \(GDB\) (\d+).(\d+)",re.MULTILINE).search(s).groups()
+    ver=(int(major),int(minor))
+    return ver
+  except:
+    return (None,None)
+
+def is_gdb_version_correct():
+  good_major=7
+  good_minor=12
+  major,minor=get_gdb_version()
+  if major==None or minor==None:
+    gdb_print("WARNING: can't recognize gdb version. Version must be >= {ma}.{mi}\n".format(
+      ma=major,mi=minor))
+    return True
+  if major < good_major:
+    gdb_print("ERROR: gdb version must be >= {ma}.{mi}\n".format(
+      ma=good_major,mi=good_minor))
+    return False
+  if minor < good_minor:
+    gdb_print("ERROR: gdb version must be >= {ma}.{mi}\n".format(
+      ma=good_major,mi=good_minor))
+    return False
+  return True
+
+
 def mc():
-  global local_w_fd,event_thread,gdb_listen_port,main_thread_ident
+  global local_w_fd,event_thread,gdb_listen_port,main_thread_ident, __mcgdb_initialized
+  if __mcgdb_initialized:
+    #already initizlized
+    return
+  if not is_gdb_version_correct():
+    return
   lsock=socket.socket()
   lsock.bind( ('',0) )
   port=lsock.getsockname()[1]
@@ -469,6 +502,7 @@ def mc():
   gdb.events.exited.connect( lambda exit_code: inferior_exited(exit_code) )
   gdb.events.breakpoint_created.connect( lambda bp : process_bp(bp,'created') )
   gdb.events.breakpoint_deleted.connect( lambda bp : process_bp(bp,'deleted') )
+  __mcgdb_initialized=True
   #gdb.events.exited.connect(stop_event_loop)
 
 def process_bp(bp,typ):
@@ -495,10 +529,16 @@ def inferior_exited(exit_code):
   os.write(local_w_fd,command)
 
 def mcgdb_main_window():
+  if not __mcgdb_initialized:
+    gdb_print('ERROR: mcgdb not initialized\n')
+    return
   command='mcgdb_main_window:;'
   os.write(local_w_fd,command)
 
 def mcgdb_source_window(filename,line=0):
+  if not __mcgdb_initialized:
+    gdb_print('ERROR: mcgdb not initialized\n')
+    return
   command='mcgdb_source_window:{fname},{line};'.format(fname=filename,line=line)
   os.write(local_w_fd,command)
 
