@@ -552,6 +552,9 @@ frontend_dlg_run (WDialog * h)
         }
         else if(d_key==EV_MOUSE) {
           mcgdb_send_mouse_event_to_gdb(h, &event);
+          if ( mcgdb_ignore_mouse_event(h, &event) ) {
+            d_key=EV_NONE;
+          }
         }
         if ( mcgdb_queue_process_event(h) & MCGDB_EXIT_DLG )
           return;

@@ -307,6 +307,18 @@ mcgdb_send_mouse_event_to_gdb(WDialog * h, Gpm_Event * event) {
   write_all(gdb_input_fd,lb,strlen(lb));
 }
 
+gboolean
+mcgdb_ignore_mouse_event(WDialog * h, Gpm_Event * event) {
+  WEdit *edit=find_editor(h);
+  long cur_col;
+  if(!edit)
+    return FALSE;
+  cur_col=event->x -1 - edit->start_col;
+  if(cur_col <= 7 && (event->type&GPM_UP || event->type&GPM_DOWN) ) {
+    return TRUE;
+  }
+  return FALSE;
+}
 
 void
 mcgdb_queue_append_event(void) {

@@ -32,7 +32,7 @@ class DebugPrint(object):
   events=4
 
 verbose=[
-  DebugPrint.events
+  #DebugPrint.events,
   #DebugPrint.mcgdb_communicate_protocol,
 ] # Данный массив используется для регулирования
 #отладочного вывода. Данный массив должен заполняться

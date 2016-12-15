@@ -71,5 +71,5 @@ extern int      gdb_input_fd;
 
 void mcgdb_queue_append_event(void);
 int  mcgdb_queue_process_event(WDialog * h);
-
+gboolean mcgdb_ignore_mouse_event(WDialog * h, Gpm_Event * event);
 
