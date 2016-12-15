@@ -9,8 +9,9 @@ import re
 import errno
 
 class window_type:
-  MCGDB_MAIN_WINDOW     = "mcgdb_main_window"
-  MCGDB_SOURCE_WINDOW   = "mcgdb_source_window"
+  MCGDB_MAIN_WINDOW         = "mcgdb_main_window"
+  MCGDB_SOURCE_WINDOW       = "mcgdb_source_window"
+  MCGDB_BACKTRACE_WINDOW    = "mcgdb_backtrace_window"
 
 
 gdb_listen_port=None
@@ -85,12 +86,12 @@ def recv_cmd(fd):
   cmd=sp[0]
   args=sp[1].split(',')
   if DebugPrint.mcgdb_communicate_protocol in verbose:
-    gdb_print('recv_cmd: {}'.format(data))
+    gdb_print('recv_cmd({fd}): {data}'.format(fd=fd,data=data))
   return (cmd,args)
 
 def send_cmd(fd,cmd):
   if DebugPrint.mcgdb_communicate_protocol in verbose:
-    gdb_print('send_cmd: {}'.format(cmd))
+    gdb_print('send_cmd({fd}): {data}'.format(fd=fd,data=cmd))
   os.write(fd,cmd)
 
 def is_function(loc):
@@ -184,19 +185,28 @@ def cmd_mouse_click(entities,fd,args):
 
 
 def cmd_mcgdb_main_window(entities,fd,args):
-  #chech whether main_window exists
-  for entity_fd in entities:
-    entity=entities[entity_fd]
-    if entity['type']==window_type.MCGDB_MAIN_WINDOW:
-      gdb_print('main window already exists\n')
-      return
-  window_queue.append({
-    'type':window_type.MCGDB_MAIN_WINDOW,
-  })
+  return cmd_mcgdb_window(entities,fd,args,window_type.MCGDB_MAIN_WINDOW)
+
+def cmd_mcgdb_backtrace_window(entities,fd,args):
+  return cmd_mcgdb_window(entities,fd,args,window_type.MCGDB_BACKTRACE_WINDOW)
+
+
+def cmd_mcgdb_window(entities,fd,args,wtype):
+  if wtype in (
+      window_type.MCGDB_MAIN_WINDOW,
+      window_type.MCGDB_BACKTRACE_WINDOW):
+    for entity_fd in entities:
+      entity=entities[entity_fd]
+      if entity['type']==wtype:
+        gdb_print('{} already exists\n'.format(wtype))
+        return
+  window_queue.append({'type':wtype})
   if DebugPrint.called in verbose:
-    gdb_print("called cmd_mcgdb_main_window\n")
+    gdb_print("called cmd_mcgdb_window\n")
   os.system('gnome-terminal -e "{path_to_mc} --gdb-port={gdb_port}"'.format(
     path_to_mc=PATH_TO_MC,gdb_port=gdb_listen_port))
+
+
 
 def cmd_mcgdb_source_window(entities,fd,args):
   window_queue.append({
@@ -392,6 +402,7 @@ def process_command_from_gdb(entities,fd):
     'terminate':            cmd_terminate_event_loop,
     'inferior_exited':      cmd_inferior_exited,
     'need_processing_bp':   cmd_need_processing_bp,
+    window_type.MCGDB_BACKTRACE_WINDOW: cmd_mcgdb_backtrace_window,
   }
   return fetch_and_process_command(entities,fd,cmds)
 
@@ -401,11 +412,15 @@ def process_command_from_mc(entities,fd):
   }
   return fetch_and_process_command(entities,fd,cmds)
 
+def process_commant_from_btmc(entities,fd):
+  #backtrace window
+  gdb_print( recv_cmd(fd) )
 
 def new_connection(entities,fd):
   actions={
     window_type.MCGDB_MAIN_WINDOW:  process_command_from_mc,
     window_type.MCGDB_SOURCE_WINDOW:process_command_from_mc,
+    window_type.MCGDB_BACKTRACE_WINDOW:  process_commant_from_btmc,
   }
   lsock=entities[fd]['sock']
   conn,addr=lsock.accept()
@@ -415,22 +430,22 @@ def new_connection(entities,fd):
   cmd+='set_window_type:{};'.format(wt['type'])
   if wt['type'] in (window_type.MCGDB_MAIN_WINDOW,window_type.MCGDB_SOURCE_WINDOW):
     cmd+='show_line_numbers:;'
-  if wt['type']==window_type.MCGDB_MAIN_WINDOW:
-    filename=FP.fnew
-    line=FP.lnew
-  elif wt['type']==window_type.MCGDB_SOURCE_WINDOW:
-    filename=wt['filename']
-    line=wt['line']
-  if filename:
-    cmd+='fopen:{fname},{line};'.format(
-      fname=filename,
-      line=line
-    )
-    cmd+=get_cmd_insert_bp_all(filename)
-    cmd+='unmark_all:;'
-    if FP.fnew==filename:
-      cmd+='mark:{line};'.format(line=FP.lnew)
-      cmd+='goto:{line};'.format(line=FP.lnew)
+    if wt['type']==window_type.MCGDB_MAIN_WINDOW:
+      filename=FP.fnew
+      line=FP.lnew
+    elif wt['type']==window_type.MCGDB_SOURCE_WINDOW:
+      filename=wt['filename']
+      line=wt['line']
+    if filename:
+      cmd+='fopen:{fname},{line};'.format(
+        fname=filename,
+        line=line
+      )
+      cmd+=get_cmd_insert_bp_all(filename)
+      cmd+='unmark_all:;'
+      if FP.fnew==filename:
+        cmd+='mark:{line};'.format(line=FP.lnew)
+        cmd+='goto:{line};'.format(line=FP.lnew)
   newfd=conn.fileno()
   send_cmd(newfd,cmd)
   entities[newfd]={
@@ -580,6 +595,11 @@ def mcgdb_source_window(filename,line=0):
   send_cmd(local_w_fd,command)
 
 
-
+def mcgdb_backtrace_window():
+  if not __mcgdb_initialized:
+    gdb_print('ERROR: mcgdb not initialized\n')
+    return
+  command='{}:;'.format(window_type.MCGDB_BACKTRACE_WINDOW)
+  send_cmd(local_w_fd,command)
 
 
