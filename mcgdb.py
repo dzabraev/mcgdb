@@ -84,6 +84,26 @@ def recv_cmd(fd):
   args=sp[1].split(',')
   return (cmd,args)
 
+def is_function(loc):
+  return gdb.block_for_pc(loc.pc).function!=None
+
+def first_executable_linenum(loc):
+  block=gdb.block_for_pc(loc.pc)
+  pc_start = block.start  #address of first instruction in function
+  pc_stop  = block.end    #address of last instr in func
+  first_exec_line=None
+  #find first line, whose addr > pc_start and whose
+  #correspond to function
+  for le in loc.symtab.linetable():
+    if le.pc > pc_stop:
+      break
+    if le.pc > pc_start:
+      first_exec_line=le.line
+      break
+  if first_exec_line==None:
+    first_exec_line=loc.line
+  return first_exec_line
+
 def get_bp_location(bp):
   location=bp.location
   locs=exec_in_main_pythread(gdb.decode_line, (location,))[1]
@@ -92,7 +112,11 @@ def get_bp_location(bp):
   locations=[]
   if locs:
     for loc in locs:
-      line=int(loc.line)
+      line=None
+      if is_function(loc):
+        line=first_executable_linenum(loc)
+      if line==None:
+        line=loc.line
       filename=loc.symtab.fullname()
       locations.append( (filename,line) )
   return locations

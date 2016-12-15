@@ -326,20 +326,29 @@ int
 mcgdb_queue_process_event(WDialog * h) {
   struct gdb_action * gdb_evt;
   int res=MCGDB_OK;
+  GList *l;
+  enum gdb_cmd cmd;
 
-  if( !mcgdb_event_queue && !find_editor(h) ) {
+  if( !mcgdb_event_queue || !find_editor(h) ) {
     return MCGDB_OK;
   }
 
-  for (GList *l=mcgdb_event_queue; l; l=l->next) {
+  while(TRUE) {
+    l=mcgdb_event_queue;
+    if(!l)
+      break;
     gdb_evt = l->data;
-    res|=process_action_from_gdb (h,gdb_evt);
-    free_gdb_evt(gdb_evt);
+    cmd=gdb_evt->command;
+    mcgdb_event_queue = g_list_remove_link (mcgdb_event_queue,l);
+    g_list_free(l);
+    process_action_from_gdb (h,gdb_evt);
+    free_gdb_evt (gdb_evt);
+    if(cmd==MCGDB_FCLOSE) {
+      return MCGDB_EXIT_DLG;
+    }
+    l=mcgdb_event_queue;
   }
-  if(mcgdb_event_queue)
-    g_list_free(mcgdb_event_queue);
-  mcgdb_event_queue=NULL;
-  dlg_redraw(h);
+  dlg_redraw (h);
   return res;
 }
 
