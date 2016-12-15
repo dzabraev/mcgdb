@@ -29,9 +29,11 @@ class DebugPrint(object):
   called=1
   new_worker=2
   mcgdb_communicate_protocol=3
+  events=4
 
 verbose=[
-#  DebugPrint.mcgdb_communicate_protocol,
+  DebugPrint.events
+  #DebugPrint.mcgdb_communicate_protocol,
 ] # Данный массив используется для регулирования
 #отладочного вывода. Данный массив должен заполняться
 # свойствами класса DebugPrint
@@ -82,7 +84,14 @@ def recv_cmd(fd):
   sp=data.split(':')
   cmd=sp[0]
   args=sp[1].split(',')
+  if DebugPrint.mcgdb_communicate_protocol in verbose:
+    gdb_print('recv_cmd: {}'.format(data))
   return (cmd,args)
+
+def send_cmd(fd,cmd):
+  if DebugPrint.mcgdb_communicate_protocol in verbose:
+    gdb_print('send_cmd: {}'.format(cmd))
+  os.write(fd,cmd)
 
 def is_function(loc):
   return gdb.block_for_pc(loc.pc).function!=None
@@ -112,11 +121,12 @@ def get_bp_location(bp):
   locations=[]
   if locs:
     for loc in locs:
-      line=None
-      if is_function(loc):
-        line=first_executable_linenum(loc)
-      if line==None:
-        line=loc.line
+      #line=None
+      #if is_function(loc):
+      #  line=first_executable_linenum(loc)
+      #if line==None:
+      #  line=loc.line
+      line=loc.line
       filename=loc.symtab.fullname()
       locations.append( (filename,line) )
   return locations
@@ -140,8 +150,10 @@ def cmd_mouse_click(entities,fd,args):
   col  = int(args[1])
   line = int(args[2])
   click_types = args[3].split('|')
+  gdb_print('fname={} col={} line={} click_types={}'.format(
+    filename,col,line,click_types))
   #gdb_print("mouse click in mc col={} line={} types={}\n".format(col,line,click_types))
-  if 'GPM_DOWN' in click_types and col<=6:
+  if 'GPM_UP' in click_types and col<=7:
     #do breakpoint
     #gdb_print("mouse click in mc col={} line={} types={}\n".format(col,line,click_types))
     #check whether line belongs to file
@@ -337,7 +349,7 @@ def cmd_check_frame(entities,fd,args):
     if cmd_for_main_window and cmd_for_main_window!='':
       if DebugPrint.mcgdb_communicate_protocol in verbose:
         gdb_print('commands for main: {}\n'.format(cmd_for_main_window))
-      os.write(main_mc_window_fd,cmd_for_main_window)
+      send_cmd(main_mc_window_fd,cmd_for_main_window)
   for fd in mc_windows_fds:
     pass
 
@@ -370,7 +382,7 @@ def cmd_need_processing_bp(entities,fd,cmds):
     for loc_fname,loc_line in bp_locations:
       if loc_fname==entity_fname:
         cmd+='{cmd1}:{line};'.format(cmd1=cmd1,line=loc_line)
-    os.write(entity_fd,cmd)
+    send_cmd(entity_fd,cmd)
 
 def process_command_from_gdb(entities,fd):
   cmds={
@@ -420,7 +432,7 @@ def new_connection(entities,fd):
       cmd+='mark:{line};'.format(line=FP.lnew)
       cmd+='goto:{line};'.format(line=FP.lnew)
   newfd=conn.fileno()
-  os.write(newfd,cmd)
+  send_cmd(newfd,cmd)
   entities[newfd]={
       'type':wt['type'],
       'sock':conn,
@@ -472,7 +484,7 @@ def stop_event_loop():
   global event_thread
   if event_thread:
     command='terminate:;'
-    os.write(local_w_fd,command)
+    send_cmd(local_w_fd,command)
     #event_thread.join()
     event_thread=None
 
@@ -521,6 +533,7 @@ def mc():
   local_r_fd,local_w_fd=os.pipe()
   event_thread=threading.Thread(target=event_loop,args=(lsock,local_r_fd))
   event_thread.start()
+  gdb.execute('set pagination off',False,False)
   gdb.execute('source {}'.format(PATH_TO_DEFINES_MCGDB))
   gdb.events.stop.connect( lambda x: check_frame() )
   gdb.events.exited.connect( lambda exit_code: inferior_exited(exit_code) )
@@ -540,31 +553,31 @@ def process_bp(bp,typ):
     return
   need_processing_bp_mutex.release()
   cmd='need_processing_bp:;'
-  os.write(local_w_fd,cmd)
+  send_cmd(local_w_fd,cmd)
 
 
 def check_frame():
   #Данную команду нужно вызывать из hookpost-{up,down,frame,step,continue}
   command='check_frame:;'
-  os.write(local_w_fd,command)
+  send_cmd(local_w_fd,command)
 
 def inferior_exited(exit_code):
   command='inferior_exited:{exit_code};'.format(exit_code=exit_code)
-  os.write(local_w_fd,command)
+  send_cmd(local_w_fd,command)
 
 def mcgdb_main_window():
   if not __mcgdb_initialized:
     gdb_print('ERROR: mcgdb not initialized\n')
     return
   command='mcgdb_main_window:;'
-  os.write(local_w_fd,command)
+  send_cmd(local_w_fd,command)
 
 def mcgdb_source_window(filename,line=0):
   if not __mcgdb_initialized:
     gdb_print('ERROR: mcgdb not initialized\n')
     return
   command='mcgdb_source_window:{fname},{line};'.format(fname=filename,line=line)
-  os.write(local_w_fd,command)
+  send_cmd(local_w_fd,command)
 
 
 
