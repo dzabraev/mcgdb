@@ -16,10 +16,10 @@
 #include "lib/skin.h"
 #include "src/editor/editwidget.h"
 
-
-
 #include "src/mcgdb.h"
 #include "src/mcgdb-bp.h"
+
+#define STREQ(s1,s2) (!strncmp(s1,s2,strlen(s2)))
 
 int mcgdb_listen_port;
 int gdb_input_fd;
@@ -55,11 +55,14 @@ mcgdb_exit(void) {
 
 static enum window_type
 get_win_type(const char * buf) {
-  if( !strncmp(buf,"mcgdb_main_window",strlen("mcgdb_main_window")) ) {
+  if(      STREQ(buf,"mcgdb_main_window") ) {
     return MCGDB_MAIN_WINDOW;
   }
-  else if( !strncmp(buf,"mcgdb_source_window",strlen("mcgdb_source_window")) ) {
+  else if( STREQ(buf,"mcgdb_source_window") ) {
     return MCGDB_SOURCE_WINDOW;
+  }
+  else if( STREQ(buf,"mcgdb_backtrace_window") ) {
+    return MCGDB_BACKTRACE_WINDOW;
   }
   else {
     return MCGDB_UNKNOWN_WINDOW_TYPE;
@@ -102,6 +105,7 @@ int open_gdb_input_fd(void) {
       read_bytes_from_gdb(buf,';',sizeof(buf));
       mcgdb_wtype=get_win_type(buf);
       if(mcgdb_wtype==MCGDB_UNKNOWN_WINDOW_TYPE) {
+        printf("unknown window type `%s`\n",buf);
         continue;
       }
       else {
