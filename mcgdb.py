@@ -151,7 +151,8 @@ def cmd_mouse_click(entities,fd,args):
   col  = int(args[1])
   line = int(args[2])
   click_types = args[3].split('|')
-  gdb_print('fname={} col={} line={} click_types={}'.format(
+  if DebugPrint.events in verbose:
+    gdb_print('fname={} col={} line={} click_types={}'.format(
     filename,col,line,click_types))
   #gdb_print("mouse click in mc col={} line={} types={}\n".format(col,line,click_types))
   if 'GPM_UP' in click_types and col<=7:
