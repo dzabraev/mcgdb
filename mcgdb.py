@@ -155,7 +155,7 @@ def cmd_mouse_click(entities,fd,args):
     gdb_print('fname={} col={} line={} click_types={}'.format(
     filename,col,line,click_types))
   #gdb_print("mouse click in mc col={} line={} types={}\n".format(col,line,click_types))
-  if 'GPM_UP' in click_types and col<=7:
+  if 'MSG_MOUSE_DOWN' in click_types and col<=7:
     #do breakpoint
     #gdb_print("mouse click in mc col={} line={} types={}\n".format(col,line,click_types))
     #check whether line belongs to file

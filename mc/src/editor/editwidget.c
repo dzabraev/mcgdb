@@ -956,6 +956,10 @@ edit_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *da
                 edit_update_screen (e);
                 ret = MSG_HANDLED;
             }
+            else if (parm==EV_GDB_MESSAGE)
+            {
+              mcgdb_queue_process_event(e);
+            }
             else if (edit_translate_key (e, parm, &cmd, &ch))
             {
                 edit_execute_key_command (e, cmd, ch);
@@ -1068,6 +1072,12 @@ edit_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event)
     int dx = edit->fullscreen ? 0 : 2;
     /* location of 'Close' and 'Toggle fullscreen' pictograms */
     int close_x, toggle_fullscreen_x;
+
+    mcgdb_send_mouse_event_to_gdb(edit, event);
+    if ( mcgdb_ignore_mouse_event(edit, event) ) {
+      event->result.abort=TRUE;
+      return;
+    }
 
     close_x = (w->cols - 1) - dx - 1;
     toggle_fullscreen_x = close_x - 3;

@@ -15,6 +15,7 @@
 #include "lib/tty/key.h"
 #include "lib/skin.h"
 #include "src/editor/editwidget.h"
+#include "lib/widget/mouse.h"
 
 #include "src/mcgdb.h"
 #include "src/mcgdb-bp.h"
@@ -24,6 +25,8 @@
 int mcgdb_listen_port;
 int gdb_input_fd;
 static GList * mcgdb_event_queue;
+
+gboolean read_gdb_events;
 
 enum window_type mcgdb_wtype; /*temporary unused*/
 
@@ -35,7 +38,7 @@ static void
 parse_action_from_gdb(struct gdb_action * act);
 
 static int
-process_action_from_gdb(WDialog * h, struct gdb_action * act);
+process_action_from_gdb(WEdit * h, struct gdb_action * act);
 
 static enum window_type
 get_win_type(const char * buf);
@@ -221,10 +224,10 @@ parse_action_from_gdb(struct gdb_action * act) {
 }
 
 static int
-process_action_from_gdb(WDialog * h, struct gdb_action * act) {
-  int alt0;
-  Widget *wh;
-  WEdit *edit = find_editor(h);
+process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
+  //int alt0;
+  //Widget *wh;
+  //edit->force |= REDRAW_COMPLETELY;
   switch(act->command) {
     case MCGDB_MARK:
       book_mark_insert( edit, act->line, BOOK_MARK_COLOR);
@@ -249,14 +252,14 @@ process_action_from_gdb(WDialog * h, struct gdb_action * act) {
       //TODO нужно ли очищать vfs_path ?
       break;
     case MCGDB_FCLOSE:
-      alt0=KEY_F(10);
-      dlg_process_event (h, alt0, 0);
-      wh = WIDGET (h);
-      if (widget_get_state (wh, WST_CLOSED))
-        send_message (h, NULL, MSG_VALIDATE, 0, NULL);
+//      alt0=KEY_F(10);
+//      dlg_process_event (h, alt0, 0);
+//      wh = WIDGET (h);
+//      if (widget_get_state (wh, WST_CLOSED))
+//        send_message (h, NULL, MSG_VALIDATE, 0, NULL);
       return MCGDB_EXIT_DLG;
     case MCGDB_SHOW_LINE_NUMBERS:
-      edit_set_show_numbers_cmd(h);
+      //edit_set_show_numbers_cmd(h);
       break;
     case MCGDB_GOTO:
       edit_move_display (edit, act->line - WIDGET (edit)->lines / 2 - 1);
@@ -269,18 +272,19 @@ process_action_from_gdb(WDialog * h, struct gdb_action * act) {
 }
 
 int
-mcgdb_action_from_gdb(WDialog * h) {
+mcgdb_action_from_gdb(WEdit * edit) {
   struct gdb_action act;
   parse_action_from_gdb(&act);
-  return process_action_from_gdb(h,&act);
+  return process_action_from_gdb(edit,&act);
 }
 
 static const char *
-stringify_click_type(Gpm_Event * event) {
+stringify_click_type(mouse_event_t * event) {
   static char buf[512];
   size_t len=0;
   buf[0]=0;
-# define APPEND_EVT(EVT)  if( event->type&EVT ) { len+=sprintf(buf+len, #EVT "|"); }
+# define APPEND_EVT(EVT)  if( event->msg==EVT ) { len+=sprintf(buf+len, #EVT "|"); }
+  /*
   APPEND_EVT(GPM_MOVE);
   APPEND_EVT(GPM_DRAG);
   APPEND_EVT(GPM_DOWN);
@@ -289,36 +293,42 @@ stringify_click_type(Gpm_Event * event) {
   APPEND_EVT(GPM_DOUBLE);
   APPEND_EVT(GPM_TRIPLE);
   APPEND_EVT(GPM_MFLAG);
-  APPEND_EVT(GPM_HARD);
+  APPEND_EVT(GPM_HARD);*/
+  APPEND_EVT(MSG_MOUSE_NONE);
+  APPEND_EVT(MSG_MOUSE_DOWN);
+  APPEND_EVT(MSG_MOUSE_UP);
+  APPEND_EVT(MSG_MOUSE_CLICK);
+  APPEND_EVT(MSG_MOUSE_DRAG);
+  APPEND_EVT(MSG_MOUSE_MOVE);
+  APPEND_EVT(MSG_MOUSE_SCROLL_UP);
+  APPEND_EVT(MSG_MOUSE_SCROLL_DOWN);
 # undef APPEND_EVT
   buf[len-1]=0;
   return buf;
 }
 
 void
-mcgdb_send_mouse_event_to_gdb(WDialog * h, Gpm_Event * event) {
+mcgdb_send_mouse_event_to_gdb(WEdit * edit, mouse_event_t * event) {
   static char lb[512];
   const char * filename;
-  WEdit *edit=find_editor(h);
   if(!edit)
     return;
   filename = edit_get_file_name(edit);
   sprintf(lb,"mouse_click:%s,%li,%li,%s;",
     filename?filename:"",
-    event->x -1 - edit->start_col,
-    event->y -1 + edit->start_line,
+    event->x     - edit->start_col,
+    event->y + 1 + edit->start_line,
     stringify_click_type(event));
   write_all(gdb_input_fd,lb,strlen(lb));
 }
 
 gboolean
-mcgdb_ignore_mouse_event(WDialog * h, Gpm_Event * event) {
-  WEdit *edit=find_editor(h);
+mcgdb_ignore_mouse_event(WEdit * edit, mouse_event_t * event) {
   long cur_col;
   if(!edit)
     return FALSE;
   cur_col=event->x -1 - edit->start_col;
-  if(cur_col <= 7 && (event->type&GPM_UP || event->type&GPM_DOWN) ) {
+  if( cur_col <= 7 ) { //TODO 7 заменить константой-define шириной нумерного столбца
     return TRUE;
   }
   return FALSE;
@@ -338,14 +348,55 @@ free_gdb_evt (struct gdb_action * gdb_evt) {
   g_free(gdb_evt);
 }
 
+static gboolean
+evt_convertable_to_key(struct gdb_action * gdb_evt) {
+  switch(gdb_evt->command) {
+    case MCGDB_FCLOSE:
+    case MCGDB_SHOW_LINE_NUMBERS:
+      return TRUE;
+    default:
+      return FALSE;
+  }
+}
+
+gboolean
+mcgdb_queue_head_convertable_to_key(void) {
+  if (!mcgdb_event_queue)
+    return FALSE;
+  return evt_convertable_to_key(mcgdb_event_queue->data);
+}
+
 int
-mcgdb_queue_process_event(WDialog * h) {
+mcgdb_queue_convert_head_to_key(void) {
+  GList *l;
+  struct gdb_action * gdb_evt;
+  int d_key;
+  l=mcgdb_event_queue;
+  mcgdb_event_queue = g_list_remove_link (mcgdb_event_queue,l);
+  gdb_evt=l->data;
+  switch( gdb_evt->command ) {
+    case MCGDB_FCLOSE:
+      d_key=KEY_F(10);
+      break;
+    case MCGDB_SHOW_LINE_NUMBERS:
+      d_key=ALT('n');
+      break;
+    default:
+      abort();
+  }
+  g_list_free(l);
+  free_gdb_evt(gdb_evt);
+  return d_key;
+}
+
+int
+mcgdb_queue_process_event(WEdit * edit) {
   struct gdb_action * gdb_evt;
   int res=MCGDB_OK;
   GList *l;
   enum gdb_cmd cmd;
 
-  if( !mcgdb_event_queue || !find_editor(h) ) {
+  if( !mcgdb_event_queue || !edit ) {
     return MCGDB_OK;
   }
 
@@ -357,21 +408,25 @@ mcgdb_queue_process_event(WDialog * h) {
     cmd=gdb_evt->command;
     mcgdb_event_queue = g_list_remove_link (mcgdb_event_queue,l);
     g_list_free(l);
-    process_action_from_gdb (h,gdb_evt);
+    process_action_from_gdb (edit,gdb_evt);
     free_gdb_evt (gdb_evt);
     if(cmd==MCGDB_FCLOSE) {
       return MCGDB_EXIT_DLG;
     }
     l=mcgdb_event_queue;
   }
-  dlg_redraw (h);
   return res;
+}
+
+gboolean
+mcgdb_queue_is_empty(void) {
+  return mcgdb_event_queue==NULL;
 }
 
 
 
-
-
-
+void mcgdb_checkset_read_gdb_events(WDialog * h) {
+  read_gdb_events=find_editor( h )!=0;
+}
 
 

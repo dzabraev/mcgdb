@@ -539,30 +539,29 @@ frontend_dlg_run (WDialog * h)
 
         update_cursor (h);
 
-        if ( mcgdb_queue_process_event(h) & MCGDB_EXIT_DLG ) {
-          return;
-        }
+//        if ( mcgdb_queue_process_event(h) & MCGDB_EXIT_DLG ) {
+//          return;
+//        }
 
         /* Clear interrupt flag */
         tty_got_interrupt ();
+        mcgdb_checkset_read_gdb_events(h);
         d_key = tty_get_event (&event, h->mouse_status == MOU_REPEAT, TRUE);
+/*
         if(d_key==EV_GDB_MESSAGE) {
           mcgdb_queue_append_event();
-          d_key=EV_NONE;
+          //d_key=EV_NONE;
         }
-        else if(d_key==EV_MOUSE) {
-          mcgdb_send_mouse_event_to_gdb(h, &event);
-          if ( mcgdb_ignore_mouse_event(h, &event) ) {
-            d_key=EV_NONE;
-          }
-        }
-        if ( mcgdb_queue_process_event(h) & MCGDB_EXIT_DLG )
-          return;
+*/
+//        if ( mcgdb_queue_process_event(h) & MCGDB_EXIT_DLG )
+//          return;
 
         dlg_process_event (h, d_key, &event);
 
         if (widget_get_state (wh, WST_CLOSED))
             send_message (h, NULL, MSG_VALIDATE, 0, NULL);
+        if(d_key==EV_GDB_MESSAGE)
+          dlg_redraw (h);
     }
 }
 

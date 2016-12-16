@@ -29,7 +29,9 @@ enum window_type {
 #define MCGDB_OK 0
 #define MCGDB_EXIT_DLG 1
 
+extern gboolean read_gdb_events;
 
+struct mouse_event_t;
 
 struct gdb_action {
   enum gdb_cmd command;
@@ -64,13 +66,19 @@ int  open_gdb_input_fd(void);
 //void parse_action_from_gdb();
 //int process_action_from_gdb(WDialog * h);
 typedef struct WEdit WEdit;
-void mcgdb_send_mouse_event_to_gdb(WDialog * edit, Gpm_Event * event);
-int mcgdb_action_from_gdb(WDialog * h);
+void mcgdb_send_mouse_event_to_gdb(WEdit * edit, mouse_event_t * event);
+int mcgdb_action_from_gdb(WEdit * edit);
 
 extern int      mcgdb_listen_port;
 extern int      gdb_input_fd;
 
 void mcgdb_queue_append_event(void);
-int  mcgdb_queue_process_event(WDialog * h);
-gboolean mcgdb_ignore_mouse_event(WDialog * h, Gpm_Event * event);
+int  mcgdb_queue_process_event(WEdit * edit);
+gboolean mcgdb_ignore_mouse_event(WEdit * edit, mouse_event_t * event);
+gboolean mcgdb_queue_is_empty(void);
 
+int mcgdb_queue_convert_head_to_key(void);
+gboolean mcgdb_queue_head_convertable_to_key(void);
+
+
+void mcgdb_checkset_read_gdb_events(WDialog * h);

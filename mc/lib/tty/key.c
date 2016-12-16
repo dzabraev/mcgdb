@@ -1973,6 +1973,9 @@ tty_get_event (struct Gpm_Event *event, gboolean redo_event, gboolean block)
     struct timeval *time_addr = NULL;
     static int dirty = 3;
 
+    //if( !mcgdb_queue_is_empty() )
+    //  return EV_GDB_MESSAGE;
+
     if ((dirty == 3) || is_idle ())
     {
         mc_refresh ();
@@ -2002,9 +2005,11 @@ tty_get_event (struct Gpm_Event *event, gboolean redo_event, gboolean block)
 
         FD_ZERO (&select_set);
         FD_SET (input_fd, &select_set);
-        FD_SET (gdb_input_fd, &select_set);
         nfd = MAX (add_selects (&select_set), MAX (0, input_fd)) + 1;
-        nfd = MAX (nfd,gdb_input_fd+1);
+        if( read_gdb_events ) {
+          FD_SET (gdb_input_fd, &select_set);
+          nfd = MAX (nfd,gdb_input_fd+1);
+        }
 #ifdef HAVE_LIBGPM
         if (mouse_enabled && (use_mouse_p == MOUSE_GPM))
         {
@@ -2087,8 +2092,14 @@ tty_get_event (struct Gpm_Event *event, gboolean redo_event, gboolean block)
             return EV_NONE;
 
         check_selects (&select_set);
-        if (FD_ISSET (gdb_input_fd, &select_set)) {
-          return EV_GDB_MESSAGE;
+        if( read_gdb_events ) {
+          if (FD_ISSET (gdb_input_fd, &select_set)) {
+            mcgdb_queue_append_event();
+            if (mcgdb_queue_head_convertable_to_key()) {
+              return mcgdb_queue_convert_head_to_key();
+            }
+            return EV_GDB_MESSAGE;
+          }
         }
         if (FD_ISSET (input_fd, &select_set))
             break;
