@@ -486,14 +486,11 @@ def event_loop(lsock,local_r_fd):
       callback=entities[fd]['action']
       try:
         callback(entities,fd)
-      except SystemExit:
-        raise
+#      except SystemExit:
+#        raise
       except CommandReadFailure:
         #if read return 0 => connection was closed.
         entities.pop(fd)
-      except:
-        #something is bad
-        raise #debug
   gdb_print('event_loop stopped\n')
 
 def stop_event_loop():
