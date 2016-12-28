@@ -23,8 +23,8 @@ PATH_TO_DEFINES_MCGDB="~/bin/defines-mcgdb.gdb"
 window_queue=[]
 __mcgdb_initialized=False
 
-need_processing_bp=[]
-need_processing_bp_mutex=threading.Lock()
+#need_processing_bp=[]
+#need_processing_bp_mutex=threading.Lock()
 
 class DebugPrint(object):
   called=1
@@ -39,6 +39,11 @@ verbose=[
 #отладочного вывода. Данный массив должен заполняться
 # свойствами класса DebugPrint
 #example: verbose=[DebugPrint.called,DebugPrint.new_worker]
+
+breakpoint_queue=[] #Если inferior не приостановлен и пользователь
+#кликает по столбцам с номерами строк, то для добавления и удаления
+#точки останова необходимо дождаться остановки inferior. Пока inferior
+#запущен будем запоминать точки останова, которые необходимо поставить.
 
 class _FP(object):
   fnew=None
@@ -55,9 +60,7 @@ def gdb_print(msg,**kwargs):
   #thread safe
   disable_mcgdb_prefix=kwargs.get('disable_mcgdb_prefix',False)
   mcgdb_prefix='' if disable_mcgdb_prefix else '\nmcgdb: '
-  if len(msg)>0 and msg[-1]=='\n':
-   msg=msg[:-1]
-  msg='{mcgdb_prefix}{origmsg}\n{prompt}'.format(
+  msg='{mcgdb_prefix}{origmsg}{prompt}'.format(
     origmsg=msg,
     prompt=gdb.parameter("prompt"),
     mcgdb_prefix=mcgdb_prefix,
@@ -86,12 +89,12 @@ def recv_cmd(fd):
   cmd=sp[0]
   args=sp[1].split(',')
   if DebugPrint.mcgdb_communicate_protocol in verbose:
-    gdb_print('recv_cmd({fd}): {data}'.format(fd=fd,data=data))
+    gdb_print('recv_cmd({fd}): {data}\n'.format(fd=fd,data=data))
   return (cmd,args)
 
 def send_cmd(fd,cmd):
   if DebugPrint.mcgdb_communicate_protocol in verbose:
-    gdb_print('send_cmd({fd}): {data}'.format(fd=fd,data=cmd))
+    gdb_print('send_cmd({fd}): {data}\n'.format(fd=fd,data=cmd))
   os.write(fd,cmd)
 
 def is_function(loc):
@@ -114,7 +117,7 @@ def first_executable_linenum(loc):
     first_exec_line=loc.line
   return first_exec_line
 
-def get_bp_location(bp):
+def get_bp_location(bp,**kwargs):
   location=bp.location
   locs=exec_in_main_pythread(gdb.decode_line, (location,))[1]
   if locs==None:
@@ -122,11 +125,6 @@ def get_bp_location(bp):
   locations=[]
   if locs:
     for loc in locs:
-      #line=None
-      #if is_function(loc):
-      #  line=first_executable_linenum(loc)
-      #if line==None:
-      #  line=loc.line
       line=loc.line
       filename=loc.symtab.fullname()
       locations.append( (filename,line) )
@@ -146,6 +144,92 @@ def get_bp(gdb_bps,filename,line):
         return bp
   return None
 
+
+def bp_check_delete(bp):
+  if gdb.selected_thread().is_stopped():
+    bp.delete()
+    return True
+  else:
+    return False
+
+def bp_check_insert(filename,line):
+  if gdb.selected_thread().is_stopped():
+    try:
+      exec_in_main_pythread( gdb.Breakpoint, ('{}:{}'.format(filename,line),) )
+    except gdb.error:
+      pass
+    return True
+  else:
+    return False
+
+
+def process_breakpoint_queue():
+  global breakpoint_queue
+  for idx in range(len(breakpoint_queue)):
+    bp_request = breakpoint_queue[idx]
+    request_type=bp_request[0]
+    request_arg =bp_request[1]
+    assert request_type in ('delete','insert')
+    if request_type=='delete':
+      bp=request_arg[0]
+      res=exec_in_main_pythread(bp_check_delete , (bp,))
+    elif request_type=='insert':
+      filename,line=request_arg
+      res=exec_in_main_pythread(bp_check_insert , (filename, line))
+    if not res:
+      #inferior running; can't process breakpoint
+      breakpoint_queue = breakpoint_queue[idx:]
+      return
+  breakpoint_queue=[]
+
+def bp_delete(bp):
+  #bp if gdb.Breakpoint object
+  global breakpoint_queue
+  if DebugPrint.called in verbose: gdb_print('called `bp_delete`\n')
+  locations=get_bp_location(bp)
+  breakpoint_queue.append ( ('delete',(bp,locations)) )
+  process_breakpoint_queue ()
+
+def bp_insert(filename,line):
+  global breakpoint_queue
+  if DebugPrint.called in verbose: gdb_print('called `bp_insert`\n')
+  breakpoint_queue.append ( ('insert',(filename,line)) )
+  process_breakpoint_queue ()
+
+
+def bp_queue_get_request_idx(filename,line):
+  for idx in range(len(breakpoint_queue)):
+    bp_request=breakpoint_queue[idx]
+    request_type=bp_request[0]
+    request_arg =bp_request[1]
+    assert request_type in ('delete','insert')
+    if request_type=='delete':
+      bp,locations=request_arg
+      if (filename,line) in locations:
+        return idx
+    elif request_type=='insert':
+      request_filename,request_line=request_arg
+      if request_filename==filename and request_line==line:
+        return idx
+  return None
+
+
+def bp_exists_in_queue(filename,line):
+  return bp_queue_get_request_idx(filename,line)!=None
+
+def bp_in_queue(bp):
+  for bp_request in breakpoint_queue:
+    request_type=bp_request[0]
+    if request_type=='delete':
+      request_arg=bp_request[1]
+      bp_object=request_arg[0]
+      if bp_object==bp:
+        return True
+  return False
+
+def is_current_thread_stopped():
+  return exec_in_main_pythread( lambda : gdb.selected_thread().is_stopped(), () )
+
 def cmd_mouse_click(entities,fd,args):
   filename=args[0] #in this file user produce click
   col  = int(args[1])
@@ -158,31 +242,38 @@ def cmd_mouse_click(entities,fd,args):
   if 'MSG_MOUSE_DOWN' in click_types and col<=7:
     #do breakpoint
     #gdb_print("mouse click in mc col={} line={} types={}\n".format(col,line,click_types))
-    #check whether line belongs to file
+    if filename=='':
+      return
     try:
+      #check whether line belongs to file
       exec_in_main_pythread( gdb.decode_line, ('{}:{}'.format(filename,line),))
     except:
       #not belonging
       return
+    idx=bp_queue_get_request_idx(filename,line)
+    if idx!=None:
+      #Чётный клик по кнопке. Удаляем request
+      global breakpoint_queue
+      breakpoint_queue.pop(idx)
+      cmd_update_breakpoints(entities,fd,[])
+      return
     gdb_bps=exec_in_main_pythread( gdb.breakpoints, ())
-    if filename!='':
-      if gdb_bps!=None:
-        try:
-          bp=get_bp(gdb_bps,filename,line)
-        except gdb.error:
-          return
-      else:
-        bp=None
-      if bp!=None:
-        #exists bp at (filename,line)
-        exec_in_main_pythread( bp.delete, ())
-      else:
-        #create breakpoint
-        try:
-          exec_in_main_pythread( gdb.Breakpoint, ('{}:{}'.format(filename,line),) )
-        except gdb.error:
-          return
+    if gdb_bps!=None:
+      try:
+        bp=get_bp(gdb_bps,filename,line)
+      except gdb.error:
+        return
+    else:
+      bp=None
+    if bp!=None:
+      #exists bp at (filename,line)
+      bp_delete(bp)
+    else:
+      #create breakpoint
+      bp_insert(filename,line)
+      if is_current_thread_stopped():
         gdb_print('',disable_mcgdb_prefix=True)
+    cmd_update_breakpoints(entities,fd,[])
 
 
 def cmd_mcgdb_main_window(entities,fd,args):
@@ -334,9 +425,13 @@ def cmd_check_frame(entities,fd,args):
       #Новый файл отсутствует. Возможно исполнение
       #отлаживаемой программы завершилось. Необходимо убрать
       #позицию исполнения(отмеченную строку) в mcedit
+      entities[main_mc_window_fd]['filename']=None
       if FP.lold:
         cmd_for_main_window+='unmark:{line};'.format(line=FP.lold)
       if FP.fold:
+        #Если в редакторе был открыт файл, то закрываем его
+        #если же файл не ыбл открыт, и будет сделано fclose, то
+        #редактор попросту закроется
         cmd_for_main_window+='fclose:;'
     if FP.fnew and FP.fnew!=FP.fold:
       if FP.lold:
@@ -370,6 +465,34 @@ def cmd_terminate_event_loop(entities,fd,cmds):
     gdb_print('called cmd_terminate_event_loop\n')
   sys.exit(0)
 
+def cmd_update_breakpoints(entities,fd,cmds):
+  bps=gdb_bps=exec_in_main_pythread( gdb.breakpoints, ())
+  bps_loc=[]
+  for bp in bps:
+    if not bp_in_queue(bp):
+      #Возможно в очереди есть request на удаление этой точки
+      bps_loc.append( get_bp_location(bp) )
+  for bp_request in breakpoint_queue:
+    rtype=bp_request[0]
+    if rtype=='insert':
+      bps_loc.append( [bp_request[1]] ) #append [ (filename,line) ]
+  for entity_fd in entities:
+    entity=entities[entity_fd]
+    if entity['type'] not in (window_type.MCGDB_MAIN_WINDOW,window_type.MCGDB_SOURCE_WINDOW):
+      continue
+    entity_fname=entity['filename']
+    if entity_fname==None:
+      continue
+    cmd=''
+    for bp_locations in bps_loc:
+      for loc_fname,loc_line in bp_locations:
+        if loc_fname==entity_fname:
+          cmd+='insert_bp:{line};'.format(line=loc_line)
+    cmd='remove_bp_all:;'+cmd
+    send_cmd(entity_fd,cmd)
+
+
+'''
 def cmd_need_processing_bp(entities,fd,cmds):
   global need_processing_bp_mutex, need_processing_bp
   need_processing_bp_mutex.acquire()
@@ -394,6 +517,17 @@ def cmd_need_processing_bp(entities,fd,cmds):
       if loc_fname==entity_fname:
         cmd+='{cmd1}:{line};'.format(cmd1=cmd1,line=loc_line)
     send_cmd(entity_fd,cmd)
+'''
+
+
+def cmd_process_event_stop(entities,fd,args):
+  process_breakpoint_queue()
+  cmd_check_frame(entities,fd,args)
+
+def cmd_process_event_exited(entities,fd,args):
+  process_breakpoint_queue()
+  cmd_inferior_exited(entities,fd,args)
+
 
 def process_command_from_gdb(entities,fd):
   cmds={
@@ -402,7 +536,10 @@ def process_command_from_gdb(entities,fd):
     'check_frame':          cmd_check_frame,
     'terminate':            cmd_terminate_event_loop,
     'inferior_exited':      cmd_inferior_exited,
-    'need_processing_bp':   cmd_need_processing_bp,
+    #'need_processing_bp':   cmd_need_processing_bp,
+    'event_stop':           cmd_process_event_stop,
+    'event_exited':         cmd_process_event_exited,
+    'update_breakpoints':   cmd_update_breakpoints,
     window_type.MCGDB_BACKTRACE_WINDOW: cmd_mcgdb_backtrace_window,
   }
   return fetch_and_process_command(entities,fd,cmds)
@@ -460,6 +597,7 @@ def new_connection(entities,fd):
 
 
 def event_loop(lsock,local_r_fd):
+  global entities
   listen_fd=lsock.fileno()
   rfds=[listen_fd,local_r_fd]
   entities={
@@ -471,7 +609,8 @@ def event_loop(lsock,local_r_fd):
     #print rfds
     if len(rfds)==0:
       #nothing to be doing
-      return
+      gdb_print('nothing tobe doing\n')
+      break
     timeout=0.1
     #timeout ставится чтобы проверять, нужно ли останавливать этот цикл
     try:
@@ -489,7 +628,7 @@ def event_loop(lsock,local_r_fd):
 #      except SystemExit:
 #        raise
       except CommandReadFailure:
-        #if read return 0 => connection was closed.
+        gdb_print('connection type={} was closed\n'.format(entities[fd]['type']))
         entities.pop(fd)
   gdb_print('event_loop stopped\n')
 
@@ -548,13 +687,16 @@ def mc():
   event_thread.start()
   gdb.execute('set pagination off',False,False)
   gdb.execute('source {}'.format(PATH_TO_DEFINES_MCGDB))
-  gdb.events.stop.connect( lambda x: check_frame() )
-  gdb.events.exited.connect( lambda exit_code: inferior_exited(exit_code) )
-  gdb.events.breakpoint_created.connect( lambda bp : process_bp(bp,'created') )
-  gdb.events.breakpoint_deleted.connect( lambda bp : process_bp(bp,'deleted') )
+  gdb.events.stop.connect( lambda x: notify_event_stop() )
+  gdb.events.exited.connect( lambda exit_code: notify_event_exited(exit_code) )
+  #gdb.events.breakpoint_created.connect( lambda bp : process_bp(bp,'created') )
+  #gdb.events.breakpoint_deleted.connect( lambda bp : process_bp(bp,'deleted') )
+  gdb.events.breakpoint_created.connect( lambda bp : notify_update_breakpoints() )
+  gdb.events.breakpoint_deleted.connect( lambda bp : notify_update_breakpoints() )
   __mcgdb_initialized=True
   #gdb.events.exited.connect(stop_event_loop)
 
+'''
 def process_bp(bp,typ):
   global need_processing_bp
   need_processing_bp_mutex.acquire()
@@ -567,7 +709,12 @@ def process_bp(bp,typ):
   need_processing_bp_mutex.release()
   cmd='need_processing_bp:;'
   send_cmd(local_w_fd,cmd)
+'''
 
+
+def notify_event_stop():            send_cmd(local_w_fd, 'event_stop:;')
+def notify_event_exited(exit_code): send_cmd(local_w_fd, 'event_exited:{exit_code};')
+def notify_update_breakpoints():    send_cmd(local_w_fd, 'update_breakpoints:;')
 
 def check_frame():
   #Данную команду нужно вызывать из hookpost-{up,down,frame,step,continue}
