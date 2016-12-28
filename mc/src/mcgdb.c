@@ -16,6 +16,7 @@
 #include "lib/skin.h"
 #include "src/editor/editwidget.h"
 #include "lib/widget/mouse.h"
+#include "src/editor/edit.h"
 
 #include "src/mcgdb.h"
 #include "src/mcgdb-bp.h"
@@ -260,6 +261,7 @@ process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
       return MCGDB_EXIT_DLG;
     case MCGDB_SHOW_LINE_NUMBERS:
       //edit_set_show_numbers_cmd(h);
+      option_line_state=1;
       break;
     case MCGDB_GOTO:
       edit_move_display (edit, act->line - WIDGET (edit)->lines / 2 - 1);
@@ -352,7 +354,6 @@ static gboolean
 evt_convertable_to_key(struct gdb_action * gdb_evt) {
   switch(gdb_evt->command) {
     case MCGDB_FCLOSE:
-    case MCGDB_SHOW_LINE_NUMBERS:
       return TRUE;
     default:
       return FALSE;
@@ -378,9 +379,9 @@ mcgdb_queue_convert_head_to_key(void) {
     case MCGDB_FCLOSE:
       d_key=KEY_F(10);
       break;
-    case MCGDB_SHOW_LINE_NUMBERS:
-      d_key=ALT('n');
-      break;
+//    case MCGDB_SHOW_LINE_NUMBERS:
+//      d_key=ALT('n');
+//      break;
     default:
       abort();
   }
