@@ -273,43 +273,6 @@ mc_tty_normalize_lines_char (const char *str)
 /* --------------------------------------------------------------------------------------------- */
 
 
-static int
-setup_listener_socket(unsigned int port)
-{
-  int sock;
-  struct sockaddr_in addr;
-  int value;
-
-  sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
-  if (sock < 0)
-    {
-      perror("socket");
-      return -1;
-    }
-  addr.sin_family = AF_INET;
-  addr.sin_port = htons(port);
-  addr.sin_addr.s_addr = htonl(INADDR_ANY);
-  value = 1;
-
-  if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &value, sizeof(value)) < 0)
-    {
-      perror("setsockopt SO_REUSEADDR");
-      return -1;
-    }
-  if (bind(sock, (struct sockaddr *) &addr, sizeof(addr)) < 0)
-    {
-      perror("bind");
-      return -1;
-    }
-  if (listen(sock, 1) < 0)
-    {
-      perror("listen");
-      return -1;
-    }
-
-  return sock;
-}
-
 
 void
 tty_init (gboolean mouse_enable, gboolean is_xterm)
@@ -347,8 +310,6 @@ tty_init (gboolean mouse_enable, gboolean is_xterm)
        file. */
     if (SLang_TT_Read_FD == fileno (stderr))
         SLang_TT_Read_FD = fileno (stdin);
-    //int lsock=setup_listener_socket(10101);
-    //SLang_TT_Read_FD=accept(lsock,0,0);
 
     if (tcgetattr (SLang_TT_Read_FD, &new_mode) == 0)
     {
