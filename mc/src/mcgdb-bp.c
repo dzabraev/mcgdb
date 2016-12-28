@@ -59,4 +59,5 @@ void mcgdb_bp_remove_all(void) {
   if(!mcgdb_bps)
     return;
   g_list_free_full (mcgdb_bps,g_free);
+  mcgdb_bps = 0;
 }
