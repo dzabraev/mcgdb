@@ -22,9 +22,9 @@
 
 ## INSTALL from sources
 
-git clone https://github.com/dzabraev/mcgdb
-mkdir obj-mcgdb
-cd obj-mcgdb
-../mcgdb/configure
-make -j4
-make install
+git clone https://github.com/dzabraev/mcgdb  
+mkdir obj-mcgdb  
+cd obj-mcgdb  
+../mcgdb/configure  
+make -j4  
+make install  
