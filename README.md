@@ -19,6 +19,7 @@
 ## dependancies
 1. gdb >= 7.12
 2. mc
+3. gnome-terminal
 
 ## INSTALL from sources
 
@@ -28,3 +29,7 @@ cd obj-mcgdb
 ../mcgdb/configure  
 make -j4  
 make install  
+
+#getting started
+Just use `$ mcgdb` instead `$ gdb`. When you invoke mcgdb additional windows will be
+open automatically. 
