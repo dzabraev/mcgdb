@@ -13,3 +13,18 @@
 При помощи кликов по столбцам с номерами строк можно добавлять и удалять точки останова.
 
 Для использования mcgdb необходим стандартный отладчик gdb >= 7.12 и mc с нашими правками.
+
+# INSTALL
+
+## dependancies
+1. gdb >= 7.12
+2. mc
+
+## INSTALL from sources
+
+git clone https://github.com/dzabraev/mcgdb
+mkdir obj-mcgdb
+cd obj-mcgdb
+../mcgdb/configure
+make -j4
+make install
