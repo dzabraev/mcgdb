@@ -10,9 +10,9 @@ def configure_mcedit(args):
   path='/'.join(__file__.split('/')[:-1]) #mcgdb root
   configure=path+'/mc/configure'
   if path!='.':
-    for fname in ['mcgdb.py', 'defines-mcgdb.gdb', 'startup.gdb', 'mcgdb']:
+    for fname in ['mcgdb.py', 'defines-mcgdb.gdb', 'startup.gdb', 'mcgdb', 'install.py']:
       #shutil.copy('{}/{}'.format(path,fname),'./')
-      os.symlink('{}/{}'.format(path,fname),'./')
+      os.symlink('{}/{}'.format(path,fname),fname)
   if not os.path.exists('obj-mc'):
     os.makedirs('obj-mc')
   savedcwd=os.getcwd()

@@ -8,13 +8,17 @@ def make_path(path):
   if not os.path.exists(path):
     os.makedirs(path)
 
+def make_path_file(fname):
+  path='/'.join(fname.split('/')[:-1])
+  make_path(path)
+
 def get_files(prefix):
   files={
-    'mcgdb-mcedit'     :('obj-mc/src/mc'    ,   '{}/bin/mcgdb-mcedit'.format(prefix)                ,   0777),
-    'mcgdb'            :(None               ,   '{}/bin/mcgdb'.format(prefix)                       ,   0777),
-    'mcgdb.py'         :('mcgdb.py'         ,   '{}/share/mcgdb/mcgdb.py'.format(prefix)            ,   0777),
-    'defines-mcgdb.gdb':('defines-mcgdb.gdb',   '{}/share/mcgdb/defines-mcgdb.gdb'.format(prefix)   ,   0777),
-    'startup.gdb'      :(None               ,   '{}/share/mcgdb/startup.gdb'.format(prefix)         ,   0777),
+    'mcgdb-mcedit'     :('obj-mc/src/mc'    ,   '{}/bin/mcgdb-mcedit'.format(prefix)                ,   0555),
+    'mcgdb'            :(None               ,   '{}/bin/mcgdb'.format(prefix)                       ,   0444),
+    'mcgdb.py'         :('mcgdb.py'         ,   '{}/share/mcgdb/mcgdb.py'.format(prefix)            ,   0444),
+    'defines-mcgdb.gdb':('defines-mcgdb.gdb',   '{}/share/mcgdb/defines-mcgdb.gdb'.format(prefix)   ,   0444),
+    'startup.gdb'      :(None               ,   '{}/share/mcgdb/startup.gdb'.format(prefix)         ,   0444),
   }
   return files
 
@@ -29,6 +33,7 @@ def install(prefix):
       continue
     if os.path.exists(dst):
       os.remove(dst)
+    make_path_file(dst)
     shutil.copy(src,dst)
     os.chmod(dst,mode)
   os.system('''sed 's#PATH_TO_MC=.*#PATH_TO_MC="{mcedit}"#' {dst} -i'''.format(
@@ -49,6 +54,7 @@ pi mcgdb_main_window()
     f.write('''#!/usr/bin/env bash
 gdb $@ -x {startup}
 '''.format(startup=files['startup.gdb'][1]))
+  os.chmod(files['mcgdb'][1],0555)
 
 
 def remove(prefix):
