@@ -295,7 +295,7 @@ def cmd_mcgdb_window(entities,fd,args,wtype):
   window_queue.append({'type':wtype})
   if DebugPrint.called in verbose:
     gdb_print("called cmd_mcgdb_window\n")
-  os.system('gnome-terminal -e "{path_to_mc} --gdb-port={gdb_port}"'.format(
+  os.system('gnome-terminal -e "{path_to_mc} -e --gdb-port={gdb_port}"'.format(
     path_to_mc=PATH_TO_MC,gdb_port=gdb_listen_port))
 
 

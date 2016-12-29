@@ -7,11 +7,12 @@ import argparse
 import subprocess as sp
 
 def configure_mcedit(args):
-  path='/'.join(__file__.split('/')[:-1])
+  path='/'.join(__file__.split('/')[:-1]) #mcgdb root
   configure=path+'/mc/configure'
   if path!='.':
     for fname in ['mcgdb.py', 'defines-mcgdb.gdb', 'startup.gdb', 'mcgdb']:
-      shutil.copy('{}/{}'.format(path,fname),'./')
+      #shutil.copy('{}/{}'.format(path,fname),'./')
+      os.symlink('{}/{}'.format(path,fname),'./')
   if not os.path.exists('obj-mc'):
     os.makedirs('obj-mc')
   savedcwd=os.getcwd()
