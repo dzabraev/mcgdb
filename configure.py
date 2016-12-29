@@ -3,6 +3,8 @@
 
 import os,shutil
 import sys
+import argparse
+import subprocess as sp
 
 def configure_mcedit(args):
   path='/'.join(__file__.split('/')[:-1])
@@ -20,16 +22,30 @@ def configure_mcedit(args):
   os.system(cmd)
   os.chdir(savedcwd)
 
-def generate_makefile():
+def generate_makefile(prefix):
   with open('Makefile','w') as f:
     f.write('''
 all :
 	make -C obj-mc
-''')
+install :
+	python install.py --prefix {prefix}
+'''.format(prefix=prefix))
+
+def get_mc_location():
+  res=sp.check_output('type mcedit',shell=True)
+  path=res.split()[-1]
+  rootpath='/'.join(path.split('/')[:-2])
+  return rootpath
 
 def main():
-  configure_mcedit(sys.argv[1:])
-  generate_makefile()
+  parser = argparse.ArgumentParser()
+  parser.add_argument("--prefix",default='/usr/local')
+  args=parser.parse_args()
+  mc_prefix=get_mc_location()
+  prefix=args.prefix
+  configure_mcedit(sys.argv[1:] + ['--prefix',mc_prefix])
+  generate_makefile(prefix)
+  print 'install mcgdb to {}'.format(prefix)
 
 if __name__ == "__main__":
   main()
