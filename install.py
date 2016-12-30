@@ -24,9 +24,6 @@ def get_files(prefix):
   return files
 
 def install(prefix):
-  make_path(prefix+'/bin')
-  make_path(prefix+'/share')
-  make_path(prefix+'/share/mcgdb')
   files=get_files(prefix)
   for fname in files:
     src,dst,mode=files[fname]
