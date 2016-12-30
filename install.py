@@ -27,7 +27,7 @@ def install(prefix):
   files=get_files(prefix)
   for fname in files:
     src,dst,mode=files[fname]
-    dst=DESTDIR+'/'+dst
+    dst=DESTDIR+dst
     if src==None:
       continue
     if os.path.exists(dst):
@@ -48,11 +48,11 @@ def install(prefix):
 source {mcgdb_py}
 pi mc()
 pi mcgdb_main_window()
-'''.format(mcgdb_py=files['mcgdb.py'][1]))
+'''.format(mcgdb_py=DESTDIR+files['mcgdb.py'][1]))
   with open(files['mcgdb'][1],'w') as f:
     f.write('''#!/usr/bin/env bash
 gdb $@ -x {startup}
-'''.format(startup=files['startup.gdb'][1]))
+'''.format(startup=DESTDIR+files['startup.gdb'][1]))
   os.chmod(files['mcgdb'][1],0555)
 
 
