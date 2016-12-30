@@ -29,7 +29,7 @@ def generate_makefile(prefix):
 all :
 	make -C obj-mc
 install :
-	python install.py --prefix {prefix}
+	python install.py --prefix {prefix} --DESTDIR=$(DESTDIR)
 '''.format(prefix=prefix))
 
 def get_mc_location():

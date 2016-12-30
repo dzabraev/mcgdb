@@ -69,7 +69,7 @@ def main():
   args=parser.parse_args()
   prefix=args.prefix
   DESTDIR=args.DESTDIR
-  if DESTDIR[-1]=='/':
+  if len(DESTDIR)>0 and DESTDIR[-1]=='/':
     DESTDIR=DESTDIR[:-1]
   install(prefix)
 
