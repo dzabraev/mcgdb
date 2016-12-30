@@ -13,12 +13,13 @@ def make_path_file(fname):
   make_path(path)
 
 def get_files(prefix):
+  global DESTDIR
   files={
-    'mcgdb-mcedit'     :('obj-mc/src/mc'    ,   '{}/bin/mcgdb-mcedit'.format(prefix)                ,   0555),
-    'mcgdb'            :(None               ,   '{}/bin/mcgdb'.format(prefix)                       ,   0444),
-    'mcgdb.py'         :('mcgdb.py'         ,   '{}/share/mcgdb/mcgdb.py'.format(prefix)            ,   0444),
-    'defines-mcgdb.gdb':('defines-mcgdb.gdb',   '{}/share/mcgdb/defines-mcgdb.gdb'.format(prefix)   ,   0444),
-    'startup.gdb'      :(None               ,   '{}/share/mcgdb/startup.gdb'.format(prefix)         ,   0444),
+    'mcgdb-mcedit'     :('obj-mc/src/mc'    ,   '{DESTDIR}{}/bin/mcgdb-mcedit'.format(              prefix,DESTDIR=DESTDIR) ,   0555),
+    'mcgdb'            :(None               ,   '{DESTDIR}{}/bin/mcgdb'.format(                     prefix,DESTDIR=DESTDIR) ,   0444),
+    'mcgdb.py'         :('mcgdb.py'         ,   '{DESTDIR}{}/share/mcgdb/mcgdb.py'.format(          prefix,DESTDIR=DESTDIR) ,   0444),
+    'defines-mcgdb.gdb':('defines-mcgdb.gdb',   '{DESTDIR}{}/share/mcgdb/defines-mcgdb.gdb'.format( prefix,DESTDIR=DESTDIR) ,   0444),
+    'startup.gdb'      :(None               ,   '{DESTDIR}{}/share/mcgdb/startup.gdb'.format(       prefix,DESTDIR=DESTDIR) ,   0444),
   }
   return files
 
@@ -61,10 +62,15 @@ def remove(prefix):
   pass
 
 def main():
+  global DESTDIR
   parser = argparse.ArgumentParser()
   parser.add_argument("--prefix")
+  parser.add_argument("--DESTDIR",default='')
   args=parser.parse_args()
   prefix=args.prefix
+  DESTDIR=args.DESTDIR
+  if DESTDIR[-1]=='/':
+    DESTDIR=DESTDIR[:-1]
   install(prefix)
 
 if __name__ == "__main__":
