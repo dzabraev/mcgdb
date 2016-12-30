@@ -36,11 +36,11 @@ def install(prefix):
     shutil.copy(src,dst)
     os.chmod(dst,mode)
   os.system('''sed 's#PATH_TO_MC=.*#PATH_TO_MC="{mcedit}"#' {dst} -i'''.format(
-    dst=files['mcgdb.py'][1],
+    dst=DESTDIR+files['mcgdb.py'][1],
     mcedit=files['mcgdb-mcedit'][1],
   ))
   os.system('''sed 's#PATH_TO_DEFINES_MCGDB=.*#PATH_TO_DEFINES_MCGDB="{defines}"#' {dst} -i'''.format(
-    dst=files['mcgdb.py'][1],
+    dst=DESTDIR+files['mcgdb.py'][1],
     defines=files['defines-mcgdb.gdb'][1],
   ))
   with open(DESTDIR+files['startup.gdb'][1],'w') as f:
