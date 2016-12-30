@@ -2,12 +2,11 @@
 %define toolchain_prefix /usr
 
 
-Summary         : Front-end for gdb
+Summary         : Front-end midnight commander(mc) for gdb
 Name            : mcgdb
 Version         : 1.1
 Release         : 1
 License         : GPL
-#Distribution    : OPB
 Vendor          : NIISI RAS
 Packager        : "Maxim Dzabraev" <dzabraew@gmail.com>
 Group           : Development/Debuggers
@@ -15,6 +14,9 @@ ExclusiveArch   : i386 i486 i586 i686 x86_64
 ExclusiveOs     : Linux
 Source          : %{name}-%{version}.tar.gz
 BuildRoot       : %{_tmppath}/%{name}-%{version}-root
+
+Requires: mc, gnome-terminal
+Requires: gdb >= 7.12
 
 %description
 text editor mcedit as frontend for gdb.
