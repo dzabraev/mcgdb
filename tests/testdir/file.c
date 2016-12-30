@@ -2,5 +2,7 @@
 
 
 int f5(int x) {
-  return x+10;
+
+  int y=7;
+  return x+y;
 }
