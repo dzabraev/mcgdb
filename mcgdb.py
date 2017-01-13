@@ -118,6 +118,8 @@ def first_executable_linenum(loc):
   return first_exec_line
 
 def get_bp_location(bp,**kwargs):
+  if bp.type!=gdb.BP_BREAKPOINT:
+    return []
   location=bp.location
   locs=exec_in_main_pythread(gdb.decode_line, (location,))[1]
   if locs==None:
@@ -134,6 +136,8 @@ def get_bp_location(bp,**kwargs):
 
 def get_bp(gdb_bps,filename,line):
   for bp in gdb_bps:
+    if bp.type!=gdb.BP_BREAKPOINT:
+      continue
     try:
       locations=get_bp_location(bp)
     except Exception:
