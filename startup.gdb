@@ -1,3 +1,5 @@
 source ~/bin/mcgdb.py
-pi mc()
-pi mcgdb_main_window()
+python
+mc()
+mcgdb_main_window()
+end
