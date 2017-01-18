@@ -128,6 +128,9 @@ def get_bp_location(bp,**kwargs):
   if locs:
     for loc in locs:
       line=loc.line
+      if not loc.symtab:
+        #maybe breakpoint have not location. For ex. `break exit`, `break abort`
+        continue
       filename=loc.symtab.fullname()
       locations.append( (filename,line) )
   return locations
