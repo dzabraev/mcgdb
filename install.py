@@ -46,9 +46,13 @@ def install(prefix):
   with open(DESTDIR+files['startup.gdb'][1],'w') as f:
     f.write('''
 source {mcgdb_py}
-pi mc()
-pi mcgdb_main_window()
+python
+mc()
+mcgdb_main_window()
+end
 '''.format(mcgdb_py=files['mcgdb.py'][1]))
+  if os.path.exists(DESTDIR+files['mcgdb'][1]):
+    os.remove(DESTDIR+files['mcgdb'][1])
   with open(DESTDIR+files['mcgdb'][1],'w') as f:
     f.write('''#!/usr/bin/env bash
 gdb $@ -x {startup}

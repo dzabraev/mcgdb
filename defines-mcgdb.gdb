@@ -1,19 +1,27 @@
 define hook-quit
-  pi stop_event_loop()
+python
+stop_event_loop()
+end
 end
 
 define hookpost-up
-  pi check_frame()
+python
+check_frame()
+end
 end
 
 
 define hookpost-down
-  pi check_frame()
+python
+check_frame()
+end
 end
 
 
 define hookpost-frame
-  pi check_frame()
+python
+check_frame()
+end
 end
 
 
