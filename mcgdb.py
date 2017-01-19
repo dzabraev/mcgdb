@@ -52,6 +52,7 @@ class _FP(object):
   lnew=None
   lold=None
 
+
 FP=_FP()
 
 class CommandReadFailure(Exception): pass
@@ -373,6 +374,7 @@ def update_FP():
   #Данную функцию можно вызывать только из main pythread или
   #через функцию exec_in_main_pythread
   global FP
+  FP.force_reopen=False
   try:
     frame=gdb.selected_frame ()
     #filename=frame.find_sal().symtab.filename
@@ -387,11 +389,12 @@ def update_FP():
     #текущий файл неизвестен или не существует
     with open(TMP_FILE_NAME,'w') as f:
       if not filename:
-        f.write('\nFor current execution position and source file not known.\n')
+        f.write('\nCurrent execution position and source file not known.\n')
       else:
-        f.write('\nFilename {} not exists\n')
+        f.write('\nFilename {} not exists\n'.format(filename))
     filename=TMP_FILE_NAME
     line=1
+    FP.force_reopen=True
   FP.fold=FP.fnew
   FP.fnew=filename #currrently debugged file
   FP.lold=FP.lnew  #currrently debugged line
@@ -450,7 +453,7 @@ def cmd_check_frame(entities,fd,args):
         #если же файл не ыбл открыт, и будет сделано fclose, то
         #редактор попросту закроется
         cmd_for_main_window+='fclose:;'
-    if FP.fnew and FP.fnew!=FP.fold:
+    if FP.fnew and (FP.fnew!=FP.fold or FP.force_reopen):
       if FP.lold:
         cmd_for_main_window+='unmark:{line};'.format(line=FP.lold)
       if FP.fold:
