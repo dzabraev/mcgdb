@@ -3,7 +3,7 @@ import gdb
 import threading
 import socket
 import select
-import os
+import os,stat
 import sys
 import re
 import errno
@@ -22,6 +22,7 @@ PATH_TO_MC="/home/dza/bin/mcedit"
 PATH_TO_DEFINES_MCGDB="~/bin/defines-mcgdb.gdb"
 window_queue=[]
 __mcgdb_initialized=False
+TMP_FILE_NAME="/tmp/mcgdb-tmp-file-{pid}.txt".format(pid=os.getpid())
 
 #need_processing_bp=[]
 #need_processing_bp_mutex=threading.Lock()
@@ -382,9 +383,18 @@ def update_FP():
     #no frame selected or maybe inferior exited?
     filename=None
     line=None
+  if not filename or not os.path.exists(filename) or not ( os.stat(filename).st_mode & stat.S_IFREG ):
+    #текущий файл неизвестен или не существует
+    with open(TMP_FILE_NAME,'w') as f:
+      if not filename:
+        f.write('\nFor current execution position and source file not known.\n')
+      else:
+        f.write('\nFilename {} not exists\n')
+    filename=TMP_FILE_NAME
+    line=1
   FP.fold=FP.fnew
-  FP.fnew=filename
-  FP.lold=FP.lnew
+  FP.fnew=filename #currrently debugged file
+  FP.lold=FP.lnew  #currrently debugged line
   FP.lnew=line
 
 def cmd_inferior_exited(entities,fd,args):
@@ -701,6 +711,7 @@ def mc():
   gdb.events.breakpoint_created.connect( lambda bp : notify_update_breakpoints() )
   gdb.events.breakpoint_deleted.connect( lambda bp : notify_update_breakpoints() )
   __mcgdb_initialized=True
+  cmd_check_frame([],None,[])
   #gdb.events.exited.connect(stop_event_loop)
 
 '''
