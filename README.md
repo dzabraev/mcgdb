@@ -17,7 +17,7 @@
 # INSTALL
 
 ## dependancies
-1. gdb >= 7.12
+1. gdb >= 7.12 (compiled with ./configure --with-python .Type in gdb-shell pi 1+1, if error occur then your gdb compiled without python)
 2. mc
 3. gnome-terminal
 
