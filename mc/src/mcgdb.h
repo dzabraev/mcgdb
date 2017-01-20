@@ -16,7 +16,9 @@ enum gdb_cmd {
   MCGDB_UNMARK_ALL,
   MCGDB_BP_REMOVE_ALL,
   MCGDB_BP_REMOVE,
-  MCGDB_BP_INSERT
+  MCGDB_BP_INSERT,
+  MCGDB_COLOR_CURLINE,
+  MCGDB_SET_CURLINE,
 };
 
 enum window_type {
@@ -30,13 +32,16 @@ enum window_type {
 #define MCGDB_EXIT_DLG 1
 
 extern gboolean read_gdb_events;
-
+extern int mcgdb_current_line_color; /*color of current execute line*/
+extern long mcgdb_curline;
 struct mouse_event_t;
 
 struct gdb_action {
   enum gdb_cmd command;
   int     line;
   char   *filename;
+  char  **argv;
+  int     argc;
 };
 
 void mcgdb_error(void);
@@ -67,7 +72,7 @@ int  open_gdb_input_fd(void);
 //int process_action_from_gdb(WDialog * h);
 typedef struct WEdit WEdit;
 void mcgdb_send_mouse_event_to_gdb(WEdit * edit, mouse_event_t * event);
-int mcgdb_action_from_gdb(WEdit * edit);
+//int mcgdb_action_from_gdb(WEdit * edit);
 
 extern int      mcgdb_listen_port;
 extern int      gdb_input_fd;
@@ -84,3 +89,12 @@ gboolean mcgdb_queue_head_convertable_to_key(void);
 void mcgdb_checkset_read_gdb_events(WDialog * h);
 
 int mcgdb_permissible_key(int c);
+
+
+void
+mcgdb_set_current_line_color(
+  const char *fgcolor /*color of text*/,
+  const char *bgcolor /*color of background*/,
+  const char *attrs , WEdit * edit);
+
+void mcgdb_init(void);

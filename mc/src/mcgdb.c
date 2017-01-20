@@ -17,6 +17,7 @@
 #include "src/editor/editwidget.h"
 #include "lib/widget/mouse.h"
 #include "src/editor/edit.h"
+#include "lib/tty/color.h"
 
 #include "src/mcgdb.h"
 #include "src/mcgdb-bp.h"
@@ -28,6 +29,10 @@ int gdb_input_fd;
 static GList * mcgdb_event_queue;
 
 gboolean read_gdb_events;
+
+
+int mcgdb_current_line_color;
+long mcgdb_curline; /*current execution line number*/
 
 enum window_type mcgdb_wtype; /*temporary unused*/
 
@@ -187,6 +192,12 @@ get_command_num(const char *command) {
   else if( compare_cmd("remove_bp") ) {
     return MCGDB_BP_REMOVE;
   }
+  else if( compare_cmd("color_curline")) {
+    return MCGDB_COLOR_CURLINE;
+  }
+  else if (compare_cmd("set_curline")) {
+    return MCGDB_SET_CURLINE;
+  }
   else {
     return MCGDB_UNKNOWN;
   }
@@ -219,6 +230,18 @@ parse_action_from_gdb(struct gdb_action * act) {
       read_bytes_from_gdb(argstr,';',sizeof(argstr));
       act->line=atoi(argstr);
       break;
+    case MCGDB_COLOR_CURLINE:
+      act->argc=2;
+      act->argv=(char **)calloc(sizeof(char *),2);
+      read_bytes_from_gdb(argstr,',',sizeof(argstr));
+      act->argv[0]=strdup(argstr);
+      read_bytes_from_gdb(argstr,';',sizeof(argstr));
+      act->argv[1]=strdup(argstr);
+      break;
+    case MCGDB_SET_CURLINE:
+      read_bytes_from_gdb(argstr,';',sizeof(argstr));
+      act->line=atoi(argstr);
+      break;
     default:
       read_bytes_from_gdb(argstr,';',sizeof(argstr));/*remove ';' from stream*/
   }
@@ -231,10 +254,10 @@ process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
   //edit->force |= REDRAW_COMPLETELY;
   switch(act->command) {
     case MCGDB_MARK:
-      book_mark_insert( edit, act->line, BOOK_MARK_COLOR);
+      book_mark_insert( edit, act->line, mcgdb_current_line_color);
       break;
     case MCGDB_UNMARK:
-      book_mark_clear( edit, act->line, BOOK_MARK_COLOR);
+      book_mark_clear( edit, act->line, mcgdb_current_line_color);
       break;
     case MCGDB_UNMARK_ALL:
       book_mark_flush( edit, -1);
@@ -253,11 +276,6 @@ process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
       //TODO нужно ли очищать vfs_path ?
       break;
     case MCGDB_FCLOSE:
-//      alt0=KEY_F(10);
-//      dlg_process_event (h, alt0, 0);
-//      wh = WIDGET (h);
-//      if (widget_get_state (wh, WST_CLOSED))
-//        send_message (h, NULL, MSG_VALIDATE, 0, NULL);
       return MCGDB_EXIT_DLG;
     case MCGDB_SHOW_LINE_NUMBERS:
       //edit_set_show_numbers_cmd(h);
@@ -267,17 +285,16 @@ process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
       edit_move_display (edit, act->line - WIDGET (edit)->lines / 2 - 1);
       edit_move_to_line (edit, act->line);
       break;
+    case MCGDB_COLOR_CURLINE:
+      mcgdb_set_current_line_color(act->argv[0],act->argv[1],NULL,edit);
+      break;
+    case MCGDB_SET_CURLINE:
+      mcgdb_curline=act->line;
+      break;
     default:
       break;
   }
   return MCGDB_OK;
-}
-
-int
-mcgdb_action_from_gdb(WEdit * edit) {
-  struct gdb_action act;
-  parse_action_from_gdb(&act);
-  return process_action_from_gdb(edit,&act);
 }
 
 static const char *
@@ -286,16 +303,6 @@ stringify_click_type(mouse_event_t * event) {
   size_t len=0;
   buf[0]=0;
 # define APPEND_EVT(EVT)  if( event->msg==EVT ) { len+=sprintf(buf+len, #EVT "|"); }
-  /*
-  APPEND_EVT(GPM_MOVE);
-  APPEND_EVT(GPM_DRAG);
-  APPEND_EVT(GPM_DOWN);
-  APPEND_EVT(GPM_UP);
-  APPEND_EVT(GPM_SINGLE);
-  APPEND_EVT(GPM_DOUBLE);
-  APPEND_EVT(GPM_TRIPLE);
-  APPEND_EVT(GPM_MFLAG);
-  APPEND_EVT(GPM_HARD);*/
   APPEND_EVT(MSG_MOUSE_NONE);
   APPEND_EVT(MSG_MOUSE_DOWN);
   APPEND_EVT(MSG_MOUSE_UP);
@@ -345,8 +352,15 @@ mcgdb_queue_append_event(void) {
 
 static void
 free_gdb_evt (struct gdb_action * gdb_evt) {
-  if( gdb_evt->filename )
+  if (gdb_evt->filename)
     free(gdb_evt->filename);
+  if (gdb_evt->argc > 0) {
+    int i;
+    for(i=0;i<gdb_evt->argc;i++) {
+      free(gdb_evt->argv[i]);
+    }
+    free(gdb_evt->argv);
+  }
   g_free(gdb_evt);
 }
 
@@ -442,11 +456,30 @@ mcgdb_permissible_key(int c) {
     (c >= 0x192 && c <= 0x195) /*arrows*/ ||
     c == EV_GDB_MESSAGE ||
     c == KEY_F(1) ||
-    c == ALT('k') || c == ALT('j') || c == ALT('i') /*bookmarks*/
+    c == ALT('k') || c == ALT('j') || c == ALT('i') /*bookmarks*/ ||
+    c == ALT('e') /*encoding*/
   ) {
     return 1;
   }
   else {
     return 0;
   }
+}
+
+void
+mcgdb_set_current_line_color(
+  const char *fgcolor /*color of text*/,
+  const char *bgcolor /*color of background*/,
+  const char *attrs, WEdit * edit ) {
+  if (edit && mcgdb_curline>=0)
+    book_mark_clear (edit, mcgdb_curline, mcgdb_current_line_color);
+  mcgdb_current_line_color = tty_try_alloc_color_pair2 (fgcolor, bgcolor, attrs, FALSE);
+  if (edit && mcgdb_curline>=0)
+    book_mark_insert (edit, mcgdb_curline, mcgdb_current_line_color);
+}
+
+void
+mcgdb_init(void) {
+  mcgdb_curline=-1;
+  mcgdb_set_current_line_color("red","black",NULL,NULL);
 }

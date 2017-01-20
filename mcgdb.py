@@ -448,17 +448,20 @@ def cmd_check_frame(entities,fd,args):
       entities[main_mc_window_fd]['filename']=None
       if FP.lold:
         cmd_for_main_window+='unmark:{line};'.format(line=FP.lold)
+        cmd_for_main_window+='set_curline:{curline};'.format(curline=-1)
       if FP.fold:
         #Если в редакторе был открыт файл, то закрываем его
         #если же файл не ыбл открыт, и будет сделано fclose, то
         #редактор попросту закроется
         cmd_for_main_window+='fclose:;'
     if FP.fnew and (FP.fnew!=FP.fold or FP.force_reopen):
+      #нужно открыть новый или переоткрыть существующий
       if FP.lold:
         cmd_for_main_window+='unmark:{line};'.format(line=FP.lold)
       if FP.fold:
         cmd_for_main_window+='fclose:;'
       cmd_for_main_window+='fopen:{fname},{line};'.format(fname=FP.fnew,line=FP.lnew)
+      cmd_for_main_window+='set_curline:{curline};'.format(curline=FP.lnew)
       entities[main_mc_window_fd]['filename']=FP.fnew
       cmd_for_main_window+=get_cmd_insert_bp_all(FP.fnew)
       cmd_for_main_window+='goto:{line};'.format(line=FP.lnew)
@@ -468,8 +471,10 @@ def cmd_check_frame(entities,fd,args):
       #будет лишняя отмеченная строка.
       cmd_for_main_window+='mark:{line};'.format(line=FP.lnew)
     elif FP.lnew and FP.lnew!=FP.lold:
+      #файл исполнения сотался тот же, строка исполнения поменялась
       if FP.lold:
         cmd_for_main_window+='unmark:{line};'.format(line=FP.lold)
+      cmd_for_main_window+='set_curline:{curline};'.format(curline=FP.lnew)
       cmd_for_main_window+='mark:{line};'.format(line=FP.lnew)
       cmd_for_main_window+='goto:{line};'.format(line=FP.lnew)
     if cmd_for_main_window and cmd_for_main_window!='':
@@ -548,6 +553,12 @@ def cmd_process_event_exited(entities,fd,args):
   process_breakpoint_queue()
   cmd_inferior_exited(entities,fd,args)
 
+def cmd_color_curline(entities,fd,args):
+  for entity_fd in entities:
+    entity=entities[entity_fd]
+    if entity['type'] == window_type.MCGDB_MAIN_WINDOW:
+      cmd='color_curline:{},{};'.format(args[0],args[1])
+      send_cmd(entity_fd,cmd)
 
 def process_command_from_gdb(entities,fd):
   cmds={
@@ -561,6 +572,7 @@ def process_command_from_gdb(entities,fd):
     'event_exited':         cmd_process_event_exited,
     'update_breakpoints':   cmd_update_breakpoints,
     window_type.MCGDB_BACKTRACE_WINDOW: cmd_mcgdb_backtrace_window,
+    'color_curline':        cmd_color_curline,
   }
   return fetch_and_process_command(entities,fd,cmds)
 
@@ -604,6 +616,7 @@ def new_connection(entities,fd):
       if FP.fnew==filename:
         cmd+='mark:{line};'.format(line=FP.lnew)
         cmd+='goto:{line};'.format(line=FP.lnew)
+        cmd+='set_curline:{curline};'.format(curline=FP.lnew)
   newfd=conn.fileno()
   send_cmd(newfd,cmd)
   entities[newfd]={
@@ -715,7 +728,8 @@ def mc():
   gdb.events.breakpoint_created.connect( lambda bp : notify_update_breakpoints() )
   gdb.events.breakpoint_deleted.connect( lambda bp : notify_update_breakpoints() )
   __mcgdb_initialized=True
-  cmd_check_frame([],None,[])
+  check_frame()
+  #cmd_check_frame([],None,[])
   #gdb.events.exited.connect(stop_event_loop)
 
 '''
@@ -750,10 +764,10 @@ def inferior_exited(exit_code):
 
 def mcgdb_main_window():
   if not __mcgdb_initialized:
-    gdb_print('ERROR: mcgdb not initialized\n')
-    return
+    mc()
   command='mcgdb_main_window:;'
   send_cmd(local_w_fd,command)
+  check_frame()
 
 def mcgdb_source_window(filename,line=0):
   if not __mcgdb_initialized:
@@ -771,3 +785,39 @@ def mcgdb_backtrace_window():
   send_cmd(local_w_fd,command)
 
 
+def mcgdb_color_curline(text_color,background_color):
+  command='color_curline:{},{};'.format(text_color,background_color)
+  send_cmd(local_w_fd,command)
+
+
+class McgdbCompleter (gdb.Command):
+  def __init__ (self):
+    super (McgdbCompleter, self).__init__ ("mcgdb", gdb.COMMAND_USER, gdb.COMPLETE_COMMAND, True)
+McgdbCompleter()
+
+class MainWindow (gdb.Command):
+  """Open mcgdb main window with current source file and current execute line"""
+
+  def __init__ (self):
+    super (MainWindow, self).__init__ ("mcgdb mainwindow", gdb.COMMAND_USER, gdb.COMPLETE_COMMAND, True)
+
+  def invoke (self, arg, from_tty):
+    mcgdb_main_window()
+
+MainWindow()
+
+class CurlineColor (gdb.Command):
+  """set color of current execute line. USAGE: mcgab curlinecolor textcolor backgroundcolor"""
+  USAGE="USAGE: mcgab curlinecolor textcolor backgroundcolor"
+  def __init__ (self):
+    super (CurlineColor, self).__init__ ("mcgdb curlinecolor", gdb.COMMAND_USER, gdb.COMPLETE_COMMAND, True)
+
+  def invoke (self, arg, from_tty):
+    colors=arg.split()
+    if len(colors)!=2:
+      print self.USAGE
+    text_color=colors[0]
+    background_color=colors[1]
+    mcgdb_color_curline(text_color,background_color)
+
+CurlineColor()

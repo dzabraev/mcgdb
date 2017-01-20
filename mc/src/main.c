@@ -77,6 +77,7 @@
 #endif /* HAVE_CHARSET */
 
 #include "consaver/cons.saver.h"        /* cons_saver_pid */
+#include "mcgdb.h"
 
 /*** global variables ****************************************************************************/
 
@@ -364,7 +365,7 @@ main (int argc, char *argv[])
         command_set_default_colors ();
 
     mc_error_message (&mcerror, NULL);
-
+    mcgdb_init();
 #ifdef ENABLE_SUBSHELL
     /* Done here to ensure that the subshell doesn't  */
     /* inherit the file descriptors opened below, etc */

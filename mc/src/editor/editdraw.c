@@ -59,6 +59,7 @@
 #include "editwidget.h"
 
 #include "src/mcgdb-bp.h"
+#include "src/mcgdb.h"
 
 /*** global variables ****************************************************************************/
 
@@ -530,7 +531,9 @@ edit_draw_this_line (WEdit * edit, off_t b, long row, long start_col, long end_c
     if (row > w->lines - 1 - EDIT_TEXT_VERTICAL_OFFSET - 2 * (edit->fullscreen ? 0 : 1))
         return;
 
-    if (book_mark_query_color (edit, edit->start_line + row, BOOK_MARK_COLOR))
+    if (book_mark_query_color (edit, edit->start_line + row, mcgdb_current_line_color))
+        book_mark = mcgdb_current_line_color;
+    else if (book_mark_query_color (edit, edit->start_line + row, BOOK_MARK_COLOR))
         book_mark = BOOK_MARK_COLOR;
     else if (book_mark_query_color (edit, edit->start_line + row, BOOK_MARK_FOUND_COLOR))
         book_mark = BOOK_MARK_FOUND_COLOR;
