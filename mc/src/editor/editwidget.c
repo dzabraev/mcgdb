@@ -816,16 +816,23 @@ edit_dialog_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, v
                 WEdit *e = (WEdit *) we;
                 long command;
 
-                if (!e->extmod)
-                    command = keybind_lookup_keymap_command (editor_map, parm);
+                if (mcgdb_permissible_key (parm))
+                {
+                  if (!e->extmod)
+                      command = keybind_lookup_keymap_command (editor_map, parm);
+                  else
+                  {
+                      e->extmod = FALSE;
+                      command = keybind_lookup_keymap_command (editor_x_map, parm);
+                  }
+
+                  if (command != CK_IgnoreKey)
+                      ret = edit_dialog_command_execute (h, command);
+                }
                 else
                 {
-                    e->extmod = FALSE;
-                    command = keybind_lookup_keymap_command (editor_x_map, parm);
+                  return MSG_HANDLED;
                 }
-
-                if (command != CK_IgnoreKey)
-                    ret = edit_dialog_command_execute (h, command);
             }
 
             /*

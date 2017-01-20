@@ -82,3 +82,5 @@ gboolean mcgdb_queue_head_convertable_to_key(void);
 
 
 void mcgdb_checkset_read_gdb_events(WDialog * h);
+
+int mcgdb_permissible_key(int c);

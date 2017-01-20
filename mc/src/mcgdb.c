@@ -431,3 +431,22 @@ void mcgdb_checkset_read_gdb_events(WDialog * h) {
 }
 
 
+int
+mcgdb_permissible_key(int c) {
+  /*При помощи данной функции достигается режим read-only для
+   * write available окна
+  */
+  if (
+    c == EV_MOUSE ||
+    c == KEY_F(7) ||
+    (c >= 0x192 && c <= 0x195) /*arrows*/ ||
+    c == EV_GDB_MESSAGE ||
+    c == KEY_F(1) ||
+    c == ALT('k') || c == ALT('j') || c == ALT('i') /*bookmarks*/
+  ) {
+    return 1;
+  }
+  else {
+    return 0;
+  }
+}

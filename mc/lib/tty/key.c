@@ -1973,9 +1973,6 @@ tty_get_event (struct Gpm_Event *event, gboolean redo_event, gboolean block)
     struct timeval *time_addr = NULL;
     static int dirty = 3;
 
-    //if( !mcgdb_queue_is_empty() )
-    //  return EV_GDB_MESSAGE;
-
     if ((dirty == 3) || is_idle ())
     {
         mc_refresh ();
@@ -2095,6 +2092,13 @@ tty_get_event (struct Gpm_Event *event, gboolean redo_event, gboolean block)
         if( read_gdb_events ) {
           if (FD_ISSET (gdb_input_fd, &select_set)) {
             mcgdb_queue_append_event();
+            /*Получен event из gdb. Если этот event может быть
+             *странслирован в нажатие кнопки, то транслурается в наж. кнопки,
+             *далее это "нажатие" кнопки выглядит буто было нажатие в терминале.
+             *Как следствие евент обрабатывается стандартными функциями mc.
+             *Если event не конвертируется в нажатие кнопки, то он будет обрабатываться
+             *функциями mcgdb.
+             */
             if (mcgdb_queue_head_convertable_to_key()) {
               return mcgdb_queue_convert_head_to_key();
             }
@@ -2181,7 +2185,15 @@ tty_get_event (struct Gpm_Event *event, gboolean redo_event, gboolean block)
         bracketed_pasting_in_progress = FALSE;
         c = EV_NONE;
     }
-
+#if 0
+    else if (!mcgdb_available_key(c)) {
+        /* Игнорируем нажатие alt+0 (F10) с терминала.
+         * Поскольку если пользователь самовольно закроет просмотр файла,
+         * то окно перестанет работать.
+        */
+        c = EV_NONE;
+    }
+#endif
     return c;
 }
 
