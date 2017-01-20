@@ -707,8 +707,9 @@ def mc():
   event_thread.start()
   gdb.execute('set pagination off',False,False)
   gdb.execute('source {}'.format(PATH_TO_DEFINES_MCGDB))
-  gdb.events.stop.connect( lambda x: notify_event_stop() )
-  gdb.events.exited.connect( lambda exit_code: notify_event_exited(exit_code) )
+  gdb.events.stop.connect(          lambda x:           notify_event_stop() )
+  gdb.events.exited.connect(        lambda exit_code:   notify_event_exited(exit_code) )
+  gdb.events.new_objfile.connect(   lambda x:           notify_event_new_objfile(x) )
   #gdb.events.breakpoint_created.connect( lambda bp : process_bp(bp,'created') )
   #gdb.events.breakpoint_deleted.connect( lambda bp : process_bp(bp,'deleted') )
   gdb.events.breakpoint_created.connect( lambda bp : notify_update_breakpoints() )
@@ -736,6 +737,7 @@ def process_bp(bp,typ):
 def notify_event_stop():            send_cmd(local_w_fd, 'event_stop:;')
 def notify_event_exited(exit_code): send_cmd(local_w_fd, 'event_exited:{exit_code};')
 def notify_update_breakpoints():    send_cmd(local_w_fd, 'update_breakpoints:;')
+def notify_event_new_objfile(x):    check_frame()
 
 def check_frame():
   #Данную команду нужно вызывать из hookpost-{up,down,frame,step,continue}
