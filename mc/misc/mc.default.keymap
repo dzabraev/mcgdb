@@ -221,6 +221,14 @@ NodeNext = n
 NodePrev = p
 
 [editor]
+Mcgdb_breakpoint = b
+Mcgdb_de_breakpoint = d
+Mcgdb_goto_eline = ctrl-e
+Mcgdb_next = n
+Mcgdb_step = s
+Mcgdb_until = u
+Mcgdb_continue = c
+Mcgdb_print = p
 Store = ctrl-insert
 Paste = shift-insert
 Cut = shift-delete

@@ -112,7 +112,7 @@ install_mcview:
 	cd $(DESTDIR)$(bindir)/$(binprefix) && rm -f mcview && $(LN_S) mc mcview
 
 install_mcedit:
-	cd $(DESTDIR)$(bindir)/$(binprefix) && rm -f mcedit && $(LN_S) mc mcedit
+	cd $(DESTDIR)$(bindir)/$(binprefix) && rm -f `echo mcedit | sed -e $(transform)` && $(LN_S) `echo mc | sed -e $(transform)` `echo mcedit | sed -e $(transform)`
 
 install_mcdiff:
 	cd $(DESTDIR)$(bindir)/$(binprefix) && rm -f mcdiff && $(LN_S) mc mcdiff

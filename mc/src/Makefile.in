@@ -1006,18 +1006,18 @@ install-exec-hook:
 # Make relative symlinks, but do the right thing if LN_S is `ln' or `cp'.
 #
 install_mcview:
-	cd $(DESTDIR)$(bindir)/$(binprefix) && rm -f mcview && $(LN_S) mc mcview
+	cd $(DESTDIR)$(bindir)/$(binprefix) && rm -f mcgdb-mcview && $(LN_S) mcgdb-mc mcgdb-mcview
 
 install_mcedit:
-	cd $(DESTDIR)$(bindir)/$(binprefix) && rm -f mcedit && $(LN_S) mc mcedit
+	cd $(DESTDIR)$(bindir)/$(binprefix) && rm -f mcgdb-mcedit && $(LN_S) mcgdb-mc mcgdb-mcedit
 
 install_mcdiff:
-	cd $(DESTDIR)$(bindir)/$(binprefix) && rm -f mcdiff && $(LN_S) mc mcdiff
+	cd $(DESTDIR)$(bindir)/$(binprefix) && rm -f mcgdb-mcdiff && $(LN_S) mcgdb-mc mcgdb-mcdiff
 
 uninstall-hook:
-	rm -f $(DESTDIR)$(bindir)/$(binprefix)/mcview
-@USE_INTERNAL_EDIT_TRUE@	rm -f $(DESTDIR)$(bindir)/$(binprefix)/mcedit
-@USE_DIFF_TRUE@	rm -f $(DESTDIR)$(bindir)/$(binprefix)/mcdiff
+	rm -f $(DESTDIR)$(bindir)/$(binprefix)/mcgdb-mcview
+@USE_INTERNAL_EDIT_TRUE@	rm -f $(DESTDIR)$(bindir)/$(binprefix)/mcgdb-mcedit
+@USE_DIFF_TRUE@	rm -f $(DESTDIR)$(bindir)/$(binprefix)/mcgdb-mcdiff
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

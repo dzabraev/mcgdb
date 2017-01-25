@@ -26,6 +26,8 @@ def get_files(prefix):
 def install(prefix):
   files=get_files(prefix)
   for fname in files:
+    if fname=='mcgdb-mcedit':
+      continue
     src,dst,mode=files[fname]
     dst=DESTDIR+dst
     if src==None:
