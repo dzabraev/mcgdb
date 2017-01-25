@@ -73,6 +73,7 @@
 #include "spell.h"
 #endif
 
+#include "src/mcgdb.h"
 #include "src/mcgdb-bp.h"
 
 /*** global variables ****************************************************************************/
@@ -3912,6 +3913,10 @@ edit_execute_cmd (WEdit * edit, long command, int char_for_insertion)
     case CK_ExtendedKeyMap:
         edit->extmod = TRUE;
         break;
+    case CK_MCGDB_Breakpoint:
+      mcgdb_user_breakpoint();
+      break;
+
     default:
         break;
     }

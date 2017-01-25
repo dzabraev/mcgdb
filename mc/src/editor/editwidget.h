@@ -168,6 +168,6 @@ struct WEdit
 /*** global variables defined in .c file *********************************************************/
 
 /*** declarations of public functions ************************************************************/
-
+gboolean edit_translate_key (WEdit * edit, long x_key, int *cmd, int *ch);
 /*** inline functions ****************************************************************************/
 #endif /* MC__EDIT_WIDGET_H */

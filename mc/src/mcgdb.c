@@ -446,24 +446,104 @@ void mcgdb_checkset_read_gdb_events(WDialog * h) {
 
 
 int
-mcgdb_permissible_key(int c) {
+mcgdb_permissible_key(WEdit * e, int c) {
   /*При помощи данной функции достигается режим read-only для
    * write available окна
   */
-  if (
-    c == EV_MOUSE ||
-    c == KEY_F(7) ||
-    (c >= 0x192 && c <= 0x195) /*arrows*/ ||
-    c == EV_GDB_MESSAGE ||
-    c == KEY_F(1) ||
-    c == ALT('k') || c == ALT('j') || c == ALT('i') /*bookmarks*/ ||
-    c == ALT('e') /*encoding*/
-  ) {
+  int ch,cmd;
+  if (c==EV_MOUSE || c==EV_GDB_MESSAGE) {
     return 1;
   }
-  else {
-    return 0;
+  edit_translate_key (e, c, &cmd, &ch);
+  switch(cmd) {
+    case CK_Up:
+    case CK_Down:
+    case CK_Left:
+    case CK_Right:
+    case CK_Home:
+    case CK_End:
+    case CK_LeftQuick:
+    case CK_RightQuick:
+    case CK_PageUp:
+    case CK_PageDown:
+    case CK_HalfPageUp:
+    case CK_HalfPageDown:
+    case CK_Top:
+    case CK_Bottom:
+    case CK_TopOnScreen:
+    case CK_MiddleOnScreen:
+    case CK_BottomOnScreen:
+    case CK_WordLeft:
+    case CK_WordRight:
+    case CK_Search:
+    case CK_SearchContinue:
+    case CK_Shell:
+    case CK_SelectCodepage:
+    case CK_Goto:
+    case CK_Find:
+    case CK_ScrollUp:
+    case CK_ScrollDown:
+    case CK_ParagraphUp:
+    case CK_ParagraphDown:
+    /* bookmarks */
+    case CK_Bookmark:
+    case CK_BookmarkFlush:
+    case CK_BookmarkNext:
+    case CK_BookmarkPrev:
+    /* mark commands */
+    case CK_MarkLeft:
+    case CK_MarkRight:
+    case CK_MarkUp:
+    case CK_MarkDown:
+    case CK_MarkToWordBegin:
+    case CK_MarkToWordEnd:
+    case CK_MarkToHome:
+    case CK_MarkToEnd:
+
+    case CK_MarkColumn:
+    case CK_MarkWord:
+    case CK_MarkLine:
+    case CK_MarkAll:
+    case CK_Unmark:
+    case CK_MarkPageUp:
+    case CK_MarkPageDown:
+    case CK_MarkToFileBegin:
+    case CK_MarkToFileEnd:
+    case CK_MarkToPageBegin:
+    case CK_MarkToPageEnd:
+    case CK_MarkScrollUp:
+    case CK_MarkScrollDown:
+    case CK_MarkParagraphUp:
+    case CK_MarkParagraphDown:
+    /* column mark commands */
+    case CK_MarkColumnPageUp:
+    case CK_MarkColumnPageDown:
+    case CK_MarkColumnLeft:
+    case CK_MarkColumnRight:
+    case CK_MarkColumnUp:
+    case CK_MarkColumnDown:
+    case CK_MarkColumnScrollUp:
+    case CK_MarkColumnScrollDown:
+    case CK_MarkColumnParagraphUp:
+    case CK_MarkColumnParagraphDown:
+    /* block commands */
+    case CK_BlockSave:
+    case CK_BlockShiftLeft:
+    case CK_BlockShiftRight:
+    case CK_DeleteLine:
+    case CK_MatchBracket:
+    //case CK_About,
+    case CK_ShowMargin:
+    case CK_ShowTabTws:
+    case CK_SyntaxOnOff:
+    case CK_SyntaxChoose:
+    /* menu */
+      return 1;
+    default:
+      return 0;
   }
+
+
 }
 
 void
@@ -482,4 +562,10 @@ void
 mcgdb_init(void) {
   mcgdb_curline=-1;
   mcgdb_set_current_line_color("red","black",NULL,NULL);
+}
+
+
+void
+mcgdb_user_breakpoint(void) {
+
 }

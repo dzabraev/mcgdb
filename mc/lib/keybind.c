@@ -360,6 +360,8 @@ static name_keymap_t command_names[] = {
     {"MergeOther", CK_MergeOther},
 #endif /* USE_DIFF_VIEW */
 
+    /*mcgdb*/
+    {"Mcgdb_breakpoint",CK_MCGDB_Breakpoint},
     {NULL, CK_IgnoreKey}
 };
 

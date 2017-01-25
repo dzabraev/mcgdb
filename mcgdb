@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+STARTUP_SCRIPT=startup.gdb
+
+gdb $@ -x $STARTUP_SCRIPT

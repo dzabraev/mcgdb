@@ -88,7 +88,7 @@ gboolean mcgdb_queue_head_convertable_to_key(void);
 
 void mcgdb_checkset_read_gdb_events(WDialog * h);
 
-int mcgdb_permissible_key(int c);
+int mcgdb_permissible_key(WEdit * e, int c);
 
 
 void
@@ -98,3 +98,8 @@ mcgdb_set_current_line_color(
   const char *attrs , WEdit * edit);
 
 void mcgdb_init(void);
+
+void mcgdb_user_breakpoint(void);
+
+
+

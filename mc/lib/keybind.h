@@ -333,7 +333,17 @@ enum
     CK_HunkPrev,
     CK_EditOther,
     CK_Merge,
-    CK_MergeOther
+    CK_MergeOther,
+
+    /* mcgdb */
+    CK_MCGDB_Breakpoint = 800L,
+    CK_MCGDB_DE_Breakpoint,
+    CK_MCGDB_Goto_ELine,
+    CK_MCGDB_Next,
+    CK_MCGDB_Step,
+    CK_MCGDB_Until,
+    CK_MCGDB_Continue,
+    CK_MCGDB_Print
 };
 
 /*** structures declarations (and typedefs of structures)*****************************************/

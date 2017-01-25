@@ -514,7 +514,7 @@ edit_dialog_command_execute (WDialog * h, long command)
  * 'command' is one of the editor commands from cmddef.h.
  */
 
-static gboolean
+gboolean
 edit_translate_key (WEdit * edit, long x_key, int *cmd, int *ch)
 {
     long command = CK_InsertChar;
@@ -816,7 +816,7 @@ edit_dialog_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, v
                 WEdit *e = (WEdit *) we;
                 long command;
 
-                if (mcgdb_permissible_key (parm))
+                if (mcgdb_permissible_key (e,parm))
                 {
                   if (!e->extmod)
                       command = keybind_lookup_keymap_command (editor_map, parm);
