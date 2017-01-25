@@ -519,7 +519,7 @@ edit_translate_key (WEdit * edit, long x_key, int *cmd, int *ch)
 {
     long command = CK_InsertChar;
     int char_for_insertion = -1;
-
+#if 0
     /* an ordinary insertable character */
     if (!edit->extmod && x_key < 256)
     {
@@ -612,7 +612,7 @@ edit_translate_key (WEdit * edit, long x_key, int *cmd, int *ch)
         }
 #endif /* HAVE_CHARSET */
     }
-
+#endif
     /* Commands specific to the key emulation */
     if (edit->extmod)
     {

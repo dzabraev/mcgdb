@@ -3914,9 +3914,29 @@ edit_execute_cmd (WEdit * edit, long command, int char_for_insertion)
         edit->extmod = TRUE;
         break;
     case CK_MCGDB_Breakpoint:
-      mcgdb_user_breakpoint();
+      mcgdb_cmd_breakpoint(edit);
       break;
-
+    case CK_MCGDB_DE_Breakpoint:
+      mcgdb_cmd_disableenable_bp();
+      break;
+    case CK_MCGDB_Goto_ELine:
+      mcgdb_cmd_goto_eline();
+      break;
+    case CK_MCGDB_Next:
+      mcgdb_cmd_next();
+      break;
+    case CK_MCGDB_Step:
+      mcgdb_cmd_step();
+      break;
+    case CK_MCGDB_Until:
+      mcgdb_cmd_until();
+      break;
+    case CK_MCGDB_Continue:
+      mcgdb_cmd_continue();
+      break;
+    case CK_MCGDB_Print:
+      mcgdb_cmd_print();
+      break;
     default:
         break;
     }

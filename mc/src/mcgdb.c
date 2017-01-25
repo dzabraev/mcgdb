@@ -537,7 +537,15 @@ mcgdb_permissible_key(WEdit * e, int c) {
     case CK_ShowTabTws:
     case CK_SyntaxOnOff:
     case CK_SyntaxChoose:
-    /* menu */
+    /* mcgdb */
+    case CK_MCGDB_Breakpoint:
+    case CK_MCGDB_DE_Breakpoint:
+    case CK_MCGDB_Goto_ELine:
+    case CK_MCGDB_Next:
+    case CK_MCGDB_Step:
+    case CK_MCGDB_Until:
+    case CK_MCGDB_Continue:
+    case CK_MCGDB_Print:
       return 1;
     default:
       return 0;
@@ -564,8 +572,58 @@ mcgdb_init(void) {
   mcgdb_set_current_line_color("red","black",NULL,NULL);
 }
 
+static
+void send_gdbcmd(const char *buf) {
+  write_all(gdb_input_fd,buf,strlen(buf));
+}
 
 void
-mcgdb_user_breakpoint(void) {
+mcgdb_cmd_breakpoint(WEdit * e) {
+  long curline = e->buffer.curs_line;
+  char buf[512];
+  snprintf(buf,sizeof(buf),"gdbcmd_breakpoint:%ld:;",curline);
+  send_gdbcmd(buf);
+}
+
+void
+mcgdb_cmd_disableenable_bp(void) {
 
 }
+
+void
+mcgdb_cmd_goto_eline(void) {
+
+}
+
+void
+mcgdb_cmd_next(void) {
+  send_gdbcmd("gdbcmd_next:;");
+}
+
+void
+mcgdb_cmd_step(void) {
+  const char *buf = "gdbcmd_step:;";
+  write_all(gdb_input_fd,buf,strlen(buf));
+}
+
+void
+mcgdb_cmd_until(void) {
+  const char *buf = "gdbcmd_until:;";
+  write_all(gdb_input_fd,buf,strlen(buf));
+}
+
+void
+mcgdb_cmd_continue(void) {
+  const char *buf = "gdbcmd_continue:;";
+  write_all(gdb_input_fd,buf,strlen(buf));
+}
+
+void
+mcgdb_cmd_print(void) {
+
+}
+
+
+
+
+

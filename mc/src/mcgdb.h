@@ -99,7 +99,16 @@ mcgdb_set_current_line_color(
 
 void mcgdb_init(void);
 
-void mcgdb_user_breakpoint(void);
+
+void mcgdb_cmd_breakpoint(WEdit * e);
+void mcgdb_cmd_disableenable_bp(void);
+void mcgdb_cmd_goto_eline(void);
+void mcgdb_cmd_next(void);
+void mcgdb_cmd_step(void);
+void mcgdb_cmd_until(void);
+void mcgdb_cmd_continue(void);
+void mcgdb_cmd_print(void);
+
 
 
 
