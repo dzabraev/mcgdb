@@ -44,7 +44,7 @@ def main():
   args=parser.parse_args()
   mc_prefix=get_mc_location()
   prefix=args.prefix
-  configure_mcedit(sys.argv[1:] + ['--prefix',mc_prefix])
+  configure_mcedit(sys.argv[1:] + ['--prefix',mc_prefix,'--program-prefix','mcgdb-'])
   generate_makefile(prefix)
   print 'install mcgdb to {}'.format(prefix)
 
