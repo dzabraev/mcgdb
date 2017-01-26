@@ -743,21 +743,6 @@ def mc():
   #cmd_check_frame([],None,[])
   #gdb.events.exited.connect(stop_event_loop)
 
-'''
-def process_bp(bp,typ):
-  global need_processing_bp
-  need_processing_bp_mutex.acquire()
-  try:
-    locations=get_bp_location(bp)
-    need_processing_bp.append( (locations,typ) )
-  except:
-    need_processing_bp_mutex.release()
-    return
-  need_processing_bp_mutex.release()
-  cmd='need_processing_bp:;'
-  send_cmd(local_w_fd,cmd)
-'''
-
 
 def notify_event_stop():            send_cmd(local_w_fd, 'event_stop:;')
 def notify_event_exited(exit_code): send_cmd(local_w_fd, 'event_exited:{exit_code};')

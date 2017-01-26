@@ -12,6 +12,8 @@ def configure_mcedit(args):
   if path!='.':
     for fname in ['mcgdb.py', 'defines-mcgdb.gdb',  'mcgdb', 'install.py']:
       #shutil.copy('{}/{}'.format(path,fname),'./')
+      if os.path.exists(fname):
+        os.remove(fname)
       os.symlink('{}/{}'.format(path,fname),fname)
   if not os.path.exists('obj-mc'):
     os.makedirs('obj-mc')
@@ -29,6 +31,7 @@ def generate_makefile(prefix):
 all :
 	make -C obj-mc
 install :
+	make -C obj-mc install
 	python install.py --prefix {prefix} --DESTDIR=$(DESTDIR)
 '''.format(prefix=prefix))
 
@@ -42,9 +45,9 @@ def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("--prefix",default='/usr/local')
   args=parser.parse_args()
-  mc_prefix=get_mc_location()
+  #mc_prefix=get_mc_location()
   prefix=args.prefix
-  configure_mcedit(sys.argv[1:] + ['--prefix',mc_prefix,'--program-prefix','mcgdb-'])
+  configure_mcedit(['--prefix',prefix])
   generate_makefile(prefix)
   print 'install mcgdb to {}'.format(prefix)
 
