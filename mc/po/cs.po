@@ -11,7 +11,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Midnight Commander\n"
 "Report-Msgid-Bugs-To: http://www.midnight-commander.org/\n"
-"POT-Creation-Date: 2016-10-02 19:48+0200\n"
+"POT-Creation-Date: 2017-01-26 13:08+0400\n"
 "PO-Revision-Date: 2016-06-21 07:03+0000\n"
 "Last-Translator: Robin Kriebel <kriebel.robin@gmail.com>\n"
 "Language-Team: Czech (http://www.transifex.com/mc/mc/language/cs/)\n"
@@ -609,6 +609,9 @@ msgstr "Odstartuje jako prohlížeč souboru"
 
 msgid "Edit files"
 msgstr "Upravit soubory"
+
+msgid "Set gdb listen port"
+msgstr ""
 
 msgid "Forces xterm features"
 msgstr "Vnutí použití možností Xtermu"

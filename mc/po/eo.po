@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Midnight Commander\n"
 "Report-Msgid-Bugs-To: http://www.midnight-commander.org/\n"
-"POT-Creation-Date: 2016-10-02 19:48+0200\n"
+"POT-Creation-Date: 2017-01-26 13:08+0400\n"
 "PO-Revision-Date: 2016-05-15 16:18+0000\n"
 "Last-Translator: Keith Bowes <zooplah@gmail.com>\n"
 "Language-Team: Esperanto (http://www.transifex.com/mc/mc/language/eo/)\n"
@@ -612,6 +612,9 @@ msgstr "Plenumigi la dosiero-legilon je la dosiero"
 
 msgid "Edit files"
 msgstr "Redakti dosierojn"
+
+msgid "Set gdb listen port"
+msgstr ""
 
 msgid "Forces xterm features"
 msgstr "Devigi xterm-trajtojn"

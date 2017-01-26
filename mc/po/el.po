@@ -12,7 +12,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Midnight Commander\n"
 "Report-Msgid-Bugs-To: http://www.midnight-commander.org/\n"
-"POT-Creation-Date: 2016-10-02 19:48+0200\n"
+"POT-Creation-Date: 2017-01-26 13:08+0400\n"
 "PO-Revision-Date: 2016-05-08 08:14+0000\n"
 "Last-Translator: Piotr Drąg <piotrdrag@gmail.com>\n"
 "Language-Team: Greek (http://www.transifex.com/mc/mc/language/el/)\n"
@@ -609,6 +609,9 @@ msgstr "Εκτελεί τον προβολέα αρχείων σε ένα αρχ
 
 msgid "Edit files"
 msgstr "&Επεξεργασία αρχείων"
+
+msgid "Set gdb listen port"
+msgstr ""
 
 msgid "Forces xterm features"
 msgstr "Εξαναγκάζει λειτουργίες xterm"

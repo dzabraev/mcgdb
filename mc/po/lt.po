@@ -11,7 +11,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Midnight Commander\n"
 "Report-Msgid-Bugs-To: http://www.midnight-commander.org/\n"
-"POT-Creation-Date: 2016-10-02 19:48+0200\n"
+"POT-Creation-Date: 2017-01-26 13:08+0400\n"
 "PO-Revision-Date: 2016-07-08 19:56+0000\n"
 "Last-Translator: Zygi Mantus <zygimantus@gmail.com>\n"
 "Language-Team: Lithuanian (http://www.transifex.com/mc/mc/language/lt/)\n"
@@ -595,6 +595,9 @@ msgid "Launches the file viewer on a file"
 msgstr "Parodo failo turinį"
 
 msgid "Edit files"
+msgstr ""
+
+msgid "Set gdb listen port"
 msgstr ""
 
 msgid "Forces xterm features"

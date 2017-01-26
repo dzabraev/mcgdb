@@ -14,7 +14,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Midnight Commander\n"
 "Report-Msgid-Bugs-To: http://www.midnight-commander.org/\n"
-"POT-Creation-Date: 2016-10-02 19:48+0200\n"
+"POT-Creation-Date: 2017-01-26 13:08+0400\n"
 "PO-Revision-Date: 2016-09-12 19:14+0000\n"
 "Last-Translator: Yury V. Zaytsev <yury@shurup.com>\n"
 "Language-Team: French (http://www.transifex.com/mc/mc/language/fr/)\n"
@@ -622,6 +622,9 @@ msgstr "Lance la visionneuse sur un fichier"
 
 msgid "Edit files"
 msgstr "Éditer les fichiers"
+
+msgid "Set gdb listen port"
+msgstr ""
 
 msgid "Forces xterm features"
 msgstr "Force un attribut xterm"
