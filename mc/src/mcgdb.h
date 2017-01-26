@@ -101,7 +101,7 @@ void mcgdb_init(void);
 
 
 void mcgdb_cmd_breakpoint(WEdit * e);
-void mcgdb_cmd_disableenable_bp(void);
+void mcgdb_cmd_disableenable_bp(WEdit * e);
 void mcgdb_cmd_goto_eline(void);
 void mcgdb_cmd_next(void);
 void mcgdb_cmd_step(void);

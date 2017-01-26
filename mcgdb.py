@@ -239,6 +239,50 @@ def bp_in_queue(bp):
 def is_current_thread_stopped():
   return exec_in_main_pythread( lambda : gdb.selected_thread().is_stopped(), () )
 
+
+def insert_or_delete_breakpoint(entities,fd,filename,line):
+  if not filename:
+    return
+  try:
+    #check whether line belongs to file
+    exec_in_main_pythread( gdb.decode_line, ('{}:{}'.format(filename,line),))
+  except:
+    #not belonging
+    return
+  idx=bp_queue_get_request_idx(filename,line)
+  if idx!=None:
+    #Чётный клик по кнопке. Удаляем request
+    global breakpoint_queue
+    breakpoint_queue.pop(idx)
+    cmd_update_breakpoints(entities,fd,[])
+    return
+  gdb_bps=exec_in_main_pythread( gdb.breakpoints, ())
+  if gdb_bps!=None:
+    try:
+      bp=get_bp(gdb_bps,filename,line)
+    except gdb.error:
+      return
+  else:
+    bp=None
+  if bp!=None:
+    #exists bp at (filename,line)
+    bp_delete(bp)
+  else:
+    #create breakpoint
+    bp_insert(filename,line)
+    if is_current_thread_stopped():
+      gdb_print('',disable_mcgdb_prefix=True)
+  cmd_update_breakpoints(entities,fd,[])
+
+
+def cmd_insert_or_delete_breakpoint(entities,fd,args):
+  filename=entities[fd]['filename_in_editor']
+  if not filename:
+    return
+  line = int(args[0])
+  insert_or_delete_breakpoint(entities,fd,filename,line)
+
+
 def cmd_mouse_click(entities,fd,args):
   filename=args[0] #in this file user produce click
   col  = int(args[1])
@@ -250,40 +294,7 @@ def cmd_mouse_click(entities,fd,args):
   #gdb_print("mouse click in mc col={} line={} types={}\n".format(col,line,click_types))
   if 'MSG_MOUSE_DOWN' in click_types and col<=7:
     #do breakpoint
-    #gdb_print("mouse click in mc col={} line={} types={}\n".format(col,line,click_types))
-    if filename=='':
-      return
-    try:
-      #check whether line belongs to file
-      exec_in_main_pythread( gdb.decode_line, ('{}:{}'.format(filename,line),))
-    except:
-      #not belonging
-      return
-    idx=bp_queue_get_request_idx(filename,line)
-    if idx!=None:
-      #Чётный клик по кнопке. Удаляем request
-      global breakpoint_queue
-      breakpoint_queue.pop(idx)
-      cmd_update_breakpoints(entities,fd,[])
-      return
-    gdb_bps=exec_in_main_pythread( gdb.breakpoints, ())
-    if gdb_bps!=None:
-      try:
-        bp=get_bp(gdb_bps,filename,line)
-      except gdb.error:
-        return
-    else:
-      bp=None
-    if bp!=None:
-      #exists bp at (filename,line)
-      bp_delete(bp)
-    else:
-      #create breakpoint
-      bp_insert(filename,line)
-      if is_current_thread_stopped():
-        gdb_print('',disable_mcgdb_prefix=True)
-    cmd_update_breakpoints(entities,fd,[])
-
+    insert_or_delete_breakpoint(entities,fd,filename,line)
 
 def cmd_mcgdb_main_window(entities,fd,args):
   return cmd_mcgdb_window(entities,fd,args,window_type.MCGDB_MAIN_WINDOW)
@@ -451,9 +462,10 @@ def cmd_check_frame(entities,fd,args):
         cmd_for_main_window+='set_curline:{curline};'.format(curline=-1)
       if FP.fold:
         #Если в редакторе был открыт файл, то закрываем его
-        #если же файл не ыбл открыт, и будет сделано fclose, то
+        #если же файл не был открыт, и будет сделано fclose, то
         #редактор попросту закроется
         cmd_for_main_window+='fclose:;'
+        entities[main_mc_window_fd]['filename_in_editor']=None
     if FP.fnew and (FP.fnew!=FP.fold or FP.force_reopen):
       #нужно открыть новый или переоткрыть существующий
       if FP.lold:
@@ -461,6 +473,7 @@ def cmd_check_frame(entities,fd,args):
       if FP.fold:
         cmd_for_main_window+='fclose:;'
       cmd_for_main_window+='fopen:{fname},{line};'.format(fname=FP.fnew,line=FP.lnew)
+      entities[main_mc_window_fd]['filename_in_editor']=FP.fnew
       cmd_for_main_window+='set_curline:{curline};'.format(curline=FP.lnew)
       entities[main_mc_window_fd]['filename']=FP.fnew
       cmd_for_main_window+=get_cmd_insert_bp_all(FP.fnew)
@@ -517,34 +530,6 @@ def cmd_update_breakpoints(entities,fd,cmds):
     send_cmd(entity_fd,cmd)
 
 
-'''
-def cmd_need_processing_bp(entities,fd,cmds):
-  global need_processing_bp_mutex, need_processing_bp
-  need_processing_bp_mutex.acquire()
-  bp_locations,typ=need_processing_bp.pop(0)
-  need_processing_bp_mutex.release()
-  if typ=='created':
-    cmd1='insert_bp'
-  elif typ=='deleted':
-    cmd1='remove_bp'
-  else:
-    #unknown command
-    return
-  for entity_fd in entities:
-    entity=entities[entity_fd]
-    if entity['type'] not in (window_type.MCGDB_MAIN_WINDOW,window_type.MCGDB_SOURCE_WINDOW):
-      continue
-    entity_fname=entity['filename']
-    if entity_fname==None:
-      continue
-    cmd=''
-    for loc_fname,loc_line in bp_locations:
-      if loc_fname==entity_fname:
-        cmd+='{cmd1}:{line};'.format(cmd1=cmd1,line=loc_line)
-    send_cmd(entity_fd,cmd)
-'''
-
-
 def cmd_process_event_stop(entities,fd,args):
   process_breakpoint_queue()
   cmd_check_frame(entities,fd,args)
@@ -559,6 +544,25 @@ def cmd_color_curline(entities,fd,args):
     if entity['type'] == window_type.MCGDB_MAIN_WINDOW:
       cmd='color_curline:{},{};'.format(args[0],args[1])
       send_cmd(entity_fd,cmd)
+
+def exec_cmd_in_gdb(cmd):
+  try:
+    exec_in_main_pythread( gdb.execute, (cmd,False) )
+  except gdb.error:
+    pass
+
+
+def cmd_enabledisable_breakpoint(entities,fd,args):
+  pass
+def cmd_next(entities,fd,args):
+  exec_cmd_in_gdb("next")
+def cmd_step(entities,fd,args):
+  exec_cmd_in_gdb("step")
+def cmd_until(entities,fd,args):
+  exec_cmd_in_gdb("until")
+def cmd_continue(entities,fd,args):
+  exec_cmd_in_gdb("continue")
+
 
 def process_command_from_gdb(entities,fd):
   cmds={
@@ -578,7 +582,13 @@ def process_command_from_gdb(entities,fd):
 
 def process_command_from_mc(entities,fd):
   cmds={
-    'mouse_click':  cmd_mouse_click,
+    'mouse_click'       :   cmd_mouse_click,
+    'gdbcmd_breakpoint' :   cmd_insert_or_delete_breakpoint,
+    'gdbcmd_enabledisable_breakpoint'   :   cmd_enabledisable_breakpoint,
+    'gdbcmd_next'       :   cmd_next,
+    'gdbcmd_step'       :   cmd_step,
+    'gdbcmd_until'      :   cmd_until,
+    'gdbcmd_continue'   :   cmd_continue,
   }
   return fetch_and_process_command(entities,fd,cmds)
 
@@ -622,7 +632,8 @@ def new_connection(entities,fd):
   entities[newfd]={
       'type':wt['type'],
       'sock':conn,
-      'action':actions[wt['type']]
+      'action':actions[wt['type']],
+      'filename_in_editor':filename,
   }
   entities[newfd]['filename']=filename
   if DebugPrint.new_worker in verbose:

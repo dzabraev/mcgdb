@@ -272,6 +272,7 @@ process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
       mcgdb_bp_remove_all ();
       break;
     case MCGDB_FOPEN:
+      mcgdb_bp_remove_all ();
       edit_file(vfs_path_build_filename(act->filename, (char *) NULL),act->line);
       //TODO нужно ли очищать vfs_path ?
       break;
@@ -579,15 +580,18 @@ void send_gdbcmd(const char *buf) {
 
 void
 mcgdb_cmd_breakpoint(WEdit * e) {
-  long curline = e->buffer.curs_line;
+  long curline = e->buffer.curs_line+1;
   char buf[512];
   snprintf(buf,sizeof(buf),"gdbcmd_breakpoint:%ld:;",curline);
   send_gdbcmd(buf);
 }
 
 void
-mcgdb_cmd_disableenable_bp(void) {
-
+mcgdb_cmd_disableenable_bp(WEdit * e) {
+  long curline = e->buffer.curs_line+1;
+  char buf[512];
+  snprintf(buf,sizeof(buf),"gdbcmd_enabledisable_breakpoint:%ld:;",curline);
+  send_gdbcmd(buf);
 }
 
 void

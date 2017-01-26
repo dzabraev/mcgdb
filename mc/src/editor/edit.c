@@ -3917,7 +3917,7 @@ edit_execute_cmd (WEdit * edit, long command, int char_for_insertion)
       mcgdb_cmd_breakpoint(edit);
       break;
     case CK_MCGDB_DE_Breakpoint:
-      mcgdb_cmd_disableenable_bp();
+      mcgdb_cmd_disableenable_bp(edit);
       break;
     case CK_MCGDB_Goto_ELine:
       mcgdb_cmd_goto_eline();
