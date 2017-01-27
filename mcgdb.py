@@ -1,3 +1,5 @@
+#coding=utf8
+
 from abc import ABCMeta, abstractmethod, abstractproperty
 import sys,os,select,errno,socket
 import json
@@ -7,6 +9,7 @@ import re
 
 import gdb
 
+logging.basicConfig(level=logging.DEBUG)
 
 PATH_TO_MC="/home/dza/bin/mcedit"
 PATH_TO_DEFINES_MCGDB="~/bin/defines-mcgdb.gdb"
@@ -23,7 +26,7 @@ def gdb_print(msg):
 
 def pkgsend(fd,msg):
   jmsg=json.dumps(msg)
-  smsg='{len};{data}'.format(len(jmsg),jmsg)
+  smsg='{len};{data}'.format(len=len(jmsg),data=jmsg)
   n=0
   total=len(smsg)
   while n<total:
@@ -34,7 +37,15 @@ def pkgrecv(fd):
   b=os.read(fd,1)
   while b!=';':
     lstr+=b
-    b=os.read(fd,1)
+    try:
+      b=os.read(fd,1)
+    except IOError as e:
+      if e.errno == errno.EINTR:
+        continue
+      else:
+        raise
+    if len(b)==0:
+      raise CommandReadFailure
   assert len(lstr)>0
   total=int(lstr)
   nrecv=0
@@ -71,7 +82,7 @@ def exec_in_main_pythread(func,args):
 
   def exec_in_main_pythread_1(func,args,evt,result):
     try:
-      result['ret']=func(*args)
+      result['retval']=func(*args)
       result['succ']='ok'
     except Exception:
       result['succ']='exception'
@@ -94,12 +105,8 @@ def exec_in_main_pythread(func,args):
 
 
 
-class Entity(object):
-  def gdb_print(self,msg):
-    raise NotImplementedError
 
-
-class BaseWindow(Entity):
+class BaseWindow(object):
 
   def __init__(self):
     lsock=socket.socket()
@@ -130,10 +137,10 @@ class BaseWindow(Entity):
 class MainWindow(BaseWindow):
 
   type='main_window'
-  startcmd='mcgdb mainwondow'
+  startcmd='mcgdb mainwindow'
 
-  def __init__(self,coregdb):
-    coregdb.register(self)
+  def __init__(self):
+    super(MainWindow,self).__init__()
     self.editor_cbs = {
       'editor_breakpoint'       :  self. __editor_breakpoint,
       'editor_breakpoint_de'    :  self. __editor_breakpoint_de,
@@ -147,7 +154,7 @@ class MainWindow(BaseWindow):
 
 
   def byemsg(self):
-    self.gdb_print("type `{cmd}` to restart {type}\n".format(cmd=self.startcmd,type=self.type))
+    gdb_print("type `{cmd}` to restart {type}\n".format(cmd=self.startcmd,type=self.type))
 
   def gdb_inferior_stop(self):
     pass
@@ -237,7 +244,7 @@ class GEThread(object):
             #уничтожаем объект, который соответствует
             #потерянному окну.
             del self.fte[fd]
-            debug('connection type={} was closed\n'.format(entity.type))
+            debug('connection type={} was closed'.format(entity.type))
             entity.byemsg()
             entity=None #forgot reference to object
     gdb_print('event_loop stopped\n')
@@ -309,5 +316,5 @@ class McgdbMain(object):
   def open_window(self,type):
     pkgsend(self.gdb_wfd,{'cmd':'open_window','type':type})
 
-mcgdb_main=McgdbMain()
+#mcgdb_main=McgdbMain()
 

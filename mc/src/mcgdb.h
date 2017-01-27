@@ -6,6 +6,7 @@
 
 enum gdb_cmd {
   MCGDB_UNKNOWN=0,
+  MCGDB_ERROR,
   MCGDB_MARK,
   MCGDB_UNMARK,
   MCGDB_GOTO,
@@ -40,8 +41,8 @@ struct gdb_action {
   enum gdb_cmd command;
   int     line;
   char   *filename;
-  char  **argv;
-  int     argc;
+  char   *tecolor;
+  char   *bgcolor;
 };
 
 void mcgdb_error(void);

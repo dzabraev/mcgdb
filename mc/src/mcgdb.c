@@ -5,7 +5,7 @@
 #include <config.h>
 #include <stdlib.h>
 #include <stdio.h>
-
+#include <assert.h>
 
 
 //#include "src/editor/edit.h"
@@ -22,6 +22,8 @@
 #include "src/mcgdb.h"
 #include "src/mcgdb-bp.h"
 
+#include <jansson.h>
+
 #define STREQ(s1,s2) (!strncmp(s1,s2,strlen(s2)))
 
 int mcgdb_listen_port;
@@ -37,8 +39,8 @@ long mcgdb_curline; /*current execution line number*/
 enum window_type mcgdb_wtype; /*temporary unused*/
 
 
-static void
-read_bytes_from_gdb(char *buf, char stop_char, size_t size);
+json_t *
+read_pkg_from_gdb(void);
 
 static void
 parse_action_from_gdb(struct gdb_action * act);
@@ -47,10 +49,10 @@ static int
 process_action_from_gdb(WEdit * h, struct gdb_action * act);
 
 static enum window_type
-get_win_type(const char * buf);
+get_window_type(json_t * pkg);
 
 static enum gdb_cmd
-get_command_num(const char *command);
+get_command_num(json_t * pkg);
 
 void
 mcgdb_error(void) {
@@ -63,26 +65,41 @@ mcgdb_exit(void) {
 }
 
 static enum window_type
-get_win_type(const char * buf) {
-  if(      STREQ(buf,"mcgdb_main_window") ) {
-    return MCGDB_MAIN_WINDOW;
-  }
-  else if( STREQ(buf,"mcgdb_source_window") ) {
-    return MCGDB_SOURCE_WINDOW;
-  }
-  else if( STREQ(buf,"mcgdb_backtrace_window") ) {
-    return MCGDB_BACKTRACE_WINDOW;
+get_window_type(json_t *pkg) {
+  json_t *val;
+  enum window_type type;
+  const char *buf;
+
+  val = json_object_get(pkg,"type");
+  if (!json_is_string(val)) {
+    type=MCGDB_UNKNOWN_WINDOW_TYPE;
   }
   else {
-    return MCGDB_UNKNOWN_WINDOW_TYPE;
+    buf=json_string_value(val);
+    if(      STREQ(buf,"main_window") ) {
+      type = MCGDB_MAIN_WINDOW;
+    }
+    else if( STREQ(buf,"source_window") ) {
+      type = MCGDB_SOURCE_WINDOW;
+    }
+    else if( STREQ(buf,"backtrace_window") ) {
+      type = MCGDB_BACKTRACE_WINDOW;
+    }
+    else {
+      type = MCGDB_UNKNOWN_WINDOW_TYPE;
+    }
   }
+
+  json_decref(val);
+  return type;
 }
 
 int open_gdb_input_fd(void) {
   int sockfd;
   struct sockaddr_in serv_addr;
   char buf[100];
-  enum gdb_cmd cmd;
+  json_t *pkg;
+
   if(mcgdb_listen_port==0) {
     printf("you must specify `--gdb-port port`\n");
     mcgdb_exit();
@@ -102,106 +119,178 @@ int open_gdb_input_fd(void) {
   }
   gdb_input_fd=sockfd;
   while (1) {
-    bzero(buf,sizeof(buf));
-    read_bytes_from_gdb(buf,':',sizeof(buf));
-    cmd=get_command_num(buf);
-    if(cmd!=MCGDB_SET_WINDOW_TYPE) {
-      printf("bad command received: `%s`\n",buf);
-      read_bytes_from_gdb(buf,';',sizeof(buf));
-      continue;
-    }
-    else {
-      read_bytes_from_gdb(buf,';',sizeof(buf));
-      mcgdb_wtype=get_win_type(buf);
-      if(mcgdb_wtype==MCGDB_UNKNOWN_WINDOW_TYPE) {
-        printf("unknown window type `%s`\n",buf);
-        continue;
-      }
-      else {
-        /*OK*/
+    while (1) {
+      /*читаем пакет до тех пор, пока не придет нажный*/
+      pkg = read_pkg_from_gdb();
+      if (get_command_num(pkg)==MCGDB_SET_WINDOW_TYPE) {
         break;
       }
+      else {
+        char *msg=json_dumps(pkg,0);
+        printf("bad command received: `%s`\n",msg);
+        free(msg);
+        json_decref(pkg);
+      }
     }
+    /*нужный пакет принят*/
+    mcgdb_wtype = get_window_type(pkg);
+    if (mcgdb_wtype==MCGDB_UNKNOWN_WINDOW_TYPE) {
+        printf("unknown window type `%s`\n",buf);
+    }
+    else {
+      break;
+    }
+    json_decref(pkg);
   }
+  json_decref(pkg);
   return sockfd;
 }
 
 
 
-static void
-read_bytes_from_gdb(char *buf, char stop_char, size_t size) {
+json_t *
+read_pkg_from_gdb() {
   int rc;
-  size_t l=0;
+  size_t bufsize=1024, N, n=0;
+  json_error_t error;
+  json_t *pkg;
+
+  char * buf = malloc(bufsize), *p=buf;
+  if(!buf)
+    return NULL;
+  //message have following structure: len;data
+  //first read len
   while(1) {
-    if(l==size-1) {
-      *buf=0;
-      return;
-    }
-    rc=read(gdb_input_fd,buf,1);
+    assert(n<bufsize);
+    rc=read(gdb_input_fd,p,1);
     if(rc<=0) {
       if(errno==EINTR) {
         continue;
       }
       else {
-        perror("read");
         mcgdb_exit();
       }
     }
-    if( (*buf)==stop_char ) {
-      *buf=0;
-      return;
-    }
-    l++;
-    buf++;
+    if(*p==';')
+      break;
+    p++;
+    n++;
   }
+  *p=0;
+  N=atoi(buf);
+  if(bufsize<N+1) {
+    bufsize=N+1;
+    buf = realloc(buf, bufsize);
+    if (!buf)
+      mcgdb_exit();
+  }
+  n=0;
+  p=buf;
+  while(n<N) {
+    rc=read(gdb_input_fd,p,N-n);
+    if(rc<=0) {
+      if(errno==EINTR) {
+        continue;
+      }
+      else {
+        mcgdb_exit();
+      }
+    }
+    n+=rc;
+    p+=rc;
+  }
+  *p=0;
+  pkg = json_loads(buf, 0, &error);
+  free(buf);
+  return pkg;
+
 }
 
 static enum gdb_cmd
-get_command_num(const char *command) {
-# define compare_cmd(CMD) (!strncmp(command,(CMD),strlen( (CMD) )))
-  if(      compare_cmd("mark") ) {
-    return MCGDB_MARK;
-  }
-  else if( compare_cmd("unmark_all") ) {
-    return MCGDB_UNMARK_ALL;
-  }
-  else if( compare_cmd("unmark") ) {
-    return MCGDB_UNMARK;
-  }
-  else if( compare_cmd("goto") ) {
-    return MCGDB_GOTO;
-  }
-  else if( compare_cmd("fopen") ) {
-    return MCGDB_FOPEN;
-  }
-  else if( compare_cmd("fclose") ) {
-    return MCGDB_FCLOSE;
-  }
-  else if( compare_cmd("show_line_numbers") ) {
-    return MCGDB_SHOW_LINE_NUMBERS;
-  }
-  else if( compare_cmd("set_window_type") ) {
-    return MCGDB_SET_WINDOW_TYPE;
-  }
-  else if( compare_cmd("remove_bp_all") ) {
-    return MCGDB_BP_REMOVE_ALL;
-  }
-  else if( compare_cmd("insert_bp") ) {
-    return MCGDB_BP_INSERT;
-  }
-  else if( compare_cmd("remove_bp") ) {
-    return MCGDB_BP_REMOVE;
-  }
-  else if( compare_cmd("color_curline")) {
-    return MCGDB_COLOR_CURLINE;
-  }
-  else if (compare_cmd("set_curline")) {
-    return MCGDB_SET_CURLINE;
+get_command_num(json_t *pkg) {
+  json_t * val;
+  const char *command;
+  enum gdb_cmd cmd;
+
+  val = json_object_get(pkg,"cmd");
+  if (!json_is_string(val)) {
+    cmd= MCGDB_ERROR;
   }
   else {
-    return MCGDB_UNKNOWN;
+    command = json_string_value(val);
+#   define compare_cmd(CMD) (!strncmp(command,(CMD),strlen( (CMD) )))
+    if(      compare_cmd("mark") ) {
+      return MCGDB_MARK;
+    }
+    else if( compare_cmd("unmark_all") ) {
+      return MCGDB_UNMARK_ALL;
+    }
+    else if( compare_cmd("unmark") ) {
+      return MCGDB_UNMARK;
+    }
+    else if( compare_cmd("goto") ) {
+      return MCGDB_GOTO;
+    }
+    else if( compare_cmd("fopen") ) {
+      return MCGDB_FOPEN;
+    }
+    else if( compare_cmd("fclose") ) {
+      return MCGDB_FCLOSE;
+    }
+    else if( compare_cmd("show_line_numbers") ) {
+      return MCGDB_SHOW_LINE_NUMBERS;
+    }
+    else if( compare_cmd("set_window_type") ) {
+      return MCGDB_SET_WINDOW_TYPE;
+    }
+    else if( compare_cmd("remove_bp_all") ) {
+      return MCGDB_BP_REMOVE_ALL;
+    }
+    else if( compare_cmd("insert_bp") ) {
+      return MCGDB_BP_INSERT;
+    }
+    else if( compare_cmd("remove_bp") ) {
+      return MCGDB_BP_REMOVE;
+    }
+    else if( compare_cmd("color_curline")) {
+      return MCGDB_COLOR_CURLINE;
+    }
+    else if (compare_cmd("set_curline")) {
+      return MCGDB_SET_CURLINE;
+    }
+    else {
+      return MCGDB_UNKNOWN;
+    }
   }
+  json_decref(val);
+  return cmd;
 }
+
+#define EXTRACT_FIELD_LONG(root,field) do{\
+  json_t *rootval;\
+  rootval = json_object_get(root,#field);\
+  if (!json_is_integer(rootval)) {\
+    act->command = MCGDB_ERROR;\
+    json_decref(rootval);\
+    return;\
+  }\
+  act->field = (long)json_integer_value(rootval);\
+  json_decref(rootval);\
+}while(0)
+
+
+#define EXTRACT_FIELD_STR(root,field) do{\
+  json_t *rootval;\
+  rootval = json_object_get(root,#field);\
+  if (!json_is_string(rootval)) {\
+    act->command = MCGDB_ERROR;\
+    json_decref(rootval);\
+    return;\
+  }\
+  act->field = strdup(json_string_value(rootval));\
+  json_decref(rootval);\
+}while(0)
+
 
 static void
 parse_action_from_gdb(struct gdb_action * act) {
@@ -210,10 +299,15 @@ parse_action_from_gdb(struct gdb_action * act) {
   // unmark:lineno;
   // goto:lineno;
   // fopen:filename;
-  static char command[512],argstr[512];
   enum gdb_cmd cmd;
-  read_bytes_from_gdb(command,':',sizeof(command));
-  cmd=get_command_num(command);
+  json_t *pkg;
+  pkg = read_pkg_from_gdb();
+  if (!json_is_object(pkg)) {
+    act->command = MCGDB_ERROR;
+    json_decref(pkg);
+    return;
+  }
+  cmd=get_command_num(pkg);
   act->command=cmd;
   switch(cmd) {
     case MCGDB_MARK:
@@ -221,30 +315,24 @@ parse_action_from_gdb(struct gdb_action * act) {
     case MCGDB_GOTO:
     case MCGDB_BP_REMOVE:
     case MCGDB_BP_INSERT:
-      read_bytes_from_gdb(argstr,';',sizeof(argstr));
-      act->line=atoi(argstr);
+      EXTRACT_FIELD_LONG(pkg,line);
       break;
     case MCGDB_FOPEN:
-      read_bytes_from_gdb(argstr,',',sizeof(argstr));
-      act->filename=strdup(argstr);
-      read_bytes_from_gdb(argstr,';',sizeof(argstr));
-      act->line=atoi(argstr);
+      EXTRACT_FIELD_LONG(pkg,line);
+      EXTRACT_FIELD_STR(pkg,filename);
       break;
     case MCGDB_COLOR_CURLINE:
-      act->argc=2;
-      act->argv=(char **)calloc(sizeof(char *),2);
-      read_bytes_from_gdb(argstr,',',sizeof(argstr));
-      act->argv[0]=strdup(argstr);
-      read_bytes_from_gdb(argstr,';',sizeof(argstr));
-      act->argv[1]=strdup(argstr);
+      EXTRACT_FIELD_STR(pkg,bgcolor);
+      EXTRACT_FIELD_STR(pkg,tecolor);
+      act->command=MCGDB_UNKNOWN; /*временная мера*/
       break;
     case MCGDB_SET_CURLINE:
-      read_bytes_from_gdb(argstr,';',sizeof(argstr));
-      act->line=atoi(argstr);
+      EXTRACT_FIELD_LONG(pkg,line);
       break;
     default:
-      read_bytes_from_gdb(argstr,';',sizeof(argstr));/*remove ';' from stream*/
+      break;
   }
+  json_decref(pkg);
 }
 
 static int
@@ -287,7 +375,7 @@ process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
       edit_move_to_line (edit, act->line);
       break;
     case MCGDB_COLOR_CURLINE:
-      mcgdb_set_current_line_color(act->argv[0],act->argv[1],NULL,edit);
+      mcgdb_set_current_line_color(act->tecolor,act->bgcolor,NULL,edit);
       break;
     case MCGDB_SET_CURLINE:
       mcgdb_curline=act->line;
@@ -355,13 +443,10 @@ static void
 free_gdb_evt (struct gdb_action * gdb_evt) {
   if (gdb_evt->filename)
     free(gdb_evt->filename);
-  if (gdb_evt->argc > 0) {
-    int i;
-    for(i=0;i<gdb_evt->argc;i++) {
-      free(gdb_evt->argv[i]);
-    }
-    free(gdb_evt->argv);
-  }
+  if (gdb_evt->bgcolor)
+    free(gdb_evt->bgcolor);
+  if (gdb_evt->tecolor)
+    free(gdb_evt->tecolor);
   g_free(gdb_evt);
 }
 
