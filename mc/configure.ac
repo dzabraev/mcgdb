@@ -160,9 +160,10 @@ AC_CHECK_HEADERS([string.h memory.h limits.h malloc.h \
 	utime.h sys/statfs.h sys/vfs.h \
 	sys/select.h sys/ioctl.h stropts.h arpa/inet.h \
 	sys/socket.h])
+
+
 AC_HEADER_MAJOR
 AC_HEADER_ASSERT
-
 
 dnl ############################################################################
 dnl Check for types
@@ -233,6 +234,20 @@ AC_CHECK_FUNCS([\
 dnl getpt is a GNU Extension (glibc 2.1.x)
 AC_CHECK_FUNCS(posix_openpt, , [AC_CHECK_FUNCS(getpt)])
 AC_CHECK_FUNCS(grantpt, , [AC_CHECK_LIB(pt, grantpt)])
+
+PKG_CHECK_MODULES(
+  JANSSON,
+  [jansson],
+  [CFLAGS="$CFLAGS $JANSSON_CFLAGS" LIBS="$LIBS $JANSSON_LIBS"],
+  [AC_MSG_ERROR([Couldn't find jansson library])]
+)
+
+
+AC_CHECK_HEADER(jansson.h,
+  [],
+  [AC_MSG_ERROR([Couldn't find or include jansson.h])]
+)
+
 
 dnl replacing lstat with statlstat on sco makes it more portable between
 dnl sco clones
@@ -477,6 +492,9 @@ AC_SUBST(CFLAGS)
 AC_SUBST(CPPFLAGS)
 AC_SUBST(LDFLAGS)
 AC_SUBST(LIBS)
+
+
+
 
 AM_CONDITIONAL(USE_NLS, [test x"$USE_NLS" = xyes])
 AM_CONDITIONAL(USE_MAINTAINER_MODE, [test x"$USE_MAINTAINER_MODE" = xyes])
