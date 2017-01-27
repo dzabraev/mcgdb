@@ -1,7 +1,7 @@
 #coding=utf8
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-import sys,os,select,errno,socket
+import sys,os,select,errno,socket,stat
 import json
 import logging
 import threading
@@ -9,7 +9,7 @@ import re
 
 import gdb
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = logging.DEBUG)
 
 PATH_TO_MC="/home/dza/bin/mcedit"
 PATH_TO_DEFINES_MCGDB="~/bin/defines-mcgdb.gdb"
@@ -25,6 +25,7 @@ def gdb_print(msg):
   gdb.post_event(lambda : gdb.write(msg))
 
 def pkgsend(fd,msg):
+  gdb_print(str(msg)+'\n')
   jmsg=json.dumps(msg)
   smsg='{len};{data}'.format(len=len(jmsg),data=jmsg)
   n=0
@@ -149,7 +150,10 @@ class MainWindow(BaseWindow):
       'editor_until'            :  self. __editor_until,
       'editor_continue'         :  self. __editor_continue,
     }
-    self.gdb_check_frame()
+    self.exec_filename=None #текущему фрейму соответствует это имя файла исзодного кода
+    self.exec_line=None     #номер строки текущего исполнения
+    self.edit_filename=None #Файл, который открыт в редакторе. Если исходник открыть нельзя, то
+                            #открывается файл-заглушка
     self.gdb_check_breakpoint()
 
 
@@ -162,8 +166,46 @@ class MainWindow(BaseWindow):
     pass
   def gdb_new_objfile(self):
     pass
-  def gdb_check_frame(self):
-    pass
+  def gdb_update_current_frame(self,filename,line):
+    '''Данная функция извлекает из gdb текущий файл
+        и номер строки исполнения. После чего, если необходимо, открывает
+        файл с исходником в редакторе и перемещает экран к линии исполнения.
+    '''
+    if (not filename and self.edit_filename!=TMP_FILE_NAME) or filename!=self.exec_filename:
+      if self.edit_filename:
+        #если в редакторе был открыт файл, то закрываем его.
+        self.send({'cmd':'fclose'})
+      if not filename or not os.path.exists(filename) or \
+        not ( os.stat(filename).st_mode & stat.S_IFREG and \
+              os.stat(filename).st_mode & stat.S_IREAD \
+        ):
+        #новый файл неизвестен, либо не существует, либо не является файлом.
+        #открываем в редакторе заглушку
+        with open(TMP_FILE_NAME,'w') as f:
+          if not filename:
+            f.write('\nCurrent execution position and source file not known.\n')
+          else:
+            f.write('\nFilename {} not exists\n'.format(filename))
+        self.send({
+          'cmd'       :   'fopen',
+          'filename'  :   TMP_FILE_NAME,
+          'line'      :   1,
+        })
+        self.edit_filename=TMP_FILE_NAME
+      else:
+        #все нормально, файл существует, его можно прочитать
+        self.send({
+          'cmd'       :   'fopen',
+          'filename'  :   filename,
+          'line'      :   line if line!=None else 0,
+        })
+        self.edit_filename=filename
+    if line!=self.exec_line and line!=None:
+      self.send({'cmd':'set_curline',  'line':line})
+    self.exec_filename=filename
+    self.exec_line=line
+
+
   def gdb_check_breakpoint(self):
     pass
 
@@ -198,6 +240,39 @@ class GEThread(object):
     self.main_thread_ident=main_thread_ident
     self.fte={}
     self.WasCalled=False
+    self.exec_filename=None
+    self.exec_line=None
+
+  def __get_current_position_main_thread(self):
+    assert is_main_thread()
+    #Данную функцию можно вызывать только из main pythread или
+    #через функцию exec_in_main_pythread
+    try:
+      frame=gdb.selected_frame ()
+      #filename=frame.find_sal().symtab.filename
+      #filename=get_abspath(filename)
+      filename=frame.find_sal().symtab.fullname()
+      line=frame.find_sal().line-1
+    except: #gdb.error:
+      #no frame selected or maybe inferior exited?
+      filename=None
+      line=None
+    return filename,line
+
+  def __get_current_position(self):
+    return exec_in_main_pythread(
+          self.__get_current_position_main_thread,())
+
+  def __update_current_position_in_win(self):
+    filename,line = self.__get_current_position()
+    if (not filename or filename!=self.exec_filename) or \
+       (not line or line!=self.exec_line):
+      for fd in self.fte:
+        win=self.fte[fd]
+        if win.type in ('main_window','source_window'):
+          win.gdb_update_current_frame(filename,line)
+      self.exec_filename=filename
+      self.exec_line=line
 
   def __process_pkg_from_gdb(self):
     pkg=pkgrecv(self.gdb_rfd)
@@ -210,8 +285,17 @@ class GEThread(object):
         debug('bad `type`: `{}`'.format(pkg))
         return
       self.fte[window.fd] = window
+      window.gdb_update_current_frame(self.exec_filename,self.exec_line)
     elif cmd=='stop_event_loop':
       sys.exit(0)
+    elif cmd=='check_frame':
+      self.__update_current_position_in_win()
+    elif cmd=='inferior_stop':
+      self.__update_current_position_in_win()
+    elif cmd=='new_objfile':
+      self.__update_current_position_in_win()
+    elif cmd=='check_breakpoint':
+      pass
     else:
       debug('unrecognized package: `{}`'.format(pkg))
       return
@@ -256,7 +340,7 @@ class McgdbMain(object):
   #global event_thread,gdb_listen_port,   main_thread_ident,mcgdb_initialized
     if not self.__is_gdb_version_correct():
       return
-    gdb_rfd,gdb_wfd=os.pipe() #Throw gdb_[rw]fd main pythread will be send commands to another thread
+    gdb_rfd,gdb_wfd=os.pipe() #Through gdb_[rw]fd main pythread will be send commands to another thread
     self.gdb_wfd=gdb_wfd
     gdb.execute('set pagination off',False,False)
     gdb.execute('source {}'.format(PATH_TO_DEFINES_MCGDB))
@@ -303,15 +387,15 @@ class McgdbMain(object):
   def stop_event_loop(self):
     pkgsend(self.gdb_wfd,{'cmd':'stop_event_loop',})
 
-  def notify_inferior_stop(self):
+  def notify_inferior_stop(self,x):
     pkgsend(self.gdb_wfd,{'cmd':'inferior_stop',})
   def notify_inferior_exited(self,exit_code):
-    pkgsend(self.gdb_wfd,{'cmd':'inferior_exited','exit_code':exit_code,})
+    pkgsend(self.gdb_wfd,{'cmd':'inferior_exited',})
   def notify_new_objfile(self,x):
     pkgsend(self.gdb_wfd,{'cmd':'new_objfile',})
   def notify_check_frame(self):
     pkgsend(self.gdb_wfd,{'cmd':'check_frame',})
-  def notify_breakpoint(self):
+  def notify_breakpoint(self,x):
     pkgsend(self.gdb_wfd,{'cmd':'check_breakpoint',})
   def open_window(self,type):
     pkgsend(self.gdb_wfd,{'cmd':'open_window','type':type})

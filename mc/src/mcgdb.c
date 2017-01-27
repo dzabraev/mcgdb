@@ -237,9 +237,6 @@ get_command_num(json_t *pkg) {
     else if( compare_cmd("fclose") ) {
       return MCGDB_FCLOSE;
     }
-    else if( compare_cmd("show_line_numbers") ) {
-      return MCGDB_SHOW_LINE_NUMBERS;
-    }
     else if( compare_cmd("set_window_type") ) {
       return MCGDB_SET_WINDOW_TYPE;
     }
@@ -335,6 +332,7 @@ parse_action_from_gdb(struct gdb_action * act) {
   json_decref(pkg);
 }
 
+
 static int
 process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
   //int alt0;
@@ -361,15 +359,16 @@ process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
       break;
     case MCGDB_FOPEN:
       mcgdb_bp_remove_all ();
-      edit_file(vfs_path_build_filename(act->filename, (char *) NULL),act->line);
+      if(mcgdb_curline>0)
+        book_mark_clear (edit, mcgdb_curline, mcgdb_current_line_color);
+      mcgdb_curline=act->line;
+      edit_file(vfs_path_build_filename(act->filename, (char *) NULL),act->line); /*тут исполнение проваливается в эту функцию
+      и не перейдет на след. строчку, пока edit-файла не закроется. Поэтому мы не может открыть файл, и сразу же подкрасить
+      текущую строку. Это надо делать следующим пакетом.*/
       //TODO нужно ли очищать vfs_path ?
       break;
     case MCGDB_FCLOSE:
       return MCGDB_EXIT_DLG;
-    case MCGDB_SHOW_LINE_NUMBERS:
-      //edit_set_show_numbers_cmd(h);
-      option_line_state=1;
-      break;
     case MCGDB_GOTO:
       edit_move_display (edit, act->line - WIDGET (edit)->lines / 2 - 1);
       edit_move_to_line (edit, act->line);
@@ -378,7 +377,11 @@ process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
       mcgdb_set_current_line_color(act->tecolor,act->bgcolor,NULL,edit);
       break;
     case MCGDB_SET_CURLINE:
+      book_mark_clear (edit, mcgdb_curline, mcgdb_current_line_color);
       mcgdb_curline=act->line;
+      book_mark_insert (edit, mcgdb_curline, mcgdb_current_line_color);
+      edit_move_display (edit, act->line - WIDGET (edit)->lines / 2 - 1);
+      edit_move_to_line (edit, act->line);
       break;
     default:
       break;
@@ -479,9 +482,6 @@ mcgdb_queue_convert_head_to_key(void) {
     case MCGDB_FCLOSE:
       d_key=KEY_F(10);
       break;
-//    case MCGDB_SHOW_LINE_NUMBERS:
-//      d_key=ALT('n');
-//      break;
     default:
       abort();
   }
@@ -656,6 +656,7 @@ void
 mcgdb_init(void) {
   mcgdb_curline=-1;
   mcgdb_set_current_line_color("red","black",NULL,NULL);
+  option_line_state=1;
 }
 
 static
