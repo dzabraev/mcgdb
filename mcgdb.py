@@ -336,7 +336,7 @@ def fetch_and_process_command(entities,fd,cmds):
     return
   return callback(entities,fd,args)
 
-__exec_in_main_pythread_result=None
+
 
 def __exec_in_main_pythread(func,args,evt):
   global __exec_in_main_pythread_result
