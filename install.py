@@ -49,8 +49,7 @@ def install(prefix):
     f.write('''
 source {mcgdb_py}
 python
-mc()
-mcgdb_main_window()
+mcgdb_main = McgdbMain()
 end
 '''.format(mcgdb_py=files['mcgdb.py'][1]))
   if os.path.exists(DESTDIR+files['mcgdb'][1]):
