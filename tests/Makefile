@@ -1,6 +1,11 @@
 CFLAGS=-g3 -O0
 
-all: main.o file.o testdir/file.o myclass.o
+all : main infinite
+
+infinite : infinite.c
+	g++ $(CFLAGS) infinite.c -o infinite
+
+main : main.o file.o testdir/file.o myclass.o
 	g++ main.o file.o testdir/file.o myclass.o  -o main
 
 main.o : main.c head.h

@@ -17,6 +17,7 @@ enum gdb_cmd {
   MCGDB_BP_REMOVE_ALL,
   MCGDB_BP_REMOVE,
   MCGDB_BP_INSERT,
+  MCGDB_BPS_INSERT,
   MCGDB_COLOR_CURLINE,
   MCGDB_SET_CURLINE,
 };
@@ -35,6 +36,7 @@ extern gboolean read_gdb_events;
 extern int mcgdb_current_line_color; /*color of current execute line*/
 extern long mcgdb_curline;
 struct mouse_event_t;
+struct json_t;
 
 struct gdb_action {
   enum gdb_cmd command;
@@ -42,6 +44,7 @@ struct gdb_action {
   char   *filename;
   char   *tecolor;
   char   *bgcolor;
+  struct json_t *pkg;
 };
 
 void mcgdb_error(void);

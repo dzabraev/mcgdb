@@ -259,6 +259,9 @@ get_command_num(json_t *pkg) {
     else if( compare_cmd("remove_bp_all") ) {
       return MCGDB_BP_REMOVE_ALL;
     }
+    else if( compare_cmd("insert_bps") ) {
+      return MCGDB_BPS_INSERT;
+    }
     else if( compare_cmd("insert_bp") ) {
       return MCGDB_BP_INSERT;
     }
@@ -322,10 +325,13 @@ parse_action_from_gdb(struct gdb_action * act) {
   }
   cmd=get_command_num(pkg);
   act->command=cmd;
+  act->pkg=pkg;
   switch(cmd) {
     case MCGDB_MARK:
     case MCGDB_UNMARK:
     case MCGDB_GOTO:
+    case MCGDB_BPS_INSERT:
+      break;
     case MCGDB_BP_REMOVE:
     case MCGDB_BP_INSERT:
       EXTRACT_FIELD_LONG(pkg,line);
@@ -345,7 +351,6 @@ parse_action_from_gdb(struct gdb_action * act) {
     default:
       break;
   }
-  json_decref(pkg);
 }
 
 
@@ -354,6 +359,7 @@ process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
   //int alt0;
   //Widget *wh;
   //edit->force |= REDRAW_COMPLETELY;
+  json_t *j_lines,*j_line,*j_clear_old;
   switch(act->command) {
     case MCGDB_MARK:
       book_mark_insert( edit, act->line, mcgdb_current_line_color);
@@ -363,6 +369,24 @@ process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
       break;
     case MCGDB_UNMARK_ALL:
       book_mark_flush( edit, -1);
+      break;
+    case MCGDB_BPS_INSERT:
+      j_clear_old = json_object_get (act->pkg,"clear_old");
+      if (j_clear_old) {
+        int clear_old = json_boolean_value (j_clear_old);
+        if (clear_old)
+          mcgdb_bp_remove_all ();
+      }
+      j_lines = json_object_get (act->pkg,"bp_lines");
+      if (j_lines) {
+        size_t i;
+        int line;
+        for (i = 0; i < json_array_size (j_lines); i++) {
+          j_line = json_array_get (j_lines, i);
+          line = (long)json_integer_value (j_line);
+          mcgdb_bp_insert (line);
+        }
+      }
       break;
     case MCGDB_BP_INSERT:
       mcgdb_bp_insert (act->line);
@@ -480,6 +504,8 @@ free_gdb_evt (struct gdb_action * gdb_evt) {
     free(gdb_evt->bgcolor);
   if (gdb_evt->tecolor)
     free(gdb_evt->tecolor);
+  if (gdb_evt->pkg)
+    json_decref(gdb_evt->pkg);
   g_free(gdb_evt);
 }
 

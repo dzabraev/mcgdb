@@ -33,7 +33,7 @@ def exec_cmd_in_gdb(cmd):
 
 
 def pkgsend(fd,msg):
-  gdb_print(str(msg)+'\n')
+  debug(str(msg)+'\n')
   jmsg=json.dumps(msg)
   smsg='{len};{data}'.format(len=len(jmsg),data=jmsg)
   n=0
@@ -43,18 +43,22 @@ def pkgsend(fd,msg):
 
 def pkgrecv(fd):
   lstr=''
-  b=os.read(fd,1)
-  while b!=';':
-    lstr+=b
+  while True:
     try:
       b=os.read(fd,1)
     except IOError as e:
       if e.errno == errno.EINTR:
         continue
       else:
-        raise
+        raise CommandReadFailure
+    except OSError:
+      raise CommandReadFailure
     if len(b)==0:
       raise CommandReadFailure
+    if b!=';':
+      lstr+=b
+    else:
+      break
   assert len(lstr)>0
   total=int(lstr)
   nrecv=0
@@ -71,6 +75,7 @@ def pkgrecv(fd):
       raise CommandReadFailure
     nrecv+=len(data1)
     data+=data1
+  debug(data)
   return json.loads(data)
 
 
@@ -269,8 +274,10 @@ class BaseWindow(object):
     lsock.bind( ('',0) )
     lsock.listen(1)
     lport=lsock.getsockname()[1]
-    os.system('gnome-terminal -e "{path_to_mc} -e --gdb-port={gdb_port}"'.format(
-      path_to_mc=PATH_TO_MC,gdb_port=lport))
+    os.system('''gnome-terminal -e "bash -c 'ulimit -c unlimited; {path_to_mc} -e --gdb-port={gdb_port}'" '''.format(
+     path_to_mc=PATH_TO_MC,gdb_port=lport))
+    #s.system('gnome-terminal -e "{path_to_mc} -e --gdb-port={gdb_port}"'.format(
+    # path_to_mc=PATH_TO_MC,gdb_port=lport))
     conn = lsock.accept()[0]
     lsock.close()
     self.fd=conn.fileno()
@@ -362,7 +369,14 @@ class MainWindow(BaseWindow):
 
 
   def gdb_check_breakpoint(self):
-    pass
+    locs=breakpoint_queue.get_inserted_bps_locs(self.edit_filename)
+    lines=[line for _,line in locs]
+    pkg={
+      'cmd':'insert_bps',
+      'bp_lines':lines,
+      'clear_old':True,
+    }
+    self.send(pkg)
 
   #commands from editor
   def __editor_breakpoint(self,pkg):
