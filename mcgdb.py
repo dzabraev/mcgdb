@@ -16,6 +16,7 @@ PATH_TO_DEFINES_MCGDB="~/bin/defines-mcgdb.gdb"
 TMP_FILE_NAME="/tmp/mcgdb-tmp-file-{pid}.txt".format(pid=os.getpid())
 main_thread_ident=threading.current_thread().ident
 
+
 class CommandReadFailure(Exception): pass
 
 def debug(msg):
@@ -23,6 +24,13 @@ def debug(msg):
 
 def gdb_print(msg):
   gdb.post_event(lambda : gdb.write(msg))
+
+def exec_cmd_in_gdb(cmd):
+  try:
+    exec_in_main_pythread( gdb.execute, (cmd,False) )
+  except gdb.error:
+    pass
+
 
 def pkgsend(fd,msg):
   gdb_print(str(msg)+'\n')
@@ -71,7 +79,153 @@ def is_main_thread():
   return threading.current_thread().ident==main_thread_ident
 
 
+class GdbBreakpoints(object):
+  def __init__(self):
+    pass
 
+  def get_all_bps(self):
+    ''' Возвращает все точки останова, которые есть в gdb'''
+    return exec_in_main_pythread( gdb.breakpoints, ())
+
+  def find_bp_in_gdb(self,filename,line):
+    if not self.location_belongs_file(filename,line):
+      return
+    gdb_bps=self.get_all_bps()
+    if gdb_bps!=None:
+      try:
+        return self.__find_bp_in_gdb_1(gdb_bps,filename,line)
+      except gdb.error:
+        return None
+    else:
+      return None
+
+  def __find_bp_in_gdb_1(self,gdb_bps,filename,line):
+    for bp in gdb_bps:
+      if (filename,line) in self.get_bp_locations(bp):
+        return bp
+    return None
+
+  def location_belongs_file(self,filename,line):
+    if not filename or line==None:
+      return False
+    try:
+      #check whether line belongs to file
+      exec_in_main_pythread( gdb.decode_line, ('{}:{}'.format(filename,line),))
+    except:
+      #not belonging
+      return False
+    return True
+
+  def get_bp_locations(self,bp):
+    if bp.type!=gdb.BP_BREAKPOINT:
+      return []
+    location=bp.location
+    locs=exec_in_main_pythread(gdb.decode_line, (location,))[1]
+    if locs==None:
+      return []
+    locations=[]
+    if locs:
+      for loc in locs:
+        line=loc.line
+        if not loc.symtab:
+          #maybe breakpoint have not location. For ex. `break exit`, `break abort`
+          continue
+        filename=loc.symtab.fullname()
+        locations.append( (filename,line) )
+    return locations
+
+
+
+class BreakpointQueue(GdbBreakpoints):
+  ''' Очередь для уаления и создания точек останова .
+
+      Если в отладчике inferior запущен, то в gdb нельзя
+      вставлять и удалять точки сотанова. Вставлять/удалять
+      breakpoint через данный класс. Когда точки останова можно
+      будет модифицировать, точки останова, добавленные в объект
+      данного класса автоматически будут вставлены в gdb.
+  '''
+
+  def __init__(self):
+    self.queue=[]
+
+  def __find_bp_in_queue(self,filename,line):
+    for idx in range(len(self.queue)):
+      action,param = self.queue[idx]
+      if   action=='insert':
+        if param['filename']==filename and param['line']==line:
+          return idx
+      elif action=='delete':
+        if (filename,line) in param['locations']:
+          return idx
+    return None
+
+  def insert_or_delete(self,filename,line):
+    ''' Если bp существует, то данная bp удаляется. Если не существует, то дабавл.'''
+    idx = self.__find_bp_in_queue(filename,line)
+    if idx!=None:
+      #Пока inferior работал пользователь нажал четное число
+      #раз по точке останова. Просто удаляем ее.
+      self.queue.pop(idx)
+      return
+    bp=self.find_bp_in_gdb(filename,line)
+    if bp==None:
+      #this bp not exists
+      self.queue.append( ('insert',{
+        'filename':filename,
+        'line':line,
+      }))
+    else:
+      self.queue.append( ('delete',{
+        'bp':bp,
+        'locations':self.get_bp_locations(bp),
+      }))
+
+  def get_inserted_bps_locs(self,filename=None):
+    ''' Данная функция возвращает список пар (fname,line) для каждой bp, которая либо уже
+        вставлена в gdb и не находится в очереди на удаление, либо находится в
+        очереди на вставку.
+
+        Если задан необьязательный аргумент filename, то возвращаются только те пары,
+        для которых fname==filename
+    '''
+    bps=self.get_all_bps()
+    rmqueue=[ param['bp'] for act,param in self.queue if act=='delete' ]
+    ok_bps=[bp for bp in bps if bp not in rmqueue]
+    locs=[]
+    for bp in ok_bps:
+      locs += self.get_bp_locations(bp)
+    wait_ins_locs=[ (param['filename'],param['line']) for act,param in self.queue if act=='insert' ]
+    locs+=wait_ins_locs
+    if filename:
+      locs=[ (filename,line) for filename,line in locs if filename==filename]
+    return locs
+
+  def __process(self):
+    assert is_main_thread()
+    if gdb.selected_thread()==None:
+      #maybe inferior not running
+      return
+    if not gdb.selected_thread().is_stopped():
+      #поток inferior'а исполняется. Точки ставить нельзя.
+      return
+    while len(self.queue)>0:
+      action,param=self.queue.pop(0)
+      if action=='insert':
+        gdb.Breakpoint('{}:{}'.format(param['filename'],param['line']))
+      elif action=='delete':
+        param['bp'].delete()
+      else:
+        debug('unknown action: {}'.format(action))
+
+  def process(self):
+    ''' Данный метод пытается вставить/удалить точки останова 
+        Если inferior запущен, то ничего сделано не будет
+    '''
+    exec_in_main_pythread(self.__process, () )
+
+
+breakpoint_queue=BreakpointQueue()
 
 
 def exec_in_main_pythread(func,args):
@@ -97,7 +251,8 @@ def exec_in_main_pythread(func,args):
   if result['succ']=='ok':
     return result['retval']
   else:
-    raise result['except']
+    exc_type, exc_value, exc_traceback = result['except']
+    raise exc_type, exc_value, exc_traceback
 
 
 
@@ -212,17 +367,24 @@ class MainWindow(BaseWindow):
   #commands from editor
   def __editor_breakpoint(self,pkg):
     line=pkg['line']
+    if self.edit_filename==TMP_FILE_NAME:
+      #в редакторе открыт файл-заглушка.
+      #молча игнорируем попытки манипуляцией брейкпоинтами
+      return
+    breakpoint_queue.insert_or_delete(self.edit_filename,line)
+    breakpoint_queue.process()
   def __editor_breakpoint_de(self,pkg):
     ''' Disable/enable breakpoint'''
-    pass
+    raise NotImplementedError
+    breakpoint_queue.process()
   def __editor_next(self,pkg):
-    pass
+    exec_cmd_in_gdb("next")
   def __editor_step(self,pkg):
-    pass
+    exec_cmd_in_gdb("step")
   def __editor_until(self,pkg):
-    pass
+    exec_cmd_in_gdb("until")
   def __editor_continue(self,pkg):
-    pass
+    exec_cmd_in_gdb("continue")
 
 
   def process_pkg(self):
@@ -274,28 +436,41 @@ class GEThread(object):
       self.exec_filename=filename
       self.exec_line=line
 
+  def __open_window(self, pkg):
+    type=pkg['type']
+    if type=='main_window':
+      window=MainWindow()
+    else:
+      debug('bad `type`: `{}`'.format(pkg))
+      return
+    self.fte[window.fd] = window
+    window.gdb_update_current_frame(self.exec_filename,self.exec_line)
+
+  def __check_breakpoint(self):
+    pass
+
   def __process_pkg_from_gdb(self):
     pkg=pkgrecv(self.gdb_rfd)
     cmd=pkg['cmd']
-    if cmd=='open_window':
-      type=pkg['type']
-      if type=='main_window':
-        window=MainWindow()
-      else:
-        debug('bad `type`: `{}`'.format(pkg))
-        return
-      self.fte[window.fd] = window
-      window.gdb_update_current_frame(self.exec_filename,self.exec_line)
+    if   cmd=='open_window':
+      self.__open_window(pkg)
     elif cmd=='stop_event_loop':
       sys.exit(0)
     elif cmd=='check_frame':
       self.__update_current_position_in_win()
+      breakpoint_queue.process()
     elif cmd=='inferior_stop':
       self.__update_current_position_in_win()
+      breakpoint_queue.process()
     elif cmd=='new_objfile':
       self.__update_current_position_in_win()
+      breakpoint_queue.process()
     elif cmd=='check_breakpoint':
-      pass
+      self.__check_breakpoint()
+      breakpoint_queue.process()
+    elif cmd=='inferior_exited':
+      self.__update_current_position_in_win()
+      breakpoint_queue.process()
     else:
       debug('unrecognized package: `{}`'.format(pkg))
       return

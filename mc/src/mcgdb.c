@@ -1,10 +1,14 @@
+#ifndef _GNU_SOURCE
+#   define _GNU_SOURCE 1
+#endif
+#include <stdio.h>
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/types.h>
 #include <arpa/inet.h>
 #include <config.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <assert.h>
 
 
@@ -39,8 +43,11 @@ long mcgdb_curline; /*current execution line number*/
 enum window_type mcgdb_wtype; /*temporary unused*/
 
 
-json_t *
-read_pkg_from_gdb(void);
+static json_t *
+read_pkg_from_gdb (void);
+
+static void
+sed_pkg_to_gdb (const char *msg);
 
 static void
 parse_action_from_gdb(struct gdb_action * act);
@@ -94,7 +101,8 @@ get_window_type(json_t *pkg) {
   return type;
 }
 
-int open_gdb_input_fd(void) {
+int
+open_gdb_input_fd (void) {
   int sockfd;
   struct sockaddr_in serv_addr;
   char buf[100];
@@ -146,10 +154,18 @@ int open_gdb_input_fd(void) {
   return sockfd;
 }
 
+static void
+sed_pkg_to_gdb (const char *msg) {
+  size_t len=strlen(msg);
+  char *s;
+  asprintf(&s,"%zu;",len);
+  write_all(gdb_input_fd,s,strlen(s));
+  write_all(gdb_input_fd,msg,strlen(msg));
+  free(s);
+}
 
-
-json_t *
-read_pkg_from_gdb() {
+static json_t *
+read_pkg_from_gdb (void) {
   int rc;
   size_t bufsize=1024, N, n=0;
   json_error_t error;
@@ -389,6 +405,7 @@ process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
   return MCGDB_OK;
 }
 
+/*
 static const char *
 stringify_click_type(mouse_event_t * event) {
   static char buf[512];
@@ -407,13 +424,25 @@ stringify_click_type(mouse_event_t * event) {
   buf[len-1]=0;
   return buf;
 }
+*/
+
 
 void
-mcgdb_send_mouse_event_to_gdb(WEdit * edit, mouse_event_t * event) {
-  static char lb[512];
-  const char * filename;
-  if(!edit)
+mcgdb_send_mouse_event_to_gdb (WEdit * edit, mouse_event_t * event) {
+  long click_col, click_line;
+  char *pkg=0;
+  if (!edit)
     return;
+  click_col  = event->x     - edit->start_col;
+  click_line = event->y + 1 + edit->start_line;
+  if (event->msg==MSG_MOUSE_DOWN && click_col<=7) {
+    asprintf (&pkg,"{\"cmd\":\"editor_breakpoint\",\"line\": %ld}",click_line);
+  }
+  if (pkg)
+    sed_pkg_to_gdb (pkg);
+    free (pkg);
+  return;
+/*
   filename = edit_get_file_name(edit);
   sprintf(lb,"mouse_click:%s,%li,%li,%s;",
     filename?filename:"",
@@ -421,6 +450,7 @@ mcgdb_send_mouse_event_to_gdb(WEdit * edit, mouse_event_t * event) {
     event->y + 1 + edit->start_line,
     stringify_click_type(event));
   write_all(gdb_input_fd,lb,strlen(lb));
+*/
 }
 
 gboolean
@@ -659,53 +689,48 @@ mcgdb_init(void) {
   option_line_state=1;
 }
 
-static
-void send_gdbcmd(const char *buf) {
-  write_all(gdb_input_fd,buf,strlen(buf));
-}
 
 void
-mcgdb_cmd_breakpoint(WEdit * e) {
+mcgdb_cmd_breakpoint (WEdit * e) {
+  char *pkg;
   long curline = e->buffer.curs_line+1;
-  char buf[512];
-  snprintf(buf,sizeof(buf),"gdbcmd_breakpoint:%ld:;",curline);
-  send_gdbcmd(buf);
+  asprintf (&pkg,"{\"cmd\":\"editor_breakpoint\",\"line\": %ld}",curline);
+  sed_pkg_to_gdb (pkg);
+  free (pkg);
 }
 
 void
-mcgdb_cmd_disableenable_bp(WEdit * e) {
+mcgdb_cmd_disableenable_bp (WEdit * e) {
+  char *pkg;
   long curline = e->buffer.curs_line+1;
-  char buf[512];
-  snprintf(buf,sizeof(buf),"gdbcmd_enabledisable_breakpoint:%ld:;",curline);
-  send_gdbcmd(buf);
+  asprintf (&pkg,"{\"cmd\":\"editor_breakpoint_de\",\"line\": %ld}",curline);
+  sed_pkg_to_gdb (pkg);
+  free (pkg);
 }
 
 void
-mcgdb_cmd_goto_eline(void) {
+mcgdb_cmd_goto_eline (void) {
 
 }
 
 void
 mcgdb_cmd_next(void) {
-  send_gdbcmd("gdbcmd_next:;");
+  sed_pkg_to_gdb ("{\"cmd\":\"editor_next\"}");
 }
 
 void
 mcgdb_cmd_step(void) {
-  const char *buf = "gdbcmd_step:;";
-  write_all(gdb_input_fd,buf,strlen(buf));
+  sed_pkg_to_gdb ("{\"cmd\":\"editor_step\"}");
 }
 
 void
 mcgdb_cmd_until(void) {
-  const char *buf = "gdbcmd_until:;";
-  write_all(gdb_input_fd,buf,strlen(buf));
+  sed_pkg_to_gdb ("{\"cmd\":\"editor_until\"}");
 }
 
 void
 mcgdb_cmd_continue(void) {
-  const char *buf = "gdbcmd_continue:;";
-  write_all(gdb_input_fd,buf,strlen(buf));
+  sed_pkg_to_gdb ("{\"cmd\":\"editor_continue\"}");
 }
 
 void
