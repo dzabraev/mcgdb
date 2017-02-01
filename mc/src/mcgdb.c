@@ -61,6 +61,9 @@ get_window_type(json_t * pkg);
 static enum gdb_cmd
 get_command_num(json_t * pkg);
 
+static void
+process_lines_array(json_t * j_lines,  void (*callback)(long) );
+
 void
 mcgdb_error(void) {
   abort();
@@ -256,18 +259,18 @@ get_command_num(json_t *pkg) {
     else if( compare_cmd("set_window_type") ) {
       return MCGDB_SET_WINDOW_TYPE;
     }
-    else if( compare_cmd("remove_bp_all") ) {
-      return MCGDB_BP_REMOVE_ALL;
+//    else if( compare_cmd("remove_bp_all") ) {
+//      return MCGDB_BP_REMOVE_ALL;
+//    }
+    else if( compare_cmd("breakpoints") ) {
+      return MCGDB_BREAKPOINTS;
     }
-    else if( compare_cmd("insert_bps") ) {
-      return MCGDB_BPS_INSERT;
-    }
-    else if( compare_cmd("insert_bp") ) {
-      return MCGDB_BP_INSERT;
-    }
-    else if( compare_cmd("remove_bp") ) {
-      return MCGDB_BP_REMOVE;
-    }
+//    else if( compare_cmd("insert_bp") ) {
+//      return MCGDB_BP_INSERT;
+//    }
+//    else if( compare_cmd("remove_bp") ) {
+//      return MCGDB_BP_REMOVE;
+//    }
     else if( compare_cmd("color_curline")) {
       return MCGDB_COLOR_CURLINE;
     }
@@ -330,12 +333,12 @@ parse_action_from_gdb(struct gdb_action * act) {
     case MCGDB_MARK:
     case MCGDB_UNMARK:
     case MCGDB_GOTO:
-    case MCGDB_BPS_INSERT:
+    case MCGDB_BREAKPOINTS:
       break;
-    case MCGDB_BP_REMOVE:
-    case MCGDB_BP_INSERT:
-      EXTRACT_FIELD_LONG(pkg,line);
-      break;
+//    case MCGDB_BP_REMOVE:
+//    case MCGDB_BP_INSERT:
+//      EXTRACT_FIELD_LONG(pkg,line);
+//      break;
     case MCGDB_FOPEN:
       EXTRACT_FIELD_LONG(pkg,line);
       EXTRACT_FIELD_STR(pkg,filename);
@@ -343,7 +346,7 @@ parse_action_from_gdb(struct gdb_action * act) {
     case MCGDB_COLOR_CURLINE:
       EXTRACT_FIELD_STR(pkg,bgcolor);
       EXTRACT_FIELD_STR(pkg,tecolor);
-      act->command=MCGDB_UNKNOWN; /*временная мера*/
+      act->command=MCGDB_UNKNOWN; /*TODO remove this временная мера*/
       break;
     case MCGDB_SET_CURLINE:
       EXTRACT_FIELD_LONG(pkg,line);
@@ -353,13 +356,26 @@ parse_action_from_gdb(struct gdb_action * act) {
   }
 }
 
+static void
+process_lines_array(json_t * j_lines,  void (*callback)(long) ) {
+  size_t i;
+  int line;
+  json_t *j_line;
+  if (!j_lines)
+    return;
+  for (i = 0; i < json_array_size (j_lines); i++) {
+    j_line = json_array_get (j_lines, i);
+    line = (long)json_integer_value (j_line);
+    callback (line);
+  }
+}
 
 static int
 process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
   //int alt0;
   //Widget *wh;
   //edit->force |= REDRAW_COMPLETELY;
-  json_t *j_lines,*j_line,*j_clear_old;
+  json_t *j_clear_old;
   switch(act->command) {
     case MCGDB_MARK:
       book_mark_insert( edit, act->line, mcgdb_current_line_color);
@@ -370,33 +386,25 @@ process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
     case MCGDB_UNMARK_ALL:
       book_mark_flush( edit, -1);
       break;
-    case MCGDB_BPS_INSERT:
-      j_clear_old = json_object_get (act->pkg,"clear_old");
+    case MCGDB_BREAKPOINTS:
+      j_clear_old = json_object_get (act->pkg,"clear");
       if (j_clear_old) {
         int clear_old = json_boolean_value (j_clear_old);
         if (clear_old)
           mcgdb_bp_remove_all ();
       }
-      j_lines = json_object_get (act->pkg,"bp_lines");
-      if (j_lines) {
-        size_t i;
-        int line;
-        for (i = 0; i < json_array_size (j_lines); i++) {
-          j_line = json_array_get (j_lines, i);
-          line = (long)json_integer_value (j_line);
-          mcgdb_bp_insert (line);
-        }
-      }
+      process_lines_array (json_object_get (act->pkg,"insert"), mcgdb_bp_insert);
+      process_lines_array (json_object_get (act->pkg,"remove"), mcgdb_bp_remove);
       break;
-    case MCGDB_BP_INSERT:
-      mcgdb_bp_insert (act->line);
-      break;
-    case MCGDB_BP_REMOVE:
-      mcgdb_bp_remove (act->line);
-      break;
-    case MCGDB_BP_REMOVE_ALL:
-      mcgdb_bp_remove_all ();
-      break;
+//    case MCGDB_BP_INSERT:
+//      mcgdb_bp_insert (act->line);
+//      break;
+//    case MCGDB_BP_REMOVE:
+//      mcgdb_bp_remove (act->line);
+//      break;
+//    case MCGDB_BP_REMOVE_ALL:
+//      mcgdb_bp_remove_all ();
+//      break;
     case MCGDB_FOPEN:
       mcgdb_bp_remove_all ();
       if(mcgdb_curline>0)
@@ -688,6 +696,8 @@ mcgdb_permissible_key(WEdit * e, int c) {
     case CK_MCGDB_Until:
     case CK_MCGDB_Continue:
     case CK_MCGDB_Print:
+    case CK_MCGDB_Frame_up:
+    case CK_MCGDB_Frame_down:
       return 1;
     default:
       return 0;
@@ -758,6 +768,17 @@ void
 mcgdb_cmd_continue(void) {
   sed_pkg_to_gdb ("{\"cmd\":\"editor_continue\"}");
 }
+
+void
+mcgdb_cmd_frame_up(void) {
+  sed_pkg_to_gdb ("{\"cmd\":\"editor_frame_up\"}");
+}
+
+void
+mcgdb_cmd_frame_down(void) {
+  sed_pkg_to_gdb ("{\"cmd\":\"editor_frame_down\"}");
+}
+
 
 void
 mcgdb_cmd_print(void) {

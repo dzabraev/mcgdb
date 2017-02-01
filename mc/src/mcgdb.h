@@ -14,10 +14,10 @@ enum gdb_cmd {
   MCGDB_FCLOSE,
   MCGDB_SET_WINDOW_TYPE,
   MCGDB_UNMARK_ALL,
-  MCGDB_BP_REMOVE_ALL,
-  MCGDB_BP_REMOVE,
-  MCGDB_BP_INSERT,
-  MCGDB_BPS_INSERT,
+//  MCGDB_BP_REMOVE_ALL,
+//  MCGDB_BP_REMOVE,
+//  MCGDB_BP_INSERT,
+  MCGDB_BREAKPOINTS,
   MCGDB_COLOR_CURLINE,
   MCGDB_SET_CURLINE,
 };
@@ -111,7 +111,8 @@ void mcgdb_cmd_step(void);
 void mcgdb_cmd_until(void);
 void mcgdb_cmd_continue(void);
 void mcgdb_cmd_print(void);
-
+void mcgdb_cmd_frame_up(void);
+void mcgdb_cmd_frame_down(void);
 
 
 

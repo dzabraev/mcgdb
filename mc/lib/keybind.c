@@ -369,6 +369,8 @@ static name_keymap_t command_names[] = {
     {"Mcgdb_until",         CK_MCGDB_Until},
     {"Mcgdb_continue",      CK_MCGDB_Continue},
     {"Mcgdb_print",         CK_MCGDB_Print},
+    {"Mcgdb_frame_up",      CK_MCGDB_Frame_up},
+    {"Mcgdb_frame_down",    CK_MCGDB_Frame_down},
 
     {NULL, CK_IgnoreKey}
 };

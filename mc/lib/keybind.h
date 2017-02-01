@@ -343,7 +343,9 @@ enum
     CK_MCGDB_Step,
     CK_MCGDB_Until,
     CK_MCGDB_Continue,
-    CK_MCGDB_Print
+    CK_MCGDB_Print,
+    CK_MCGDB_Frame_up,
+    CK_MCGDB_Frame_down
 };
 
 /*** structures declarations (and typedefs of structures)*****************************************/

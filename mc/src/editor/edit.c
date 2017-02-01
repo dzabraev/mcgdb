@@ -3937,6 +3937,12 @@ edit_execute_cmd (WEdit * edit, long command, int char_for_insertion)
     case CK_MCGDB_Print:
       mcgdb_cmd_print();
       break;
+    case CK_MCGDB_Frame_up:
+      mcgdb_cmd_frame_up();
+      break;
+    case CK_MCGDB_Frame_down:
+      mcgdb_cmd_frame_down();
+      break;
     default:
         break;
     }

@@ -203,7 +203,7 @@ class BreakpointQueue(GdbBreakpoints):
     wait_ins_locs=[ (param['filename'],param['line']) for act,param in self.queue if act=='insert' ]
     locs+=wait_ins_locs
     if filename:
-      locs=[ (filename,line) for filename,line in locs if filename==filename]
+      locs=[ (fname,line) for fname,line in locs if fname==filename]
     return locs
 
   def __process(self):
@@ -305,18 +305,20 @@ class MainWindow(BaseWindow):
   def __init__(self):
     super(MainWindow,self).__init__()
     self.editor_cbs = {
-      'editor_breakpoint'       :  self. __editor_breakpoint,
-      'editor_breakpoint_de'    :  self. __editor_breakpoint_de,
-      'editor_next'             :  self. __editor_next,
-      'editor_step'             :  self. __editor_step,
-      'editor_until'            :  self. __editor_until,
-      'editor_continue'         :  self. __editor_continue,
+      'editor_breakpoint'       :  self.__editor_breakpoint,
+      'editor_breakpoint_de'    :  self.__editor_breakpoint_de,
+      'editor_next'             :  self.__editor_next,
+      'editor_step'             :  self.__editor_step,
+      'editor_until'            :  self.__editor_until,
+      'editor_continue'         :  self.__editor_continue,
+      'editor_frame_up'         :  self.__editor_frame_up,
+      'editor_frame_down'       :  self.__editor_frame_down,
     }
     self.exec_filename=None #текущему фрейму соответствует это имя файла исзодного кода
     self.exec_line=None     #номер строки текущего исполнения
     self.edit_filename=None #Файл, который открыт в редакторе. Если исходник открыть нельзя, то
                             #открывается файл-заглушка
-    self.gdb_check_breakpoint()
+
 
 
   def byemsg(self):
@@ -364,19 +366,23 @@ class MainWindow(BaseWindow):
         self.edit_filename=filename
     if line!=self.exec_line and line!=None:
       self.send({'cmd':'set_curline',  'line':line})
+    assert self.edit_filename!=None
     self.exec_filename=filename
     self.exec_line=line
 
 
   def gdb_check_breakpoint(self):
     locs=breakpoint_queue.get_inserted_bps_locs(self.edit_filename)
-    lines=[line for _,line in locs]
+    insert_lines=[line for _,line in locs]
+    remove_lines=[]
     pkg={
-      'cmd':'insert_bps',
-      'bp_lines':lines,
-      'clear_old':True,
+      'cmd':'breakpoints',
+      'insert':insert_lines,
+      'remove':remove_lines,
+      'clear':True,
     }
-    self.send(pkg)
+    if len(insert_lines)>0 or len(remove_lines)>0:
+      self.send(pkg)
 
   #commands from editor
   def __editor_breakpoint(self,pkg):
@@ -399,13 +405,22 @@ class MainWindow(BaseWindow):
     exec_cmd_in_gdb("until")
   def __editor_continue(self,pkg):
     exec_cmd_in_gdb("continue")
+  def __editor_frame_up(self,pkg):
+    exec_cmd_in_gdb("up")
+  def __editor_frame_down(self,pkg):
+    exec_cmd_in_gdb("down")
+
 
 
   def process_pkg(self):
     '''Обработать сообщение из редактора'''
     pkg=self.recv()
     cmd=pkg['cmd']
-    return self.editor_cbs[cmd](pkg)
+    cb=self.editor_cbs.get(cmd)
+    if cb==None:
+      debug("unknown `cmd`: `{}`".format(pkg))
+    else:
+      return cb(pkg)
 
 
 
@@ -460,30 +475,37 @@ class GEThread(object):
     self.fte[window.fd] = window
     window.gdb_update_current_frame(self.exec_filename,self.exec_line)
 
-  def __check_breakpoint(self):
-    pass
+  def __check_breakpoint(self,pkg):
+    for fd in self.fte:
+      win = self.fte[fd]
+      win.gdb_check_breakpoint()
 
   def __process_pkg_from_gdb(self):
     pkg=pkgrecv(self.gdb_rfd)
     cmd=pkg['cmd']
     if   cmd=='open_window':
       self.__open_window(pkg)
+      self.__check_breakpoint(pkg)
     elif cmd=='stop_event_loop':
       sys.exit(0)
     elif cmd=='check_frame':
       self.__update_current_position_in_win()
+      self.__check_breakpoint(pkg)
       breakpoint_queue.process()
     elif cmd=='inferior_stop':
       self.__update_current_position_in_win()
+      self.__check_breakpoint(pkg)
       breakpoint_queue.process()
     elif cmd=='new_objfile':
       self.__update_current_position_in_win()
+      self.__check_breakpoint(pkg)
       breakpoint_queue.process()
     elif cmd=='check_breakpoint':
-      self.__check_breakpoint()
+      self.__check_breakpoint(pkg)
       breakpoint_queue.process()
     elif cmd=='inferior_exited':
       self.__update_current_position_in_win()
+      self.__check_breakpoint(pkg)
       breakpoint_queue.process()
     else:
       debug('unrecognized package: `{}`'.format(pkg))
@@ -520,7 +542,7 @@ class GEThread(object):
             debug('connection type={} was closed'.format(entity.type))
             entity.byemsg()
             entity=None #forgot reference to object
-    gdb_print('event_loop stopped\n')
+    debug('event_loop stopped\n')
 
 
 
