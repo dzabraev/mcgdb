@@ -48,9 +48,6 @@ def install(prefix):
   with open(DESTDIR+files['startup.gdb'][1],'w') as f:
     f.write('''
 source {mcgdb_py}
-python
-mcgdb_main = McgdbMain()
-end
 '''.format(mcgdb_py=files['mcgdb.py'][1]))
   if os.path.exists(DESTDIR+files['mcgdb'][1]):
     os.remove(DESTDIR+files['mcgdb'][1])

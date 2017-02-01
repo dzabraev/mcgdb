@@ -18,7 +18,7 @@ enum gdb_cmd {
 //  MCGDB_BP_REMOVE,
 //  MCGDB_BP_INSERT,
   MCGDB_BREAKPOINTS,
-  MCGDB_COLOR_CURLINE,
+  MCGDB_COLOR,
   MCGDB_SET_CURLINE,
 };
 
@@ -34,6 +34,7 @@ enum window_type {
 
 extern gboolean read_gdb_events;
 extern int mcgdb_current_line_color; /*color of current execute line*/
+extern int mcgdb_bp_color;
 extern long mcgdb_curline;
 struct mouse_event_t;
 struct json_t;
@@ -95,10 +96,7 @@ int mcgdb_permissible_key(WEdit * e, int c);
 
 
 void
-mcgdb_set_current_line_color(
-  const char *fgcolor /*color of text*/,
-  const char *bgcolor /*color of background*/,
-  const char *attrs , WEdit * edit);
+mcgdb_set_color (struct json_t * pkg, WEdit * edit);
 
 void mcgdb_init(void);
 

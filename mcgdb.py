@@ -9,15 +9,16 @@ import re
 
 import gdb
 
-logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = logging.DEBUG)
+#logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = logging.DEBUG)
+logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s')
 
 PATH_TO_MC="/home/dza/bin/mcedit"
 PATH_TO_DEFINES_MCGDB="~/bin/defines-mcgdb.gdb"
 TMP_FILE_NAME="/tmp/mcgdb-tmp-file-{pid}.txt".format(pid=os.getpid())
 main_thread_ident=threading.current_thread().ident
+mcgdb_main=None
 
-
-class CommandReadFailure(Exception): pass
+class IOFailure(Exception): pass
 
 def debug(msg):
   exec_in_main_pythread (logging.debug,(msg,))
@@ -50,11 +51,11 @@ def pkgrecv(fd):
       if e.errno == errno.EINTR:
         continue
       else:
-        raise CommandReadFailure
+        raise IOFailure
     except OSError:
-      raise CommandReadFailure
+      raise IOFailure
     if len(b)==0:
-      raise CommandReadFailure
+      raise IOFailure
     if b!=';':
       lstr+=b
     else:
@@ -71,8 +72,10 @@ def pkgrecv(fd):
         continue
       else:
         raise
+    except OSError:
+      raise IOFailure
     if len(data1)==0:
-      raise CommandReadFailure
+      raise IOFailure
     nrecv+=len(data1)
     data+=data1
   debug(data)
@@ -410,6 +413,19 @@ class MainWindow(BaseWindow):
   def __editor_frame_down(self,pkg):
     exec_cmd_in_gdb("down")
 
+#  def __save_curline_color(self,background_color,text_color,attr):
+#    pass
+#  def __load_curline_color(self):
+#    pass
+#    try:
+#      with open('{HOME}/.mcgdb/color/curline', 'w') as f:
+#        fd=f.fileno()
+#        fcntl.flock(fd,fcntl.LOCK_EX)
+
+
+  def set_color(self,pkg):
+    self.send(pkg)
+
 
 
   def process_pkg(self):
@@ -480,6 +496,12 @@ class GEThread(object):
       win = self.fte[fd]
       win.gdb_check_breakpoint()
 
+
+  def __set_color(self,pkg):
+    for fd in self.fte:
+      win=self.fte[fd]
+      win.set_color(pkg)
+
   def __process_pkg_from_gdb(self):
     pkg=pkgrecv(self.gdb_rfd)
     cmd=pkg['cmd']
@@ -507,6 +529,8 @@ class GEThread(object):
       self.__update_current_position_in_win()
       self.__check_breakpoint(pkg)
       breakpoint_queue.process()
+    elif cmd=='color':
+      self.__set_color(pkg)
     else:
       debug('unrecognized package: `{}`'.format(pkg))
       return
@@ -534,7 +558,7 @@ class GEThread(object):
           entity=self.fte[fd]
           try:
             entity.process_pkg ()
-          except CommandReadFailure:
+          except IOFailure:
             #возможно удаленное окно было закрыто =>
             #уничтожаем объект, который соответствует
             #потерянному окну.
@@ -610,6 +634,82 @@ class McgdbMain(object):
     pkgsend(self.gdb_wfd,{'cmd':'check_breakpoint',})
   def open_window(self,type):
     pkgsend(self.gdb_wfd,{'cmd':'open_window','type':type})
+  def __send_color(self,name,text_color,background_color,attr):
+    pkg={
+      'cmd':'color',
+      name : {
+        'background_color':background_color,
+        'text_color': text_color,
+      },
+    }
+    pkgsend(self.gdb_wfd,pkg)
+  def set_color_curline(self,text_color,background_color,attr):
+    self.__send_color ('color_curline',text_color,background_color,attr)
+  def set_color_bp(self,text_color,background_color,attr):
+    self.__send_color ('color_breakpoint',text_color,background_color,attr)
 
-#mcgdb_main=McgdbMain()
+
+def init():
+  global mcgdb_main
+  mcgdb_main = McgdbMain()
+
+def module_initialized():
+  return not mcgdb_main==None
+
+
+init()
+
+######################## GDB commands ############################
+
+class McgdbCompleter (gdb.Command):
+  def __init__ (self):
+    super (McgdbCompleter, self).__init__ ("mcgdb", gdb.COMMAND_USER, gdb.COMPLETE_COMMAND, True)
+McgdbCompleter()
+
+class CmdMainWindow (gdb.Command):
+  """Open mcgdb main window with current source file and current execute line"""
+
+  def __init__ (self):
+    super (CmdMainWindow, self).__init__ ("mcgdb mainwindow", gdb.COMMAND_USER, gdb.COMPLETE_COMMAND, True)
+
+  def invoke (self, arg, from_tty):
+    if not module_initialized():
+      init()
+    mcgdb_main.open_window('main_window')
+
+CmdMainWindow()
+
+class CmdColor (gdb.Command):
+  def __init__ (self, cmd, doc, callback):
+    super (CmdColor, self).__init__ (cmd, gdb.COMMAND_USER, gdb.COMPLETE_COMMAND, True)
+    self.doc=doc
+    self.usage='USAGE: {cmd} textcolor backgroundcolor'.format(cmd=cmd)
+    self.callback=callback
+    self.cmd=cmd
+
+  def __doc__ (self):
+    return '{}\n{}'.format(self.doc, self.usage)
+
+  def invoke (self, arg, from_tty):
+    colors=arg.split()
+    if len(colors)!=2:
+      print self.usage
+    text_color=colors[0]
+    background_color=colors[1]
+    self.callback(text_color,background_color,None)
+
+CmdColor(
+  'mcgdb curlinecolor',
+  'set color of current execute line.',
+  mcgdb_main.set_color_curline)
+
+CmdColor(
+  'mcgdb bpcolor',
+  'set color of breakpoints in editor.',
+  mcgdb_main.set_color_bp)
+
+
+
+
+
 

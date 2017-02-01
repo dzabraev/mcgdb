@@ -446,7 +446,7 @@ print_to_widget (WEdit * edit, long row, int start_col, int start_col_real,
     if (option_line_state)
     {
         if( mcgdb_bp_exists(edit->start_line + row + 1) )
-          tty_setcolor (BOOK_MARK_COLOR);
+          tty_setcolor (mcgdb_bp_color);
         else
           tty_setcolor (LINE_STATE_COLOR);
         for (i = 0; i < LINE_STATE_WIDTH; i++)

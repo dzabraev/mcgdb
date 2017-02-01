@@ -36,7 +36,7 @@ static GList * mcgdb_event_queue;
 
 gboolean read_gdb_events;
 
-
+int mcgdb_bp_color;
 int mcgdb_current_line_color;
 long mcgdb_curline; /*current execution line number*/
 
@@ -271,8 +271,8 @@ get_command_num(json_t *pkg) {
 //    else if( compare_cmd("remove_bp") ) {
 //      return MCGDB_BP_REMOVE;
 //    }
-    else if( compare_cmd("color_curline")) {
-      return MCGDB_COLOR_CURLINE;
+    else if( compare_cmd("color")) {
+      return MCGDB_COLOR;
     }
     else if (compare_cmd("set_curline")) {
       return MCGDB_SET_CURLINE;
@@ -343,10 +343,10 @@ parse_action_from_gdb(struct gdb_action * act) {
       EXTRACT_FIELD_LONG(pkg,line);
       EXTRACT_FIELD_STR(pkg,filename);
       break;
-    case MCGDB_COLOR_CURLINE:
-      EXTRACT_FIELD_STR(pkg,bgcolor);
-      EXTRACT_FIELD_STR(pkg,tecolor);
-      act->command=MCGDB_UNKNOWN; /*TODO remove this временная мера*/
+    case MCGDB_COLOR:
+//      EXTRACT_FIELD_STR(pkg,bgcolor);
+//      EXTRACT_FIELD_STR(pkg,tecolor);
+//      act->command=MCGDB_UNKNOWN; /*TODO remove this временная мера*/
       break;
     case MCGDB_SET_CURLINE:
       EXTRACT_FIELD_LONG(pkg,line);
@@ -421,8 +421,8 @@ process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
       edit_move_display (edit, act->line - WIDGET (edit)->lines / 2 - 1);
       edit_move_to_line (edit, act->line);
       break;
-    case MCGDB_COLOR_CURLINE:
-      mcgdb_set_current_line_color(act->tecolor,act->bgcolor,NULL,edit);
+    case MCGDB_COLOR:
+      mcgdb_set_color(act->pkg,edit);
       break;
     case MCGDB_SET_CURLINE:
       book_mark_clear (edit, mcgdb_curline, mcgdb_current_line_color);
@@ -706,22 +706,41 @@ mcgdb_permissible_key(WEdit * e, int c) {
 
 }
 
+static void
+extract_color( json_t *color, const char **text_color,
+    const char **bg_color, const char **attrs) {
+  json_t *j_attrs;
+  *text_color = json_string_value (json_object_get (color, "text_color"));
+  *bg_color = json_string_value (json_object_get (color, "background_color"));
+  j_attrs = json_object_get (color, "attrs");
+  *attrs = j_attrs ? json_string_value (j_attrs) : NULL;
+}
+
 void
-mcgdb_set_current_line_color(
-  const char *fgcolor /*color of text*/,
-  const char *bgcolor /*color of background*/,
-  const char *attrs, WEdit * edit ) {
-  if (edit && mcgdb_curline>=0)
-    book_mark_clear (edit, mcgdb_curline, mcgdb_current_line_color);
-  mcgdb_current_line_color = tty_try_alloc_color_pair2 (fgcolor, bgcolor, attrs, FALSE);
-  if (edit && mcgdb_curline>=0)
-    book_mark_insert (edit, mcgdb_curline, mcgdb_current_line_color);
+mcgdb_set_color (json_t * pkg, WEdit * edit) {
+  json_t *color_curline, *color_breakpoint;
+  const char *text_color, *bg_color, *attrs;
+  color_curline = json_object_get (pkg, "color_curline");
+  color_breakpoint = json_object_get (pkg, "color_breakpoint");
+  if (color_curline) {
+    extract_color(color_curline, &text_color, &bg_color, &attrs);
+    if (edit && mcgdb_curline>=0)
+      book_mark_clear (edit, mcgdb_curline, mcgdb_current_line_color);
+    mcgdb_current_line_color = tty_try_alloc_color_pair2 (text_color, bg_color, attrs, FALSE);
+    if (edit && mcgdb_curline>=0)
+      book_mark_insert (edit, mcgdb_curline, mcgdb_current_line_color);
+  }
+  if (color_breakpoint) {
+    extract_color(color_breakpoint, &text_color, &bg_color, &attrs);
+    mcgdb_bp_color = tty_try_alloc_color_pair2 (text_color, bg_color, attrs, FALSE);
+  }
 }
 
 void
 mcgdb_init(void) {
   mcgdb_curline=-1;
-  mcgdb_set_current_line_color("red","black",NULL,NULL);
+  mcgdb_current_line_color = tty_try_alloc_color_pair2 ("red", "black", NULL, FALSE);
+  mcgdb_bp_color = tty_try_alloc_color_pair2 ("red", "black", NULL, FALSE);
   option_line_state=1;
 }
 
