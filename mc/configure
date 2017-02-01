@@ -3421,7 +3421,7 @@ fi
 
 # Define the identity of the package.
 
- PACKAGE=mc
+ PACKAGE=mcgdb
  VERSION=${VERSION}
 
 
