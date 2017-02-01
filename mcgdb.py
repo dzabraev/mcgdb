@@ -9,8 +9,8 @@ import re
 
 import gdb
 
-#logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = logging.DEBUG)
-logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s')
+level = logging.WARNING
+logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
 
 PATH_TO_MC="/home/dza/bin/mcedit"
 PATH_TO_DEFINES_MCGDB="~/bin/defines-mcgdb.gdb"
@@ -21,7 +21,10 @@ mcgdb_main=None
 class IOFailure(Exception): pass
 
 def debug(msg):
-  exec_in_main_pythread (logging.debug,(msg,))
+  if level==logging.DEBUG:
+    #эта блокировка нужна, поскольку exec_in_main_pythread
+    #делает блокировки. И лучше их избегать.
+    exec_in_main_pythread (logging.debug,(msg,))
 
 def gdb_print(msg):
   gdb.post_event(lambda : gdb.write(msg))
@@ -34,7 +37,7 @@ def exec_cmd_in_gdb(cmd):
 
 
 def pkgsend(fd,msg):
-  debug(str(msg)+'\n')
+  debug('SEND: {}'.format(str(msg)))
   jmsg=json.dumps(msg)
   smsg='{len};{data}'.format(len=len(jmsg),data=jmsg)
   n=0
@@ -78,7 +81,7 @@ def pkgrecv(fd):
       raise IOFailure
     nrecv+=len(data1)
     data+=data1
-  debug(data)
+  debug('RECV: {}'.format(data))
   return json.loads(data)
 
 
@@ -541,16 +544,15 @@ class GEThread(object):
     while True:
       rfds=self.fte.keys()
       rfds.append(self.gdb_rfd)
-      timeout=0.1
-      #timeout ставится чтобы проверять, нужно ли останавливать этот цикл
       try:
-        fds=select.select(rfds,[],[],timeout)
+        fds=select.select(rfds,[],[])
       except select.error as se:
         if se[0]==errno.EINTR:
           continue
         else:
           raise
       ready_rfds=fds[0]
+      debug( str(ready_rfds)+' '+str(rfds) )
       for fd in ready_rfds:
         if fd==self.gdb_rfd:
           self.__process_pkg_from_gdb()
@@ -582,7 +584,7 @@ class McgdbMain(object):
     gethread = GEThread(gdb_rfd,main_thread_ident)
     event_thread=threading.Thread (target=gethread,args=()) #this thread will be communicate with editors
     event_thread.start()
-
+    self.event_thread=event_thread
     gdb.events.stop.connect( self.notify_inferior_stop )
     gdb.events.exited.connect( self.notify_inferior_exited )
     gdb.events.new_objfile.connect( self.notify_new_objfile )
@@ -680,15 +682,11 @@ class CmdMainWindow (gdb.Command):
 CmdMainWindow()
 
 class CmdColor (gdb.Command):
-  def __init__ (self, cmd, doc, callback):
+  def __init__ (self, cmd, callback):
     super (CmdColor, self).__init__ (cmd, gdb.COMMAND_USER, gdb.COMPLETE_COMMAND, True)
-    self.doc=doc
     self.usage='USAGE: {cmd} textcolor backgroundcolor'.format(cmd=cmd)
     self.callback=callback
     self.cmd=cmd
-
-  def __doc__ (self):
-    return '{}\n{}'.format(self.doc, self.usage)
 
   def invoke (self, arg, from_tty):
     colors=arg.split()
@@ -698,15 +696,16 @@ class CmdColor (gdb.Command):
     background_color=colors[1]
     self.callback(text_color,background_color,None)
 
-CmdColor(
-  'mcgdb curlinecolor',
-  'set color of current execute line.',
-  mcgdb_main.set_color_curline)
+class CmdColorCurline(CmdColor):
+  '''set color of current execute line.
+USAGE: mcgdb curlinecolor textcolor backgroundcolor'''
 
-CmdColor(
-  'mcgdb bpcolor',
-  'set color of breakpoints in editor.',
-  mcgdb_main.set_color_bp)
+class CmdColorBreakpoint(CmdColor):
+  '''set color of breakpoints in editor.
+USAGE: mcgdb mcgdb bpcolor textcolor backgroundcolor'''
+
+CmdColorCurline('mcgdb curlinecolor', mcgdb_main.set_color_curline)
+CmdColorBreakpoint('mcgdb bpcolor', mcgdb_main.set_color_bp)
 
 
 
