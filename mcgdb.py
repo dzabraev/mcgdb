@@ -10,6 +10,7 @@ import re
 import gdb
 
 level = logging.WARNING
+#level = logging.DEBUG
 logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
 
 PATH_TO_MC="/home/dza/bin/mcedit"
@@ -29,9 +30,19 @@ def debug(msg):
 def gdb_print(msg):
   gdb.post_event(lambda : gdb.write(msg))
 
+def get_prompt():
+  res=exec_in_main_pythread( gdb.execute, ('show prompt',False,True) )
+  regex=re.compile('''Gdb's prompt is "([^"]+)".''')
+  prompt=regex.match(res).groups()[0]
+  return prompt
+
+
 def exec_cmd_in_gdb(cmd):
   try:
-    exec_in_main_pythread( gdb.execute, (cmd,False) )
+    exec_in_main_pythread( gdb.execute, ('echo {cmd}\n'.format(cmd=cmd),False) )
+    exec_in_main_pythread( gdb.execute, (cmd,) )
+#    exec_in_main_pythread(
+#      gdb.execute, ('echo {prompt}\ '.format(prompt=get_prompt()),False) )
   except gdb.error:
     pass
 
@@ -387,8 +398,7 @@ class MainWindow(BaseWindow):
       'remove':remove_lines,
       'clear':True,
     }
-    if len(insert_lines)>0 or len(remove_lines)>0:
-      self.send(pkg)
+    self.send(pkg)
 
   #commands from editor
   def __editor_breakpoint(self,pkg):
@@ -552,7 +562,6 @@ class GEThread(object):
         else:
           raise
       ready_rfds=fds[0]
-      debug( str(ready_rfds)+' '+str(rfds) )
       for fd in ready_rfds:
         if fd==self.gdb_rfd:
           self.__process_pkg_from_gdb()
