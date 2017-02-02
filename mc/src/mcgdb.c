@@ -36,7 +36,6 @@ static GList * mcgdb_event_queue;
 
 gboolean read_gdb_events;
 
-int mcgdb_bp_color;
 int mcgdb_current_line_color;
 long mcgdb_curline; /*current execution line number*/
 
@@ -370,12 +369,26 @@ process_lines_array(json_t * j_lines,  void (*callback)(long) ) {
   }
 }
 
+static void
+pkg_breakpoints(json_t *pkg) {
+  json_t *j_clear;
+  j_clear = json_object_get (pkg,"clear");
+  if (j_clear) {
+    int clear = json_boolean_value (j_clear);
+    if (clear)
+      mcgdb_bp_remove_all ();
+  }
+  else {
+    process_lines_array (json_object_get (pkg,"remove"), mcgdb_bp_remove);
+  }
+  process_lines_array (json_object_get (pkg,"normal"),      mcgdb_bp_insert_normal);
+  process_lines_array (json_object_get (pkg,"wait_insert"), mcgdb_bp_insert_wait_insert);
+  process_lines_array (json_object_get (pkg,"wait_remove"), mcgdb_bp_insert_wait_remove);
+  process_lines_array (json_object_get (pkg,"disabled"),    mcgdb_bp_insert_disabled);
+}
+
 static int
 process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
-  //int alt0;
-  //Widget *wh;
-  //edit->force |= REDRAW_COMPLETELY;
-  json_t *j_clear_old;
   switch(act->command) {
     case MCGDB_MARK:
       book_mark_insert( edit, act->line, mcgdb_current_line_color);
@@ -387,14 +400,7 @@ process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
       book_mark_flush( edit, -1);
       break;
     case MCGDB_BREAKPOINTS:
-      j_clear_old = json_object_get (act->pkg,"clear");
-      if (j_clear_old) {
-        int clear_old = json_boolean_value (j_clear_old);
-        if (clear_old)
-          mcgdb_bp_remove_all ();
-      }
-      process_lines_array (json_object_get (act->pkg,"insert"), mcgdb_bp_insert);
-      process_lines_array (json_object_get (act->pkg,"remove"), mcgdb_bp_remove);
+      pkg_breakpoints (act->pkg);
       break;
 //    case MCGDB_BP_INSERT:
 //      mcgdb_bp_insert (act->line);
@@ -716,13 +722,21 @@ extract_color( json_t *color, const char **text_color,
   *attrs = j_attrs ? json_string_value (j_attrs) : NULL;
 }
 
+#define SET_COLOR_BP(pkg,type) do {\
+  json_t * color_bp = json_object_get (pkg, "color_bp_" #type); \
+  if (color_bp) { \
+    const char *text_color, *bg_color, *attrs; \
+    extract_color(color_bp, &text_color, &bg_color, &attrs); \
+    mcgdb_bp_color_ ## type  = tty_try_alloc_color_pair2 (text_color, bg_color, attrs, FALSE); \
+  } \
+} while(0)\
+
 void
 mcgdb_set_color (json_t * pkg, WEdit * edit) {
-  json_t *color_curline, *color_breakpoint;
-  const char *text_color, *bg_color, *attrs;
+  json_t *color_curline;
   color_curline = json_object_get (pkg, "color_curline");
-  color_breakpoint = json_object_get (pkg, "color_breakpoint");
   if (color_curline) {
+    const char *text_color, *bg_color, *attrs;
     extract_color(color_curline, &text_color, &bg_color, &attrs);
     if (edit && mcgdb_curline>=0)
       book_mark_clear (edit, mcgdb_curline, mcgdb_current_line_color);
@@ -730,17 +744,21 @@ mcgdb_set_color (json_t * pkg, WEdit * edit) {
     if (edit && mcgdb_curline>=0)
       book_mark_insert (edit, mcgdb_curline, mcgdb_current_line_color);
   }
-  if (color_breakpoint) {
-    extract_color(color_breakpoint, &text_color, &bg_color, &attrs);
-    mcgdb_bp_color = tty_try_alloc_color_pair2 (text_color, bg_color, attrs, FALSE);
-  }
+  SET_COLOR_BP(pkg,normal);
+  SET_COLOR_BP(pkg,disabled);
+  SET_COLOR_BP(pkg,wait_remove);
+  SET_COLOR_BP(pkg,wait_insert);
+  edit->force |= REDRAW_COMPLETELY;
 }
 
 void
 mcgdb_init(void) {
   mcgdb_curline=-1;
-  mcgdb_current_line_color = tty_try_alloc_color_pair2 ("red", "black", NULL, FALSE);
-  mcgdb_bp_color = tty_try_alloc_color_pair2 ("red", "black", NULL, FALSE);
+  mcgdb_current_line_color   = tty_try_alloc_color_pair2 ("red", "black",   "bold", FALSE);
+  mcgdb_bp_color_normal      = tty_try_alloc_color_pair2 ("red", "black",   NULL, FALSE);
+  mcgdb_bp_color_disabled    = tty_try_alloc_color_pair2 ("red", "wite",    NULL, FALSE);
+  mcgdb_bp_color_wait_insert = tty_try_alloc_color_pair2 ("red", "yellow",  NULL, FALSE);
+  mcgdb_bp_color_wait_remove = tty_try_alloc_color_pair2 ("red", "magenta", NULL, FALSE);
   option_line_state=1;
 }
 

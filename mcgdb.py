@@ -142,7 +142,11 @@ class GdbBreakpoints(object):
     if bp.type!=gdb.BP_BREAKPOINT:
       return []
     location=bp.location
-    locs=exec_in_main_pythread(gdb.decode_line, (location,))[1]
+    try:
+      locs=exec_in_main_pythread(gdb.decode_line, (location,))[1]
+    except gdb.error:
+      #current file have not location `location` then produce this error
+      return []
     if locs==None:
       return []
     locations=[]
@@ -215,13 +219,39 @@ class BreakpointQueue(GdbBreakpoints):
     rmqueue=[ param['bp'] for act,param in self.queue if act=='delete' ]
     ok_bps=[bp for bp in bps if bp not in rmqueue]
     locs=[]
-    for bp in ok_bps:
-      locs += self.get_bp_locations(bp)
     wait_ins_locs=[ (param['filename'],param['line']) for act,param in self.queue if act=='insert' ]
     locs+=wait_ins_locs
     if filename:
       locs=[ (fname,line) for fname,line in locs if fname==filename]
     return locs
+
+  def __bps_to_locs(self,bps,filename=None):
+    locs=[]
+    for bp in bps:
+      locs += self.get_bp_locations(bp)
+    if filename:
+      locs=[ line for fname,line in locs if fname==filename ]
+    return locs
+
+  def get_bps_locs_normal(self,filename=None):
+    normal_bps=[bp for bp in self.get_all_bps() if bp.enabled]
+    return self.__bps_to_locs(normal_bps,filename)
+
+  def get_bps_locs_disabled(self,filename=None):
+    disabled_bps=[bp for bp in self.get_all_bps() if not bp.enabled]
+    return self.__bps_to_locs(disabled_bps,filename)
+
+  def get_bps_locs_wait_remove(self,filename=None):
+    wait_remove_locs=[ param['bp'] for act,param in self.queue if act=='delete' ]
+    return self.__bps_to_locs(wait_remove_locs, filename)
+
+  def get_bps_locs_wait_insert(self,filename=None):
+    wait_insert_locs=[ (param['filename'],param['line']) for act,param in self.queue if act=='insert' ]
+    if filename!=None:
+      return [ line for (fname,line) in wait_insert_locs ]
+    else:
+      return wait_insert_locs
+
 
   def __process(self):
     assert is_main_thread()
@@ -317,7 +347,7 @@ class BaseWindow(object):
 class MainWindow(BaseWindow):
 
   type='main_window'
-  startcmd='mcgdb mainwindow'
+  startcmd='mcgdb open main'
 
   def __init__(self):
     super(MainWindow,self).__init__()
@@ -389,13 +419,17 @@ class MainWindow(BaseWindow):
 
 
   def gdb_check_breakpoint(self):
-    locs=breakpoint_queue.get_inserted_bps_locs(self.edit_filename)
-    insert_lines=[line for _,line in locs]
-    remove_lines=[]
+    normal=breakpoint_queue.get_bps_locs_normal(self.edit_filename)
+    disabled=breakpoint_queue.get_bps_locs_disabled(self.edit_filename)
+    wait_remove=breakpoint_queue.get_bps_locs_wait_remove(self.edit_filename)
+    wait_insert=breakpoint_queue.get_bps_locs_wait_insert(self.edit_filename)
     pkg={
       'cmd':'breakpoints',
-      'insert':insert_lines,
-      'remove':remove_lines,
+      'normal'          :   normal,
+      'wait_insert'     :   wait_insert,
+      'wait_remove'     :   wait_remove,
+      'disabled'        :   disabled,
+      'remove'          :   [],
       'clear':True,
     }
     self.send(pkg)
@@ -409,6 +443,7 @@ class MainWindow(BaseWindow):
       return
     breakpoint_queue.insert_or_delete(self.edit_filename,line)
     breakpoint_queue.process()
+    return [{'cmd':'check_breakpoint'}]
   def __editor_breakpoint_de(self,pkg):
     ''' Disable/enable breakpoint'''
     raise NotImplementedError
@@ -496,7 +531,7 @@ class GEThread(object):
 
   def __open_window(self, pkg):
     type=pkg['type']
-    if type=='main_window':
+    if type=='main':
       window=MainWindow()
     else:
       debug('bad `type`: `{}`'.format(pkg))
@@ -548,10 +583,27 @@ class GEThread(object):
       debug('unrecognized package: `{}`'.format(pkg))
       return
 
+  def __process_pkg_from_entity (self):
+    pkg=self.entities_evt_queue.pop(0)
+    cmd=pkg['cmd']
+    if cmd=='check_breakpoint':
+      breakpoint_queue.process()
+      self.__check_breakpoint(pkg)
+    else:
+      debug('unrecognized package: `{}`'.format(pkg))
+      return
+
+
   def __call__(self):
     assert not self.WasCalled
     self.WasCalled=True
+    self.entities_evt_queue=[] #Если при обработке пакета от editor или чего-то еще
+    #трубется оповестить другие окна о каком-то событии, то entity.process_pkg()
+    #должен вернуть пакет(ы), которые будут обрабатываться в 
     while True:
+      if len(self.entities_evt_queue)>0:
+        self.__process_pkg_from_entity ()
+        continue
       rfds=self.fte.keys()
       rfds.append(self.gdb_rfd)
       try:
@@ -568,7 +620,9 @@ class GEThread(object):
         else:
           entity=self.fte[fd]
           try:
-            entity.process_pkg ()
+            res=entity.process_pkg ()
+            if res:
+              self.entities_evt_queue+=res
           except IOFailure:
             #возможно удаленное окно было закрыто =>
             #уничтожаем объект, который соответствует
@@ -600,7 +654,7 @@ class McgdbMain(object):
     gdb.events.breakpoint_created.connect( self.notify_breakpoint )
     gdb.events.breakpoint_deleted.connect( self.notify_breakpoint )
 
-    self.open_window('main_window')
+    self.open_window('main')
 
   def __get_gdb_version(self):
     try:
@@ -635,17 +689,22 @@ class McgdbMain(object):
 
   def notify_inferior_stop(self,x):
     pkgsend(self.gdb_wfd,{'cmd':'inferior_stop',})
+
   def notify_inferior_exited(self,exit_code):
     pkgsend(self.gdb_wfd,{'cmd':'inferior_exited',})
+
   def notify_new_objfile(self,x):
     pkgsend(self.gdb_wfd,{'cmd':'new_objfile',})
+
   def notify_check_frame(self):
     pkgsend(self.gdb_wfd,{'cmd':'check_frame',})
+
   def notify_breakpoint(self,x):
     pkgsend(self.gdb_wfd,{'cmd':'check_breakpoint',})
+
   def open_window(self,type):
     pkgsend(self.gdb_wfd,{'cmd':'open_window','type':type})
-  def __send_color(self,name,text_color,background_color,attr):
+  def __send_color(self,name,text_color,background_color,attrs):
     pkg={
       'cmd':'color',
       name : {
@@ -653,11 +712,19 @@ class McgdbMain(object):
         'text_color': text_color,
       },
     }
+    if attrs!=None:
+      pkg[name]['attrs']=attrs
     pkgsend(self.gdb_wfd,pkg)
   def set_color_curline(self,text_color,background_color,attr):
     self.__send_color ('color_curline',text_color,background_color,attr)
-  def set_color_bp(self,text_color,background_color,attr):
-    self.__send_color ('color_breakpoint',text_color,background_color,attr)
+  def set_color_bp_normal(self,text_color,background_color,attr):
+    self.__send_color ('color_bp_normal',text_color,background_color,attr)
+  def set_color_bp_disabled(self,text_color,background_color,attr):
+    self.__send_color ('color_bp_disabled',text_color,background_color,attr)
+  def set_color_bp_wait_remove(self,text_color,background_color,attr):
+    self.__send_color ('color_bp_wait_remove',text_color,background_color,attr)
+  def set_color_bp_wait_insert(self,text_color,background_color,attr):
+    self.__send_color ('color_bp_wait_insert',text_color,background_color,attr)
 
 
 def init():
@@ -672,6 +739,11 @@ init()
 
 ######################## GDB commands ############################
 
+
+def start_with(arr,word):
+  return [s for s in arr if s[:len(word)]==word]
+
+
 class McgdbCompleter (gdb.Command):
   def __init__ (self):
     super (McgdbCompleter, self).__init__ ("mcgdb", gdb.COMMAND_USER, gdb.COMPLETE_COMMAND, True)
@@ -681,40 +753,109 @@ class CmdMainWindow (gdb.Command):
   """Open mcgdb main window with current source file and current execute line"""
 
   def __init__ (self):
-    super (CmdMainWindow, self).__init__ ("mcgdb mainwindow", gdb.COMMAND_USER, gdb.COMPLETE_COMMAND, True)
+    super (CmdMainWindow, self).__init__ ("mcgdb open", gdb.COMMAND_USER)
+    self.types=['main']
 
   def invoke (self, arg, from_tty):
     if not module_initialized():
       init()
-    mcgdb_main.open_window('main_window')
+    args=arg.split()
+    if len(args)!=1:
+      print 'number of args must be exactly 1'
+      return
+    type=args[0]
+    if type not in self.types:
+      print '`type` should be in {}'.format(self.types)
+      return
+    mcgdb_main.open_window(type)
+
+  def complete(self,text,word):
+    complete_part = text[:len(text)-len(word)]
+    narg=len(complete_part.split())
+    if narg==0:
+      return start_with(self.types,word)
+    if narg >= 1:
+      return gdb.COMPLETE_NONE
+
 
 CmdMainWindow()
 
+
 class CmdColor (gdb.Command):
-  def __init__ (self, cmd, callback):
-    super (CmdColor, self).__init__ (cmd, gdb.COMMAND_USER, gdb.COMPLETE_COMMAND, True)
-    self.usage='USAGE: {cmd} textcolor backgroundcolor'.format(cmd=cmd)
-    self.callback=callback
-    self.cmd=cmd
+  ''' set color of curline, breakpoint and other.
+USAGE: mcgdb color type text_color background_color [attribs]
+
+type={curline, bp_normal, bp_disabled, bp_wait_remove, bp_wait_insert}
+COLOR={black, white, blue, yellow, red, ...}
+text_color: see COLOR set
+background_color: see COLOR set
+attribs: attrib1+...+attrinb
+'''
+
+  def __init__ (self):
+    super (CmdColor, self).__init__ ('mcgdb color', gdb.COMMAND_USER)
+    self.cbs={
+      'curline'        : mcgdb_main.set_color_curline,
+      'bp_normal'      : mcgdb_main.set_color_bp_normal,
+      'bp_disabled'    : mcgdb_main.set_color_bp_disabled,
+      'bp_wait_remove' : mcgdb_main.set_color_bp_wait_remove,
+      'bp_wait_insert' : mcgdb_main.set_color_bp_wait_insert,
+    }
+    self.colors=[
+      'black', 'gray', 'red', 'brightred', 'green', 'brightgreen',
+      'brown', 'yellow', 'blue', 'brightblue', 'magenta', 'brightmagenta',
+      'cyan', 'brightcyan', 'lightgray', 'white',
+    ]
+    self.attribs= [
+      'bold', 'italic', 'underline', 'reverse', 'blink',
+    ]
+    self.types=self.cbs.keys()
 
   def invoke (self, arg, from_tty):
-    colors=arg.split()
-    if len(colors)!=2:
-      print self.usage
-    text_color=colors[0]
-    background_color=colors[1]
-    self.callback(text_color,background_color,None)
+    args=arg.split()
+    if len(args)!=3 and len(args)!=4:
+      print 'number of args must be 3 or 4'
+      return
+    if len(args)==3:
+      type,text_color,background_color = tuple(args)
+      attribs=None
+    else:
+      type,text_color,background_color,attribs = tuple(args)
+    if type not in self.types:
+      print '`type` should be in {}'.format(self.types)
+      return
+    if text_color not in self.colors:
+      print '`text_color` should be in {}'.format(self.colors)
+      return
+    if background_color not in self.colors:
+      print '`background_color` should be in {}'.format(self.colors)
+      return
+    if attribs:
+      attribs_arr=attribs.split('+')
+      for attrib in attribs_arr:
+        if attrib not in self.attribs:
+          print '`attrib` should be in {}'.format(self.attribs)
+          return
+    self.cbs[type](text_color,background_color,attribs)
 
-class CmdColorCurline(CmdColor):
-  '''set color of current execute line.
-USAGE: mcgdb curlinecolor textcolor backgroundcolor'''
+  def complete(self,text,word):
+    complete_part = text[:len(text)-len(word)]
+    narg=len(complete_part.split())
+    #gdb.write( 'nargs={narg} word=`{word}`'.format( word=word,narg=narg ) )
+    if narg==0:
+      return start_with(self.types,word)
+    if narg==1 or narg==2:
+      return start_with(self.colors,word)
+    if narg==3:
+      return start_with(self.attribs,word)
+    if narg >= 4:
+      return gdb.COMPLETE_NONE
 
-class CmdColorBreakpoint(CmdColor):
-  '''set color of breakpoints in editor.
-USAGE: mcgdb mcgdb bpcolor textcolor backgroundcolor'''
 
-CmdColorCurline('mcgdb curlinecolor', mcgdb_main.set_color_curline)
-CmdColorBreakpoint('mcgdb bpcolor', mcgdb_main.set_color_bp)
+CmdColor()
+
+
+
 
 
 

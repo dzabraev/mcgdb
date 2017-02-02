@@ -4,6 +4,19 @@ mcgdb_main.stop_event_loop()
 end
 end
 
+define hook-disable
+python
+mcgdb_main.notify_breakpoint(None)
+end
+end
+
+define hook-enable
+python
+mcgdb_main.notify_breakpoint(None)
+end
+end
+
+
 define hookpost-up
 python
 mcgdb_main.notify_check_frame()

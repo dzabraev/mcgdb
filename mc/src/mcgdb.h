@@ -34,7 +34,6 @@ enum window_type {
 
 extern gboolean read_gdb_events;
 extern int mcgdb_current_line_color; /*color of current execute line*/
-extern int mcgdb_bp_color;
 extern long mcgdb_curline;
 struct mouse_event_t;
 struct json_t;
