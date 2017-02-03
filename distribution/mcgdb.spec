@@ -17,6 +17,7 @@ BuildRoot       : %{_tmppath}/%{name}-%{version}-root
 
 Requires: mc, gnome-terminal, jansson
 Requires: slang >= 2.0
+Requires: glib >= 2.0
 Requires: gdb
 
 %description
