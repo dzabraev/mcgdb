@@ -2,11 +2,11 @@
 
 STARTUP_SCRIPT=startup.gdb
 
-ver=`gdb --version | head -n 1| sed -r 's/GNU gdb \(GDB\) ([[:digit:]]+).([[:digit:]]+)/\1 \2/'`
+ver=`gdb --version | head -n 1| sed -r 's/GNU gdb.* ([[:digit:]]+).([[:digit:]]+).*/\1 \2/'`
 major=`echo $ver | awk '{print $1}'`
 minor=`echo $ver | awk '{print $2}'`
 
-err="gdb version should be >= 7.12, but your gdb is $major,$minor"
+err="gdb version should be >= 7.12, but your gdb is $major.$minor"
 
 if [ "$major" -lt "7" ]; then
   echo $err
