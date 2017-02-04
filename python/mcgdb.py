@@ -13,9 +13,7 @@ level = logging.WARNING
 #level = logging.DEBUG
 logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
 
-#PATH_TO_MC="XXX/mcgdb-mcedit"
-#PATH_TO_DEFINES_MCGDB="XXX/defines-mcgdb.gdb"
-TMP_FILE_NAME="/tmp/mcgdb-tmp-file-{pid}.txt".format(pid=os.getpid())
+TMP_FILE_NAME="/tmp/mcgdb/mcgdb-tmp-file-{pid}.txt".format(pid=os.getpid())
 main_thread_ident=threading.current_thread().ident
 mcgdb_main=None
 
@@ -392,6 +390,9 @@ class MainWindow(BaseWindow):
         ):
         #новый файл неизвестен, либо не существует, либо не является файлом.
         #открываем в редакторе заглушку
+        dname=os.path.dirname(TMP_FILE_NAME)
+        if not os.path.exists(dname):
+          os.makedirs(dname)
         with open(TMP_FILE_NAME,'w') as f:
           if not filename:
             f.write('\nCurrent execution position and source file not known.\n')
@@ -557,6 +558,10 @@ class GEThread(object):
       self.__open_window(pkg)
       self.__check_breakpoint(pkg)
     elif cmd=='stop_event_loop':
+      try:
+        os.remove(TMP_FILE_NAME)
+      except:
+        pass
       sys.exit(0)
     elif cmd=='check_frame':
       self.__update_current_position_in_win()
