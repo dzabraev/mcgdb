@@ -10,7 +10,7 @@ AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_SRCDIR(src/main.c)
 AC_CONFIG_HEADERS(config.h)
 mc_VERSION
-AM_INIT_AUTOMAKE(mcgdb, ${VERSION} )
+AM_INIT_AUTOMAKE(mcgdb_mc, ${VERSION} )
 dnl Enable silent rules by default (if yes)
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 

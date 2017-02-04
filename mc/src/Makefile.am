@@ -31,7 +31,7 @@ AM_CPPFLAGS += -I$(top_srcdir) $(GLIB_CFLAGS)
 localedir = $(datadir)/locale
 pkglibexecdir = $(libexecdir)/@PACKAGE@
 
-bin_PROGRAMS = mc
+bin_PROGRAMS = mcgdb_mc
 
 if USE_INTERNAL_EDIT
 EDITLIB = editor/libedit.la
@@ -49,26 +49,25 @@ libinternal_la_LIBADD = \
 	filemanager/libmcfilemanager.la \
 	vfs/libmc-vfs.la \
 	viewer/libmcviewer.la \
-	libmc.la \
 	$(DIFFLIB) $(EDITLIB) $(SUBSHELLLIB)
 
-mc_LDADD = \
+mcgdb_mc_LDADD = \
 	libinternal.la \
 	$(top_builddir)/lib/libmc.la
 
 if ENABLE_VFS_SMB
 # this is a hack for linking with own samba library in simple way
-mc_LDADD += vfs/smbfs/helpers/libsamba.a
+mcgdb_mc_LDADD += vfs/smbfs/helpers/libsamba.a
 endif
 
-SRC_mc_conssaver = \
+SRC_mcgdb_mc_conssaver = \
 	cons.handler.c consaver/cons.saver.h
 
-mc_SOURCES = \
+mcgdb_mc_SOURCES = \
 	main.c
 
 libinternal_la_SOURCES = \
-	$(SRC_mc_conssaver) \
+	$(SRC_mcgdb_mc_conssaver) \
 	args.c args.h \
 	clipboard.c clipboard.h \
 	events_init.c events_init.h \
@@ -109,19 +108,19 @@ endif
 # Make relative symlinks, but do the right thing if LN_S is `ln' or `cp'.
 #
 install_mcview:
-	cd $(DESTDIR)$(bindir)/$(binprefix) && rm -f mcview && $(LN_S) mc mcview
+	cd $(DESTDIR)$(bindir)/$(binprefix) && rm -f mcgdb_mcview && $(LN_S) mcgdb_mc mcgdb_mcview
 
 install_mcedit:
-	cd $(DESTDIR)$(bindir)/$(binprefix) && rm -f `echo mcedit | sed -e $(transform)` && $(LN_S) `echo mc | sed -e $(transform)` `echo mcedit | sed -e $(transform)`
+	cd $(DESTDIR)$(bindir)/$(binprefix) && rm -f mcgdb_mcedit && $(LN_S) mcgdb_mc mcgdb_mcedit
 
 install_mcdiff:
-	cd $(DESTDIR)$(bindir)/$(binprefix) && rm -f mcdiff && $(LN_S) mc mcdiff
+	cd $(DESTDIR)$(bindir)/$(binprefix) && rm -f mcgdb_mcdiff && $(LN_S) mcgdb_mc mcgdb_mcdiff
 
 uninstall-hook:
-	rm -f $(DESTDIR)$(bindir)/$(binprefix)/mcview
+	rm -f $(DESTDIR)$(bindir)/$(binprefix)/mcgdb_mcview
 if USE_INTERNAL_EDIT
-	rm -f $(DESTDIR)$(bindir)/$(binprefix)/mcedit
+	rm -f $(DESTDIR)$(bindir)/$(binprefix)/mcgdb_mcedit
 endif
 if USE_DIFF
-	rm -f $(DESTDIR)$(bindir)/$(binprefix)/mcdiff
+	rm -f $(DESTDIR)$(bindir)/$(binprefix)/mcgdb_mcdiff
 endif
