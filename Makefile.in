@@ -879,22 +879,12 @@ uninstall-am: uninstall-binSCRIPTS uninstall-pkgdataDATA \
 	uninstall-pkgdatapythonDATA
 
 
-#all: invoke-mc-makefile
-#install : invkoe-mc-install
-
-#invkoe-mc-install :
-#	make -C mc install
-
-#invoke-mc-makefile :
-#	make -C mc
-
 python/mcgdb_const.py:
 	echo -n ''                                                          > python/mcgdb_const.py
 	echo "PATH_TO_MC = '$(abs_builddir)/mc/src/mcgdb_mc'"              >> python/mcgdb_const.py
 	echo "PATH_TO_DEFINES_MCGDB = '$(abs_builddir)/defines-mcgdb.gdb'" >> python/mcgdb_const.py
 
 startup.gdb :
-#echo "source $(pkgdatadir)/python/mcgdb.py" > startup.gdb
 	echo '' > startup.gdb
 	echo "source $(abs_builddir)/python/mcgdb_const.py" >> startup.gdb
 	echo "source $(abs_builddir)/python/mcgdb.py"       >> startup.gdb
@@ -904,13 +894,7 @@ mcgdb :
 	sed "s#STARTUP_SCRIPT=startup.gdb#STARTUP_SCRIPT=$(abs_builddir)/startup.gdb#"  mcgdb -i
 	chmod +x mcgdb
 
-#python/mcgdb.py :
-#	cp python/mcgdb.py.in  python/mcgdb.py
-#	sed "s#PATH_TO_DEFINES_MCGDB=.*#PATH_TO_DEFINES_MCGDB=\"$(pkgdatadir)/defines-mcgdb.gdb\"#"  python/mcgdb.py -i
-#	sed "s#PATH_TO_MC=.*#PATH_TO_MC=\"@bindir@/mcgdb-mcedit\"#"  python/mcgdb.py -i
-
 install-exec-hook:
-#	$(pkgdatapythondir)/python/mcgdb.py
 	sed "s#STARTUP_SCRIPT=.*#STARTUP_SCRIPT=$(pkgdatadir)/startup.gdb#"  @bindir@/mcgdb -i
 
 install-data-hook:

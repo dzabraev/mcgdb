@@ -3628,15 +3628,8 @@ fi
 ac_config_headers="$ac_config_headers config.h"
 
 
-#m4_pattern_allow(AC_CONFIG_SUBDIR_CUSTOM)
-
-#AC_CONFIG_LINKS([startup.gdb.in:startup.gdb.in])
-AC_CONFIG_DIRS(tests:tests)
 ac_config_links="$ac_config_links python/mcgdb.py:python/mcgdb.py defines-mcgdb.gdb:defines-mcgdb.gdb"
 
-
-#AC_CONFIG_FILES(mcgdb, [sed "s!STARTUP_SCRIPT=startup.gdb!STARTUP_SCRIPT=@bindir@/startup.gdb!"  mcgdb -i])
-#AC_CONFIG_FILES(mcgdb)
 
 # Checks for programs.
 ac_ext=cpp
@@ -5071,9 +5064,6 @@ fi
 # Checks for typedefs, structures, and compiler characteristics.
 
 # Checks for library functions.
-#extra_host_mc_configure_flags="--program-prefix=mcgdb-"
-#AC_SUBST(extra_host_mc_configure_flags)
-#AC_CONFIG_SUBDIR_CUSTOM([mc],[--program-prefix=mcgdb-])
 
 
 
