@@ -1,8 +1,8 @@
 #https://www.gnu.org/software/autoconf/manual/autoconf-2.61/html_node/Preset-Output-Variables.html
 #https://www.gnu.org/prep/standards/html_node/Directory-Variables.html
 
-pkgdatadir = $(DESTDIR)$(datadir)/@PACKAGE@
-pkgdatapythondir = $(DESTDIR)$(datadir)/@PACKAGE@/python
+pkgdatadir = $(datadir)/@PACKAGE@
+pkgdatapythondir = $(datadir)/@PACKAGE@/python
 
 SUBDIRS = mc
 
@@ -26,14 +26,14 @@ mcgdb :
 	chmod +x mcgdb
 
 install-exec-hook:
-	sed "s#STARTUP_SCRIPT=.*#STARTUP_SCRIPT=$(pkgdatadir)/startup.gdb#"  $(DESTDIR)$(bindir)/mcgdb -i
+	sed "s#STARTUP_SCRIPT=.*#STARTUP_SCRIPT=$(DESTDIR)$(pkgdatadir)/startup.gdb#"  $(DESTDIR)$(bindir)/mcgdb -i
 
 install-data-hook:
-	mkdir -p $(pkgdatadir)
-	mkdir -p $(pkgdatapythondir)
-	echo ''                                           > $(pkgdatadir)/startup.gdb
-	echo "source $(pkgdatapythondir)/mcgdb_const.py" >> $(pkgdatadir)/startup.gdb
-	echo "source $(pkgdatapythondir)/mcgdb.py"       >> $(pkgdatadir)/startup.gdb
-	echo -n ''                                                        > $(pkgdatapythondir)/mcgdb_const.py
-	echo "PATH_TO_MC = '$(DESTDIR)$(bindir)/mcgdb_mc'"               >> $(pkgdatapythondir)/mcgdb_const.py
-	echo "PATH_TO_DEFINES_MCGDB = '$(pkgdatadir)/defines-mcgdb.gdb'" >> $(pkgdatapythondir)/mcgdb_const.py
+	mkdir -p $(DESTDIR)$(pkgdatadir)
+	mkdir -p $(DESTDIR)$(pkgdatapythondir)
+	echo ''                                                     > $(DESTDIR)$(pkgdatadir)/startup.gdb
+	echo "source $(DESTDIR)$(pkgdatapythondir)/mcgdb_const.py" >> $(DESTDIR)$(pkgdatadir)/startup.gdb
+	echo "source $(DESTDIR)$(pkgdatapythondir)/mcgdb.py"       >> $(DESTDIR)$(pkgdatadir)/startup.gdb
+	echo -n ''                                                        > $(DESTDIR)$(pkgdatapythondir)/mcgdb_const.py
+	echo "PATH_TO_MC = '$(DESTDIR)$(bindir)/mcgdb_mc'"               >> $(DESTDIR)$(pkgdatapythondir)/mcgdb_const.py
+	echo "PATH_TO_DEFINES_MCGDB = '$(DESTDIR)$(pkgdatadir)/defines-mcgdb.gdb'" >> $(DESTDIR)$(pkgdatapythondir)/mcgdb_const.py

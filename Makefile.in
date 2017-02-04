@@ -227,7 +227,7 @@ distuninstallcheck_listfiles = find . -type f -print
 am__distuninstallcheck_listfiles = $(distuninstallcheck_listfiles) \
   | sed 's|^\./|$(prefix)/|' | grep -v '$(infodir)/dir$$'
 distcleancheck_listfiles = find . -type f -print
-pkgdatadir = $(DESTDIR)$(datadir)/@PACKAGE@
+pkgdatadir = $(datadir)/@PACKAGE@
 ACLOCAL = @ACLOCAL@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
@@ -317,7 +317,7 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-pkgdatapythondir = $(DESTDIR)$(datadir)/@PACKAGE@/python
+pkgdatapythondir = $(datadir)/@PACKAGE@/python
 SUBDIRS = mc
 bin_SCRIPTS = mcgdb
 pkgdata_DATA = defines-mcgdb.gdb  startup.gdb
@@ -896,17 +896,17 @@ mcgdb :
 	chmod +x mcgdb
 
 install-exec-hook:
-	sed "s#STARTUP_SCRIPT=.*#STARTUP_SCRIPT=$(pkgdatadir)/startup.gdb#"  $(DESTDIR)$(bindir)/mcgdb -i
+	sed "s#STARTUP_SCRIPT=.*#STARTUP_SCRIPT=$(DESTDIR)$(pkgdatadir)/startup.gdb#"  $(DESTDIR)$(bindir)/mcgdb -i
 
 install-data-hook:
-	mkdir -p $(pkgdatadir)
-	mkdir -p $(pkgdatapythondir)
-	echo ''                                           > $(pkgdatadir)/startup.gdb
-	echo "source $(pkgdatapythondir)/mcgdb_const.py" >> $(pkgdatadir)/startup.gdb
-	echo "source $(pkgdatapythondir)/mcgdb.py"       >> $(pkgdatadir)/startup.gdb
-	echo -n ''                                                        > $(pkgdatapythondir)/mcgdb_const.py
-	echo "PATH_TO_MC = '$(DESTDIR)$(bindir)/mcgdb_mc'"               >> $(pkgdatapythondir)/mcgdb_const.py
-	echo "PATH_TO_DEFINES_MCGDB = '$(pkgdatadir)/defines-mcgdb.gdb'" >> $(pkgdatapythondir)/mcgdb_const.py
+	mkdir -p $(DESTDIR)$(pkgdatadir)
+	mkdir -p $(DESTDIR)$(pkgdatapythondir)
+	echo ''                                                     > $(DESTDIR)$(pkgdatadir)/startup.gdb
+	echo "source $(DESTDIR)$(pkgdatapythondir)/mcgdb_const.py" >> $(DESTDIR)$(pkgdatadir)/startup.gdb
+	echo "source $(DESTDIR)$(pkgdatapythondir)/mcgdb.py"       >> $(DESTDIR)$(pkgdatadir)/startup.gdb
+	echo -n ''                                                        > $(DESTDIR)$(pkgdatapythondir)/mcgdb_const.py
+	echo "PATH_TO_MC = '$(DESTDIR)$(bindir)/mcgdb_mc'"               >> $(DESTDIR)$(pkgdatapythondir)/mcgdb_const.py
+	echo "PATH_TO_DEFINES_MCGDB = '$(DESTDIR)$(pkgdatadir)/defines-mcgdb.gdb'" >> $(DESTDIR)$(pkgdatapythondir)/mcgdb_const.py
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
