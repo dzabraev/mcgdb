@@ -63,5 +63,29 @@ $ gdb
 (gdb) mcgdb open main  
 ```
 
+##gdb commands
+mcgdb add several commands in gdb. Type
+`(gdb) help mcgdb` to get command documentation.
+
+Most important command is
+`(gdb) mcgdb open main`. If you close window with editor,
+then type this command and window will be reopen.
+
+In this project mcedit is readonly. And onto ordinary keys we
+add additional functionality.
+
+1. s == step
+1. n == next
+1. c == continue
+1. u == up
+1. d == down
+1. b == break
+
+Focus editor and type `c`. This action produce
+`(gdb) continue` command in gdb.
+
+Key `b` get current cursor line in editor and filename of opened file
+and produce `(gdb) break FILENAME:LINE`
+
 
 

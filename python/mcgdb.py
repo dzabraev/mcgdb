@@ -787,11 +787,12 @@ CmdMainWindow()
 
 
 class CmdColor (gdb.Command):
-  ''' set color of curline, breakpoint and other.
+  '''Change color in editor.
 USAGE: mcgdb color type text_color background_color [attribs]
 
 type={curline, bp_normal, bp_disabled, bp_wait_remove, bp_wait_insert}
 COLOR={black, white, blue, yellow, red, ...}
+attrib={bold, italic, underline, reverse, blink}
 text_color: see COLOR set
 background_color: see COLOR set
 attribs: attrib1+...+attrinb
