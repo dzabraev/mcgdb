@@ -3630,6 +3630,8 @@ ac_config_headers="$ac_config_headers config.h"
 
 ac_config_links="$ac_config_links python/mcgdb.py:python/mcgdb.py defines-mcgdb.gdb:defines-mcgdb.gdb"
 
+ac_config_links="$ac_config_links do_checkinstall.sh:distribution/do_checkinstall.sh"
+
 
 # Checks for programs.
 ac_ext=cpp
@@ -5806,6 +5808,7 @@ do
     "config.h") CONFIG_HEADERS="$CONFIG_HEADERS config.h" ;;
     "python/mcgdb.py") CONFIG_LINKS="$CONFIG_LINKS python/mcgdb.py:python/mcgdb.py" ;;
     "defines-mcgdb.gdb") CONFIG_LINKS="$CONFIG_LINKS defines-mcgdb.gdb:defines-mcgdb.gdb" ;;
+    "do_checkinstall.sh") CONFIG_LINKS="$CONFIG_LINKS do_checkinstall.sh:distribution/do_checkinstall.sh" ;;
     "depfiles") CONFIG_COMMANDS="$CONFIG_COMMANDS depfiles" ;;
 
   *) as_fn_error $? "invalid argument: \`$ac_config_target'" "$LINENO" 5;;
@@ -6434,6 +6437,7 @@ $as_echo "$as_me: executing $ac_file commands" >&6;}
 
 
   case $ac_file$ac_mode in
+    "do_checkinstall.sh":L) chmod +x do_checkinstall.sh ;;
     "depfiles":C) test x"$AMDEP_TRUE" != x"" || {
   # Older Autoconf quotes --file arguments for eval, but not when files
   # are listed without --file.  Let's play safe and only enable the eval

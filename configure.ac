@@ -7,6 +7,7 @@ AC_CONFIG_SRCDIR([mc])
 AC_CONFIG_HEADERS([config.h])
 
 AC_CONFIG_LINKS([python/mcgdb.py:python/mcgdb.py defines-mcgdb.gdb:defines-mcgdb.gdb])
+AC_CONFIG_LINKS([do_checkinstall.sh:distribution/do_checkinstall.sh], [chmod +x do_checkinstall.sh])
 
 # Checks for programs.
 AC_PROG_CXX
