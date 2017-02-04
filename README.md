@@ -56,11 +56,12 @@ Just use `$ mcgdb` instead `$ gdb`. When you invoke mcgdb additional windows wil
 open automatically. 
 
 OR you can load python plugin manually:  
+```
 $ gdb  
 (gdb) source /usr/share/mcgdb/python/mcgdb_const.py  
 (gdb) source /usr/share/mcgdb/python/mcgdb.py  
 (gdb) mcgdb open main  
-
+```
 
 
 
