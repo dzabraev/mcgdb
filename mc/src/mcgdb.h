@@ -29,8 +29,10 @@ enum window_type {
   MCGDB_BACKTRACE_WINDOW
 };
 
-#define MCGDB_OK 0
-#define MCGDB_EXIT_DLG 1
+typedef enum  {
+  MCGDB_OK=0,
+  MCGDB_EXIT_DLG=1,
+} mcgdb_rc;
 
 extern gboolean read_gdb_events;
 extern int mcgdb_current_line_color; /*color of current execute line*/
@@ -99,6 +101,7 @@ mcgdb_set_color (struct json_t * pkg, WEdit * edit);
 
 void mcgdb_init(void);
 
+gboolean mcgdb_available_key(int c);
 
 void mcgdb_cmd_breakpoint(WEdit * e);
 void mcgdb_cmd_disableenable_bp(WEdit * e);

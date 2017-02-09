@@ -2185,15 +2185,17 @@ tty_get_event (struct Gpm_Event *event, gboolean redo_event, gboolean block)
         bracketed_pasting_in_progress = FALSE;
         c = EV_NONE;
     }
-#if 0
+
     else if (!mcgdb_available_key(c)) {
         /* Игнорируем нажатие alt+0 (F10) с терминала.
          * Поскольку если пользователь самовольно закроет просмотр файла,
          * то окно перестанет работать.
+         * Мы не может залочить команду закрытия editor'a ибо
+         * тогда мы не сможем закрыть editor программно (из gdb).
         */
         c = EV_NONE;
     }
-#endif
+
     return c;
 }
 

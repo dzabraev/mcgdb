@@ -46,7 +46,7 @@ static json_t *
 read_pkg_from_gdb (void);
 
 static void
-sed_pkg_to_gdb (const char *msg);
+send_pkg_to_gdb (const char *msg);
 
 static void
 parse_action_from_gdb(struct gdb_action * act);
@@ -157,7 +157,7 @@ open_gdb_input_fd (void) {
 }
 
 static void
-sed_pkg_to_gdb (const char *msg) {
+send_pkg_to_gdb (const char *msg) {
   size_t len=strlen(msg);
   char *s;
   asprintf(&s,"%zu;",len);
@@ -389,6 +389,7 @@ pkg_breakpoints(json_t *pkg) {
 
 static int
 process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
+  assert(act->command!=MCGDB_FCLOSE);
   switch(act->command) {
     case MCGDB_MARK:
       book_mark_insert( edit, act->line, mcgdb_current_line_color);
@@ -402,15 +403,6 @@ process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
     case MCGDB_BREAKPOINTS:
       pkg_breakpoints (act->pkg);
       break;
-//    case MCGDB_BP_INSERT:
-//      mcgdb_bp_insert (act->line);
-//      break;
-//    case MCGDB_BP_REMOVE:
-//      mcgdb_bp_remove (act->line);
-//      break;
-//    case MCGDB_BP_REMOVE_ALL:
-//      mcgdb_bp_remove_all ();
-//      break;
     case MCGDB_FOPEN:
       mcgdb_bp_remove_all ();
       if(mcgdb_curline>0)
@@ -421,8 +413,6 @@ process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
       текущую строку. Это надо делать следующим пакетом.*/
       //TODO нужно ли очищать vfs_path ?
       break;
-    case MCGDB_FCLOSE:
-      return MCGDB_EXIT_DLG;
     case MCGDB_GOTO:
       edit_move_display (edit, act->line - WIDGET (edit)->lines / 2 - 1);
       edit_move_to_line (edit, act->line);
@@ -443,26 +433,6 @@ process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
   return MCGDB_OK;
 }
 
-/*
-static const char *
-stringify_click_type(mouse_event_t * event) {
-  static char buf[512];
-  size_t len=0;
-  buf[0]=0;
-# define APPEND_EVT(EVT)  if( event->msg==EVT ) { len+=sprintf(buf+len, #EVT "|"); }
-  APPEND_EVT(MSG_MOUSE_NONE);
-  APPEND_EVT(MSG_MOUSE_DOWN);
-  APPEND_EVT(MSG_MOUSE_UP);
-  APPEND_EVT(MSG_MOUSE_CLICK);
-  APPEND_EVT(MSG_MOUSE_DRAG);
-  APPEND_EVT(MSG_MOUSE_MOVE);
-  APPEND_EVT(MSG_MOUSE_SCROLL_UP);
-  APPEND_EVT(MSG_MOUSE_SCROLL_DOWN);
-# undef APPEND_EVT
-  buf[len-1]=0;
-  return buf;
-}
-*/
 
 
 void
@@ -477,18 +447,9 @@ mcgdb_send_mouse_event_to_gdb (WEdit * edit, mouse_event_t * event) {
     asprintf (&pkg,"{\"cmd\":\"editor_breakpoint\",\"line\": %ld}",click_line);
   }
   if (pkg)
-    sed_pkg_to_gdb (pkg);
+    send_pkg_to_gdb (pkg);
     free (pkg);
   return;
-/*
-  filename = edit_get_file_name(edit);
-  sprintf(lb,"mouse_click:%s,%li,%li,%s;",
-    filename?filename:"",
-    event->x     - edit->start_col,
-    event->y + 1 + edit->start_line,
-    stringify_click_type(event));
-  write_all(gdb_input_fd,lb,strlen(lb));
-*/
 }
 
 gboolean
@@ -565,23 +526,23 @@ mcgdb_queue_process_event(WEdit * edit) {
   struct gdb_action * gdb_evt;
   int res=MCGDB_OK;
   GList *l;
-  enum gdb_cmd cmd;
+  mcgdb_rc rc;
 
   if( !mcgdb_event_queue || !edit ) {
     return MCGDB_OK;
   }
 
   while(TRUE) {
+    assert (!mcgdb_queue_head_convertable_to_key ());
     l=mcgdb_event_queue;
-    if(!l)
+    if(!l || mcgdb_queue_head_convertable_to_key () )
       break;
     gdb_evt = l->data;
-    cmd=gdb_evt->command;
     mcgdb_event_queue = g_list_remove_link (mcgdb_event_queue,l);
     g_list_free(l);
-    process_action_from_gdb (edit,gdb_evt);
+    rc=process_action_from_gdb (edit,gdb_evt);
     free_gdb_evt (gdb_evt);
-    if(cmd==MCGDB_FCLOSE) {
+    if(rc==MCGDB_EXIT_DLG) {
       return MCGDB_EXIT_DLG;
     }
     l=mcgdb_event_queue;
@@ -612,6 +573,13 @@ mcgdb_permissible_key(WEdit * e, int c) {
   }
   edit_translate_key (e, c, &cmd, &ch);
   switch(cmd) {
+    case CK_Quit:
+    case CK_QuitQuiet:
+    case CK_Close: /*
+    * Обязательно надо добавлять это действие,
+    * иначе мы не сможем закрыть файл даже программно
+    * и стек будет увеличиваться при каждом открытом новом файле
+    */
     case CK_Up:
     case CK_Down:
     case CK_Left:
@@ -768,7 +736,7 @@ mcgdb_cmd_breakpoint (WEdit * e) {
   char *pkg;
   long curline = e->buffer.curs_line+1;
   asprintf (&pkg,"{\"cmd\":\"editor_breakpoint\",\"line\": %ld}",curline);
-  sed_pkg_to_gdb (pkg);
+  send_pkg_to_gdb (pkg);
   free (pkg);
 }
 
@@ -777,7 +745,7 @@ mcgdb_cmd_disableenable_bp (WEdit * e) {
   char *pkg;
   long curline = e->buffer.curs_line+1;
   asprintf (&pkg,"{\"cmd\":\"editor_breakpoint_de\",\"line\": %ld}",curline);
-  sed_pkg_to_gdb (pkg);
+  send_pkg_to_gdb (pkg);
   free (pkg);
 }
 
@@ -786,34 +754,44 @@ mcgdb_cmd_goto_eline (void) {
 
 }
 
+gboolean
+mcgdb_available_key (int c) {
+  switch (c) {
+    case KEY_F(10):
+      return FALSE;
+    default:
+      return TRUE;
+  }
+}
+
 void
 mcgdb_cmd_next(void) {
-  sed_pkg_to_gdb ("{\"cmd\":\"editor_next\"}");
+  send_pkg_to_gdb ("{\"cmd\":\"editor_next\"}");
 }
 
 void
 mcgdb_cmd_step(void) {
-  sed_pkg_to_gdb ("{\"cmd\":\"editor_step\"}");
+  send_pkg_to_gdb ("{\"cmd\":\"editor_step\"}");
 }
 
 void
 mcgdb_cmd_until(void) {
-  sed_pkg_to_gdb ("{\"cmd\":\"editor_until\"}");
+  send_pkg_to_gdb ("{\"cmd\":\"editor_until\"}");
 }
 
 void
 mcgdb_cmd_continue(void) {
-  sed_pkg_to_gdb ("{\"cmd\":\"editor_continue\"}");
+  send_pkg_to_gdb ("{\"cmd\":\"editor_continue\"}");
 }
 
 void
 mcgdb_cmd_frame_up(void) {
-  sed_pkg_to_gdb ("{\"cmd\":\"editor_frame_up\"}");
+  send_pkg_to_gdb ("{\"cmd\":\"editor_frame_up\"}");
 }
 
 void
 mcgdb_cmd_frame_down(void) {
-  sed_pkg_to_gdb ("{\"cmd\":\"editor_frame_down\"}");
+  send_pkg_to_gdb ("{\"cmd\":\"editor_frame_down\"}");
 }
 
 

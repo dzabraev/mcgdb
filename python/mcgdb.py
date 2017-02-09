@@ -9,8 +9,8 @@ import re
 
 import gdb
 
-level = logging.WARNING
-#level = logging.DEBUG
+#level = logging.WARNING
+level = logging.DEBUG
 logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
 
 TMP_FILE_NAME="/tmp/mcgdb/mcgdb-tmp-file-{pid}.txt".format(pid=os.getpid())
@@ -38,6 +38,14 @@ def get_prompt():
   prompt=regex.match(res).groups()[0]
   return prompt
 
+def gdb_stopped():
+  try:
+    th=gdb.selected_thread()
+    if th==None:
+      return True
+    return gdb.selected_thread().is_stopped()
+  except:
+    return True
 
 def exec_cmd_in_gdb(cmd):
   try:
@@ -260,7 +268,7 @@ class BreakpointQueue(GdbBreakpoints):
     if gdb.selected_thread()==None:
       #maybe inferior not running
       return
-    if not gdb.selected_thread().is_stopped():
+    if not gdb_stopped():
       #поток inferior'а исполняется. Точки ставить нельзя.
       return
     while len(self.queue)>0:
@@ -327,6 +335,8 @@ class BaseWindow(object):
                 из gdb. Например, если зайти по ssh на удаленную машину, то не всегда есть возможность
                 запустить gnome-terminal.
     '''
+    self.gui_window_cmd='''gnome-terminal -e 'bash -c "cd ~/tmp/mcgdb-debug/; touch 1; ulimit -c unlimited; {cmd}"' '''
+    #self.gui_window_cmd='''gnome-terminal -e '{cmd}' '''
     self.lsock=socket.socket()
     self.lsock.bind( ('',0) )
     self.lsock.listen(1)
@@ -334,17 +344,31 @@ class BaseWindow(object):
     self.listen_fd=self.lsock.fileno()
     manually=kwargs.get('manually',False)
     cmd=self.make_runwin_cmd()
+    complete_cmd=self.gui_window_cmd.format(cmd=cmd)
     if manually:
       gdb_print('''Execute manually `{cmd}` for start window'''.format(cmd=cmd))
     else:
-      proc=subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+      proc=subprocess.Popen(complete_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
       proc.wait()
       rc=proc.returncode
       if rc!=0:
         out,err = proc.communicate()
-        error('''command: `{cmd}` return error code: {rc}.
+        error('''command: `{complete_cmd}` return error code: {rc}.
 You can try execute this command manually from another terminal.
-stdout=`{stdout}`\nstderr=`{stderr}`'''.format(cmd=cmd,rc=rc,stdout=out,stderr=err))
+stdout=`{stdout}`\nstderr=`{stderr}`'''.format(complete_cmd=complete_cmd,rc=rc,stdout=out,stderr=err))
+        gdb_print('execute manually: `{cmd}`'.format(cmd))
+
+
+  def make_runwin_cmd(self):
+    ''' Данный метод формирует shell-команду для запуска окна с editor.
+        Команда формируется на основе self.listen_port
+    '''
+    return '{path_to_mc} -e --gdb-port={gdb_port}'.format(
+     path_to_mc=PATH_TO_MC,gdb_port=self.listen_port)
+
+
+  def byemsg(self):
+    gdb_print("type `{cmd}` to restart {type}\n".format(cmd=self.startcmd,type=self.type))
 
 
   def process_connection(self):
@@ -374,10 +398,54 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(cmd=cmd,rc=rc,stdout=out,stderr=e
   def recv(self):
     return pkgrecv(self.fd)
 
+class LocalVarsWindow(BaseWindow):
+  ''' Representation of window with localvars of current frame
+  '''
+
+  type='localvars_window'
+  startcmd='mcgdb open lvars'
+
+  def __init__(self, **kwargs):
+    super(LocalVarsWindow,self).__init__(**kwargs)
+    pass
+  def gdb_inferior_stop(self):
+    pass
+  def gdb_inferior_exited(self):
+    pass
+  def gdb_new_objfile(self):
+    pass
+  def gdb_update_current_frame(self,filename,line):
+    lvars=self.__get_local_vars()
+    pkg={'cmd':'localvars','localvars':lvars}
+    self.send(pkg)
+  def gdb_check_breakpoint(self):
+    pass
+  def set_color(self,pkg):
+    pass
+  def process_pkg(self):
+    pass
+  def __get_local_vars(self):
+    if gdb.selected_thread()==None:
+      return []
+    if not gdb_stopped():
+      return []
+    lvars=[]
+    res=exec_in_main_pythread( gdb.execute, ('info locals',False,True) )
+    for line in res.split('\n'):
+      sl=line.split('=')
+      if len(sl)!=2:
+        debug('cmd `info locals` get bad line {line}'.format(line=line))
+        continue
+      lvars.append( {'name':sl[0].strip(), 'value':sl[1].strip()} )
+    lvars.sort( lambda x,y: x['name']<y['name'] )
+    return lvars
+
+
 class MainWindow(BaseWindow):
 
   type='main_window'
   startcmd='mcgdb open main'
+
 
   def __init__(self, **kwargs):
     super(MainWindow,self).__init__(**kwargs)
@@ -396,17 +464,7 @@ class MainWindow(BaseWindow):
     self.edit_filename=None #Файл, который открыт в редакторе. Отличие от self.exec_filename в
                             #том, что если исходник открыть нельзя, то открывается файл-заглушка.
 
-  def make_runwin_cmd(self):
-    ''' Данный метод формирует shell-команду для запуска окна с editor.
-        Команда формируется на основе self.listen_port
-    '''
-    #return '''gnome-terminal -e "bash -c 'ulimit -c unlimited; {path_to_mc} -e --gdb-port={gdb_port}'" '''.format(
-    # path_to_mc=PATH_TO_MC,gdb_port=self.listen_port)
-    return 'gnome-terminal -e "{path_to_mc} -e --gdb-port={gdb_port}"'.format(
-     path_to_mc=PATH_TO_MC,gdb_port=self.listen_port)
 
-  def byemsg(self):
-    gdb_print("type `{cmd}` to restart {type}\n".format(cmd=self.startcmd,type=self.type))
 
   def gdb_inferior_stop(self):
     pass
@@ -489,22 +547,22 @@ class MainWindow(BaseWindow):
     raise NotImplementedError
     breakpoint_queue.process()
   def __editor_next(self,pkg):
-    if gdb.selected_thread().is_stopped():
+    if gdb_stopped():
       exec_cmd_in_gdb("next")
   def __editor_step(self,pkg):
-    if gdb.selected_thread().is_stopped():
+    if gdb_stopped():
       exec_cmd_in_gdb("step")
   def __editor_until(self,pkg):
-    if gdb.selected_thread().is_stopped():
+    if gdb_stopped():
       exec_cmd_in_gdb("until")
   def __editor_continue(self,pkg):
-    if gdb.selected_thread().is_stopped():
+    if gdb_stopped():
       exec_cmd_in_gdb("continue")
   def __editor_frame_up(self,pkg):
-    if gdb.selected_thread().is_stopped():
+    if gdb_stopped():
       exec_cmd_in_gdb("up")
   def __editor_frame_down(self,pkg):
-    if gdb.selected_thread().is_stopped():
+    if gdb_stopped():
       exec_cmd_in_gdb("down")
 
 #  def __save_curline_color(self,background_color,text_color,attr):
@@ -551,8 +609,6 @@ class GEThread(object):
     #через функцию exec_in_main_pythread
     try:
       frame=gdb.selected_frame ()
-      #filename=frame.find_sal().symtab.filename
-      #filename=get_abspath(filename)
       filename=frame.find_sal().symtab.fullname()
       line=frame.find_sal().line-1
     except: #gdb.error:
@@ -577,22 +633,27 @@ class GEThread(object):
       self.exec_line=line
 
   def __open_window(self, pkg):
+    # Процесс открывания окна следующий. Создается класс, в рамках которого есть
+    # listen port, затем открывается окно (напр, с редактором), этому окну дается
+    # номер listen port'a. Данный порт записывается в хэш self.wait_connection.
+    # Смысл self.wait_connection в том, что окно может не открыться в результате
+    # каких-то внешних причин, не зависящих от нас. И будет плохо, если исполнение
+    # данного потока заблокируется в ожидании соединения. После детектирования 
+    # запроса на установления соединения будет вызван метод window.process_connection
+    # и window переместится из self.wait_connection в self.fte
     type=pkg['type']
     manually=pkg.get('manually',False)
-    if type=='main':
-      # Процесс открывания окна следующий. Создается класс, в рамках которого есть
-      # listen port, затем открывается окно (напр, с редактором), этому окну дается
-      # номер listen port'a. Данный порт записывается в хэш self.wait_connection.
-      # Смысл self.wait_connection в том, что окно может не открыться в результате
-      # каких-то внешних причин, не зависящих от нас. И будет плохо, если исполнение
-      # данного потока заблокируется в ожидании соединения. После детектирования 
-      # запроса на установления соединения будет вызван метод window.process_connection
-      # и window переместится из self.wait_connection в self.fte
-      window=MainWindow(manually=manually)
-      self.wait_connection[window.listen_fd] = window
-    else:
+    cls={
+      'main'        :   MainWindow,
+      'localvars'   :   LocalVarsWindow,
+    }
+    WinClsConstr=cls.get(type)
+    if WinClsConstr==None:
       debug('bad `type`: `{}`'.format(pkg))
-    return
+    else:
+      window=WinClsConstr(manually=manually)
+      self.wait_connection[window.listen_fd] = window
+
 
 
   def __check_breakpoint(self,pkg):
@@ -820,7 +881,7 @@ class McgdbCompleter (gdb.Command):
     super (McgdbCompleter, self).__init__ ("mcgdb", gdb.COMMAND_USER, gdb.COMPLETE_COMMAND, True)
 McgdbCompleter()
 
-class CmdMainWindow (gdb.Command):
+class CmdOpenWindow (gdb.Command):
   """ Open mcgdb main window with current source file and current execute line
 
       Options:
@@ -830,9 +891,9 @@ class CmdMainWindow (gdb.Command):
   """
 
   def __init__ (self):
-    super (CmdMainWindow, self).__init__ ("mcgdb open", gdb.COMMAND_USER)
+    super (CmdOpenWindow, self).__init__ ("mcgdb open", gdb.COMMAND_USER)
     self.permissible_options=['--manually']
-    self.types=['main']
+    self.types=['main', 'localvars']
 
   def invoke (self, arg, from_tty):
     self.dont_repeat()
@@ -862,7 +923,7 @@ class CmdMainWindow (gdb.Command):
       return gdb.COMPLETE_NONE
 
 
-CmdMainWindow()
+CmdOpenWindow()
 
 
 class CmdColor (gdb.Command):
