@@ -450,17 +450,23 @@ class MainWindow(BaseWindow):
     raise NotImplementedError
     breakpoint_queue.process()
   def __editor_next(self,pkg):
-    exec_cmd_in_gdb("next")
+    if gdb.selected_thread().is_stopped():
+      exec_cmd_in_gdb("next")
   def __editor_step(self,pkg):
-    exec_cmd_in_gdb("step")
+    if gdb.selected_thread().is_stopped():
+      exec_cmd_in_gdb("step")
   def __editor_until(self,pkg):
-    exec_cmd_in_gdb("until")
+    if gdb.selected_thread().is_stopped():
+      exec_cmd_in_gdb("until")
   def __editor_continue(self,pkg):
-    exec_cmd_in_gdb("continue")
+    if gdb.selected_thread().is_stopped():
+      exec_cmd_in_gdb("continue")
   def __editor_frame_up(self,pkg):
-    exec_cmd_in_gdb("up")
+    if gdb.selected_thread().is_stopped():
+      exec_cmd_in_gdb("up")
   def __editor_frame_down(self,pkg):
-    exec_cmd_in_gdb("down")
+    if gdb.selected_thread().is_stopped():
+      exec_cmd_in_gdb("down")
 
 #  def __save_curline_color(self,background_color,text_color,attr):
 #    pass
