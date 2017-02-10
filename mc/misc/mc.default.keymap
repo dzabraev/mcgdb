@@ -230,6 +230,7 @@ Mcgdb_continue = c
 Mcgdb_print = p
 Mcgdb_frame_up = u
 Mcgdb_frame_down = d
+Mcgdb_finish = f
 Store = ctrl-insert
 Paste = shift-insert
 Cut = shift-delete
