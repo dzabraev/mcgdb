@@ -32,7 +32,6 @@
 
 int mcgdb_listen_port;
 int gdb_input_fd;
-static GList * mcgdb_event_queue;
 
 gboolean read_gdb_events;
 
@@ -41,6 +40,7 @@ long mcgdb_curline; /*current execution line number*/
 
 enum window_type mcgdb_wtype; /*temporary unused*/
 
+struct gdb_action * event_from_gdb=NULL;
 
 static json_t *
 read_pkg_from_gdb (void);
@@ -62,6 +62,12 @@ get_command_num(json_t * pkg);
 
 static void
 process_lines_array(json_t * j_lines,  void (*callback)(long) );
+
+static gboolean
+evt_convertable_to_key(struct gdb_action * gdb_evt);
+
+static void
+free_gdb_evt (struct gdb_action * gdb_evt);
 
 void
 mcgdb_error(void) {
@@ -99,7 +105,6 @@ get_window_type(json_t *pkg) {
     }
   }
 
-  json_decref(val);
   return type;
 }
 
@@ -130,7 +135,7 @@ open_gdb_input_fd (void) {
   gdb_input_fd=sockfd;
   while (1) {
     while (1) {
-      /*читаем пакет до тех пор, пока не придет нажный*/
+      /*читаем пакет до тех пор, пока не придет нужный*/
       pkg = read_pkg_from_gdb();
       if (get_command_num(pkg)==MCGDB_SET_WINDOW_TYPE) {
         break;
@@ -258,18 +263,9 @@ get_command_num(json_t *pkg) {
     else if( compare_cmd("set_window_type") ) {
       return MCGDB_SET_WINDOW_TYPE;
     }
-//    else if( compare_cmd("remove_bp_all") ) {
-//      return MCGDB_BP_REMOVE_ALL;
-//    }
     else if( compare_cmd("breakpoints") ) {
       return MCGDB_BREAKPOINTS;
     }
-//    else if( compare_cmd("insert_bp") ) {
-//      return MCGDB_BP_INSERT;
-//    }
-//    else if( compare_cmd("remove_bp") ) {
-//      return MCGDB_BP_REMOVE;
-//    }
     else if( compare_cmd("color")) {
       return MCGDB_COLOR;
     }
@@ -289,11 +285,9 @@ get_command_num(json_t *pkg) {
   rootval = json_object_get(root,#field);\
   if (!json_is_integer(rootval)) {\
     act->command = MCGDB_ERROR;\
-    json_decref(rootval);\
     return;\
   }\
   act->field = (long)json_integer_value(rootval);\
-  json_decref(rootval);\
 }while(0)
 
 
@@ -302,11 +296,9 @@ get_command_num(json_t *pkg) {
   rootval = json_object_get(root,#field);\
   if (!json_is_string(rootval)) {\
     act->command = MCGDB_ERROR;\
-    json_decref(rootval);\
     return;\
   }\
   act->field = strdup(json_string_value(rootval));\
-  json_decref(rootval);\
 }while(0)
 
 
@@ -465,11 +457,44 @@ mcgdb_ignore_mouse_event(WEdit * edit, mouse_event_t * event) {
 }
 
 void
-mcgdb_queue_append_event(void) {
-  struct gdb_action * gdb_evt = g_new0(struct gdb_action, 1);
-  parse_action_from_gdb(gdb_evt);
-  mcgdb_event_queue = g_list_append (mcgdb_event_queue, gdb_evt);
+mcgdb_gdbevt_read (void) {
+  assert (event_from_gdb==NULL);
+  event_from_gdb = g_new0 (struct gdb_action, 1);
+  parse_action_from_gdb (event_from_gdb);
 }
+
+gboolean
+mcgdb_gdbevt_covertable_to_key (void) {
+  return evt_convertable_to_key(event_from_gdb);
+}
+
+int
+mcgdb_gdbevt_covert_to_key (void) {
+  int d_key;
+  switch( event_from_gdb->command ) {
+    case MCGDB_FCLOSE:
+      d_key=KEY_F(10);
+      break;
+    default:
+      abort ();
+  }
+  free_gdb_evt (event_from_gdb);
+  event_from_gdb=NULL;
+  return d_key;
+}
+
+int
+mcgdb_gdbevt_process (WEdit * edit) {
+  struct gdb_action * tmp = event_from_gdb;
+  int rc;
+  event_from_gdb=NULL;
+  rc = process_action_from_gdb (edit, tmp);
+  free_gdb_evt (tmp);
+  return rc;
+}
+
+
+
 
 static void
 free_gdb_evt (struct gdb_action * gdb_evt) {
@@ -494,66 +519,6 @@ evt_convertable_to_key(struct gdb_action * gdb_evt) {
   }
 }
 
-gboolean
-mcgdb_queue_head_convertable_to_key(void) {
-  if (!mcgdb_event_queue)
-    return FALSE;
-  return evt_convertable_to_key(mcgdb_event_queue->data);
-}
-
-int
-mcgdb_queue_convert_head_to_key(void) {
-  GList *l;
-  struct gdb_action * gdb_evt;
-  int d_key;
-  l=mcgdb_event_queue;
-  mcgdb_event_queue = g_list_remove_link (mcgdb_event_queue,l);
-  gdb_evt=l->data;
-  switch( gdb_evt->command ) {
-    case MCGDB_FCLOSE:
-      d_key=KEY_F(10);
-      break;
-    default:
-      abort();
-  }
-  g_list_free(l);
-  free_gdb_evt(gdb_evt);
-  return d_key;
-}
-
-int
-mcgdb_queue_process_event(WEdit * edit) {
-  struct gdb_action * gdb_evt;
-  int res=MCGDB_OK;
-  GList *l;
-  mcgdb_rc rc;
-
-  if( !mcgdb_event_queue || !edit ) {
-    return MCGDB_OK;
-  }
-
-  while(TRUE) {
-    assert (!mcgdb_queue_head_convertable_to_key ());
-    l=mcgdb_event_queue;
-    if(!l || mcgdb_queue_head_convertable_to_key () )
-      break;
-    gdb_evt = l->data;
-    mcgdb_event_queue = g_list_remove_link (mcgdb_event_queue,l);
-    g_list_free(l);
-    rc=process_action_from_gdb (edit,gdb_evt);
-    free_gdb_evt (gdb_evt);
-    if(rc==MCGDB_EXIT_DLG) {
-      return MCGDB_EXIT_DLG;
-    }
-    l=mcgdb_event_queue;
-  }
-  return res;
-}
-
-gboolean
-mcgdb_queue_is_empty(void) {
-  return mcgdb_event_queue==NULL;
-}
 
 
 

@@ -2091,7 +2091,8 @@ tty_get_event (struct Gpm_Event *event, gboolean redo_event, gboolean block)
         check_selects (&select_set);
         if( read_gdb_events ) {
           if (FD_ISSET (gdb_input_fd, &select_set)) {
-            mcgdb_queue_append_event();
+            //mcgdb_queue_append_event();
+            mcgdb_gdbevt_read();
             /*Получен event из gdb. Если этот event может быть
              *странслирован в нажатие кнопки, то транслурается в наж. кнопки,
              *далее это "нажатие" кнопки выглядит буто было нажатие в терминале.
@@ -2099,9 +2100,11 @@ tty_get_event (struct Gpm_Event *event, gboolean redo_event, gboolean block)
              *Если event не конвертируется в нажатие кнопки, то он будет обрабатываться
              *функциями mcgdb.
              */
-            if (mcgdb_queue_head_convertable_to_key()) {
-              return mcgdb_queue_convert_head_to_key();
-            }
+            //if (mcgdb_queue_head_convertable_to_key()) {
+            //  return mcgdb_queue_convert_head_to_key();
+            //}
+            if (mcgdb_gdbevt_covertable_to_key())
+              return mcgdb_gdbevt_covert_to_key();
             return EV_GDB_MESSAGE;
           }
         }

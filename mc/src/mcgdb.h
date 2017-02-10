@@ -82,13 +82,7 @@ void mcgdb_send_mouse_event_to_gdb(WEdit * edit, mouse_event_t * event);
 extern int      mcgdb_listen_port;
 extern int      gdb_input_fd;
 
-void mcgdb_queue_append_event(void);
-int  mcgdb_queue_process_event(WEdit * edit);
 gboolean mcgdb_ignore_mouse_event(WEdit * edit, mouse_event_t * event);
-gboolean mcgdb_queue_is_empty(void);
-
-int mcgdb_queue_convert_head_to_key(void);
-gboolean mcgdb_queue_head_convertable_to_key(void);
 
 
 void mcgdb_checkset_read_gdb_events(WDialog * h);
@@ -114,5 +108,10 @@ void mcgdb_cmd_print(void);
 void mcgdb_cmd_frame_up(void);
 void mcgdb_cmd_frame_down(void);
 
+
+void        mcgdb_gdbevt_read (void);
+gboolean    mcgdb_gdbevt_covertable_to_key (void);
+int         mcgdb_gdbevt_covert_to_key (void);
+int         mcgdb_gdbevt_process (WEdit * edit);
 
 

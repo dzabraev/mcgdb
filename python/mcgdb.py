@@ -9,8 +9,8 @@ import re
 
 import gdb
 
-#level = logging.WARNING
-level = logging.DEBUG
+level = logging.WARNING
+#level = logging.DEBUG
 logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
 
 TMP_FILE_NAME="/tmp/mcgdb/mcgdb-tmp-file-{pid}.txt".format(pid=os.getpid())
@@ -335,7 +335,7 @@ class BaseWindow(object):
                 из gdb. Например, если зайти по ssh на удаленную машину, то не всегда есть возможность
                 запустить gnome-terminal.
     '''
-    self.gui_window_cmd='''gnome-terminal -e 'bash -c "cd ~/tmp/mcgdb-debug/; touch 1; ulimit -c unlimited; {cmd}"' '''
+    self.gui_window_cmd='''LANG=C gnome-terminal -e 'bash -c "cd ~/tmp/mcgdb-debug/; touch 1; ulimit -c unlimited; {cmd}"' '''
     #self.gui_window_cmd='''gnome-terminal -e '{cmd}' '''
     self.lsock=socket.socket()
     self.lsock.bind( ('',0) )
@@ -355,8 +355,9 @@ class BaseWindow(object):
         out,err = proc.communicate()
         error('''command: `{complete_cmd}` return error code: {rc}.
 You can try execute this command manually from another terminal.
-stdout=`{stdout}`\nstderr=`{stderr}`'''.format(complete_cmd=complete_cmd,rc=rc,stdout=out,stderr=err))
-        gdb_print('execute manually: `{cmd}`'.format(cmd))
+stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
+  complete_cmd=complete_cmd,rc=rc,stdout=out,stderr=err))
+        gdb_print('execute manually: `{cmd}`'.format(cmd=cmd))
 
 
   def make_runwin_cmd(self):
