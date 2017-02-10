@@ -25,7 +25,8 @@ enum window_type {
   MCGDB_UNKNOWN_WINDOW_TYPE=0,
   MCGDB_MAIN_WINDOW,
   MCGDB_SOURCE_WINDOW,
-  MCGDB_BACKTRACE_WINDOW
+  MCGDB_BACKTRACE_WINDOW,
+  MCGDB_LVARS_WINDOW
 };
 
 typedef enum  {
@@ -38,6 +39,7 @@ extern int mcgdb_current_line_color; /*color of current execute line*/
 extern long mcgdb_curline;
 struct mouse_event_t;
 struct json_t;
+extern enum window_type mcgdb_wtype;
 
 struct gdb_action {
   enum gdb_cmd command;

@@ -38,7 +38,7 @@ gboolean read_gdb_events;
 int mcgdb_current_line_color;
 long mcgdb_curline; /*current execution line number*/
 
-enum window_type mcgdb_wtype; /*temporary unused*/
+enum window_type mcgdb_wtype;
 
 struct gdb_action * event_from_gdb=NULL;
 
@@ -101,6 +101,9 @@ get_window_type(json_t *pkg) {
     }
     else if( STREQ(buf,"backtrace_window") ) {
       type = MCGDB_BACKTRACE_WINDOW;
+    }
+    else if( STREQ(buf,"localvars_window") ) {
+      type = MCGDB_LVARS_WINDOW;
     }
     else {
       type = MCGDB_UNKNOWN_WINDOW_TYPE;

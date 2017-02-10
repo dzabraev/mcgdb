@@ -90,6 +90,8 @@
 #include "midnight.h"
 #include "src/mcgdb.h"
 
+#include "lib/widget/mcgdb_lvarswidget.h"
+
 /*** global variables ****************************************************************************/
 
 /* When the modes are active, left_panel, right_panel and tree_panel */
@@ -1760,7 +1762,16 @@ do_nc (void)
         rc = setjmp(mcgdb_jump_buf);
         if (!rc) {
           setup_dummy_mc ();
-          ret = mc_maybe_editor_or_viewer ();
+          switch(mcgdb_wtype) {
+            case MCGDB_MAIN_WINDOW:
+              ret = mc_maybe_editor_or_viewer ();
+              break;
+            case MCGDB_LVARS_WINDOW:
+              ret = lvarswidget();
+              break;
+            default:
+              mcgdb_error();
+          }
         }
         else {
           ret = rc;

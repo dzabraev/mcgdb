@@ -798,7 +798,8 @@ class McgdbMain(object):
     gdb.events.breakpoint_created.connect( self.notify_breakpoint )
     gdb.events.breakpoint_deleted.connect( self.notify_breakpoint )
 
-    self.open_window('main')
+    #self.open_window('main')
+    self.open_window('localvars')
 
   def __get_gdb_version(self):
     try:
