@@ -42,6 +42,8 @@ enum window_type mcgdb_wtype; /*temporary unused*/
 
 struct gdb_action * event_from_gdb=NULL;
 
+jmp_buf mcgdb_jump_buf;
+
 static json_t *
 read_pkg_from_gdb (void);
 
@@ -71,12 +73,12 @@ free_gdb_evt (struct gdb_action * gdb_evt);
 
 void
 mcgdb_error(void) {
-  abort();
+  longjmp (mcgdb_jump_buf, 1);
 }
 
 void
 mcgdb_exit(void) {
-  exit(0);
+  longjmp (mcgdb_jump_buf, 1);
 }
 
 static enum window_type
@@ -272,6 +274,9 @@ get_command_num(json_t *pkg) {
     else if (compare_cmd("set_curline")) {
       return MCGDB_SET_CURLINE;
     }
+    else if (compare_cmd("exit")) {
+      return MCGDB_EXIT;
+    }
     else {
       return MCGDB_UNKNOWN;
     }
@@ -383,6 +388,9 @@ static int
 process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
   assert(act->command!=MCGDB_FCLOSE);
   switch(act->command) {
+    case MCGDB_EXIT:
+      mcgdb_exit();
+      break;
     case MCGDB_MARK:
       book_mark_insert( edit, act->line, mcgdb_current_line_color);
       break;
@@ -637,6 +645,7 @@ mcgdb_permissible_key(WEdit * e, int c) {
     case CK_MCGDB_Print:
     case CK_MCGDB_Frame_up:
     case CK_MCGDB_Frame_down:
+    case CK_MCGDB_Finish:
       return 1;
     default:
       return 0;
@@ -757,6 +766,11 @@ mcgdb_cmd_frame_up(void) {
 void
 mcgdb_cmd_frame_down(void) {
   send_pkg_to_gdb ("{\"cmd\":\"editor_frame_down\"}");
+}
+
+void
+mcgdb_cmd_finish(void) {
+  send_pkg_to_gdb ("{\"cmd\":\"editor_finish\"}");
 }
 
 

@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include "lib/widget.h"
+#include <setjmp.h>
 
 enum gdb_cmd {
   MCGDB_UNKNOWN=0,
@@ -14,12 +15,10 @@ enum gdb_cmd {
   MCGDB_FCLOSE,
   MCGDB_SET_WINDOW_TYPE,
   MCGDB_UNMARK_ALL,
-//  MCGDB_BP_REMOVE_ALL,
-//  MCGDB_BP_REMOVE,
-//  MCGDB_BP_INSERT,
   MCGDB_BREAKPOINTS,
   MCGDB_COLOR,
   MCGDB_SET_CURLINE,
+  MCGDB_EXIT
 };
 
 enum window_type {
@@ -107,11 +106,11 @@ void mcgdb_cmd_continue(void);
 void mcgdb_cmd_print(void);
 void mcgdb_cmd_frame_up(void);
 void mcgdb_cmd_frame_down(void);
-
+void mcgdb_cmd_finish(void);
 
 void        mcgdb_gdbevt_read (void);
 gboolean    mcgdb_gdbevt_covertable_to_key (void);
 int         mcgdb_gdbevt_covert_to_key (void);
 int         mcgdb_gdbevt_process (WEdit * edit);
 
-
+extern jmp_buf mcgdb_jump_buf; /*for error processing*/

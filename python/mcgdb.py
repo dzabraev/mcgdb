@@ -9,7 +9,8 @@ import re
 
 import gdb
 
-level = logging.WARNING
+level = logging.CRITICAL
+#level = logging.WARNING
 #level = logging.DEBUG
 logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
 
@@ -357,7 +358,7 @@ class BaseWindow(object):
 You can try execute this command manually from another terminal.
 stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
   complete_cmd=complete_cmd,rc=rc,stdout=out,stderr=err))
-        gdb_print('execute manually: `{cmd}`'.format(cmd=cmd))
+        gdb_print('''Can't open gui window. execute manually: `{cmd}`'''.format(cmd=cmd))
 
 
   def make_runwin_cmd(self):
@@ -398,6 +399,12 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
 
   def recv(self):
     return pkgrecv(self.fd)
+
+  def terminate(self):
+    try:
+      self.send({'cmd':'exit'})
+    except:
+      pass
 
 class LocalVarsWindow(BaseWindow):
   ''' Representation of window with localvars of current frame
@@ -459,6 +466,7 @@ class MainWindow(BaseWindow):
       'editor_continue'         :  self.__editor_continue,
       'editor_frame_up'         :  self.__editor_frame_up,
       'editor_frame_down'       :  self.__editor_frame_down,
+      'editor_finish'           :  self.__editor_finish,
     }
     self.exec_filename=None #текущему фрейму соответствует это имя файла с исходным кодом
     self.exec_line=None     #номер строки текущей позиции исполнения программы
@@ -565,6 +573,10 @@ class MainWindow(BaseWindow):
   def __editor_frame_down(self,pkg):
     if gdb_stopped():
       exec_cmd_in_gdb("down")
+  def __editor_finish(self,pkg):
+    if gdb_stopped():
+      exec_cmd_in_gdb("finish")
+
 
 #  def __save_curline_color(self,background_color,text_color,attr):
 #    pass
@@ -679,6 +691,8 @@ class GEThread(object):
         os.remove(TMP_FILE_NAME)
       except:
         pass
+      for fd,win in self.fte.iteritems():
+        win.terminate()
       sys.exit(0)
     elif cmd=='check_frame':
       self.__update_current_position_in_win()

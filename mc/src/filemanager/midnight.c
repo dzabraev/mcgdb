@@ -88,6 +88,7 @@
 #include "src/consaver/cons.saver.h"    /* show_console_contents */
 
 #include "midnight.h"
+#include "src/mcgdb.h"
 
 /*** global variables ****************************************************************************/
 
@@ -1744,6 +1745,7 @@ gboolean
 do_nc (void)
 {
     gboolean ret;
+    int rc=0;
 
 #ifdef USE_INTERNAL_EDIT
     edit_stack_init ();
@@ -1755,8 +1757,14 @@ do_nc (void)
     /* Check if we were invoked as an editor or file viewer */
     if (mc_global.mc_run_mode != MC_RUN_FULL)
     {
-        setup_dummy_mc ();
-        ret = mc_maybe_editor_or_viewer ();
+        rc = setjmp(mcgdb_jump_buf);
+        if (!rc) {
+          setup_dummy_mc ();
+          ret = mc_maybe_editor_or_viewer ();
+        }
+        else {
+          ret = rc;
+        }
     }
     else
     {
@@ -1782,7 +1790,8 @@ do_nc (void)
 
     /* Program end */
     mc_global.midnight_shutdown = TRUE;
-    dialog_switch_shutdown ();
+    if (!rc)
+      dialog_switch_shutdown ();
     done_mc ();
     dlg_destroy (midnight_dlg);
     current_panel = NULL;

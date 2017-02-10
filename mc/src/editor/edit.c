@@ -3925,6 +3925,8 @@ edit_execute_cmd (WEdit * edit, long command, int char_for_insertion)
     case CK_MCGDB_Next:
       mcgdb_cmd_next();
       break;
+    case CK_MCGDB_Finish:
+      mcgdb_cmd_finish();
     case CK_MCGDB_Step:
       mcgdb_cmd_step();
       break;
