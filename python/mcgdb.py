@@ -370,7 +370,8 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
 
 
   def byemsg(self):
-    gdb_print("type `{cmd}` to restart {type}\n".format(cmd=self.startcmd,type=self.type))
+    gdb_print("type `{cmd}` to restart {type}\n{prompt}".format(
+      cmd=self.startcmd,type=self.type,prompt=get_prompt()))
 
 
   def process_connection(self):
@@ -431,7 +432,7 @@ class LocalVarsWindow(BaseWindow):
   def set_color(self,pkg):
     pass
   def process_pkg(self):
-    pass
+    pkg=self.recv()
   def __get_local_vars(self):
     if gdb.selected_thread()==None:
       return []
