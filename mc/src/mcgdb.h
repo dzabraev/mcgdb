@@ -1,3 +1,8 @@
+#ifndef __mcgdb_h_
+#define __mcgdb_h_
+
+
+
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
@@ -6,6 +11,7 @@
 #include <setjmp.h>
 
 enum gdb_cmd {
+  /*editor widget*/
   MCGDB_UNKNOWN=0,
   MCGDB_ERROR,
   MCGDB_MARK,
@@ -18,7 +24,10 @@ enum gdb_cmd {
   MCGDB_BREAKPOINTS,
   MCGDB_COLOR,
   MCGDB_SET_CURLINE,
-  MCGDB_EXIT
+  MCGDB_EXIT,
+
+  /*localwars widget*/
+  MCGDB_LOCALVARS,
 };
 
 enum window_type {
@@ -40,13 +49,10 @@ extern long mcgdb_curline;
 struct mouse_event_t;
 struct json_t;
 extern enum window_type mcgdb_wtype;
+extern struct gdb_action * event_from_gdb;
 
 struct gdb_action {
   enum gdb_cmd command;
-  int     line;
-  char   *filename;
-  char   *tecolor;
-  char   *bgcolor;
   struct json_t *pkg;
 };
 
@@ -113,6 +119,12 @@ void mcgdb_cmd_finish(void);
 void        mcgdb_gdbevt_read (void);
 gboolean    mcgdb_gdbevt_covertable_to_key (void);
 int         mcgdb_gdbevt_covert_to_key (void);
-int         mcgdb_gdbevt_process (WEdit * edit);
+int         mcgdb_gdbevt_process_edit (WEdit * edit);
 
 extern jmp_buf mcgdb_jump_buf; /*for error processing*/
+
+void free_gdb_evt (struct gdb_action * gdb_evt);
+
+
+#endif /*__mcgdb_h_*/
+

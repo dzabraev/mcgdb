@@ -1767,7 +1767,7 @@ do_nc (void)
               ret = mc_maybe_editor_or_viewer ();
               break;
             case MCGDB_LVARS_WINDOW:
-              ret = lvarswidget();
+              ret = mcgdb_aux_dlg ();
               break;
             default:
               mcgdb_error();

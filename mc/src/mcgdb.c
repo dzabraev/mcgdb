@@ -25,6 +25,7 @@
 
 #include "src/mcgdb.h"
 #include "src/mcgdb-bp.h"
+#include "lib/widget/mcgdb_lvarswidget.c"
 
 #include <jansson.h>
 
@@ -51,10 +52,12 @@ static void
 send_pkg_to_gdb (const char *msg);
 
 static void
-parse_action_from_gdb(struct gdb_action * act);
+check_action_from_gdb(struct gdb_action * act);
 
-static int
-process_action_from_gdb(WEdit * h, struct gdb_action * act);
+int
+process_action_from_gdb_edit(WEdit * edit, struct gdb_action * act);
+
+
 
 static enum window_type
 get_window_type(json_t * pkg);
@@ -67,9 +70,6 @@ process_lines_array(json_t * j_lines,  void (*callback)(long) );
 
 static gboolean
 evt_convertable_to_key(struct gdb_action * gdb_evt);
-
-static void
-free_gdb_evt (struct gdb_action * gdb_evt);
 
 void
 mcgdb_error(void) {
@@ -280,6 +280,9 @@ get_command_num(json_t *pkg) {
     else if (compare_cmd("exit")) {
       return MCGDB_EXIT;
     }
+    else if (compare_cmd("localvars")) {
+      return MCGDB_LOCALVARS;
+    }
     else {
       return MCGDB_UNKNOWN;
     }
@@ -288,35 +291,10 @@ get_command_num(json_t *pkg) {
   return cmd;
 }
 
-#define EXTRACT_FIELD_LONG(root,field) do{\
-  json_t *rootval;\
-  rootval = json_object_get(root,#field);\
-  if (!json_is_integer(rootval)) {\
-    act->command = MCGDB_ERROR;\
-    return;\
-  }\
-  act->field = (long)json_integer_value(rootval);\
-}while(0)
-
-
-#define EXTRACT_FIELD_STR(root,field) do{\
-  json_t *rootval;\
-  rootval = json_object_get(root,#field);\
-  if (!json_is_string(rootval)) {\
-    act->command = MCGDB_ERROR;\
-    return;\
-  }\
-  act->field = strdup(json_string_value(rootval));\
-}while(0)
 
 
 static void
-parse_action_from_gdb(struct gdb_action * act) {
-  // command:arg;
-  // mark:lineno;
-  // unmark:lineno;
-  // goto:lineno;
-  // fopen:filename;
+check_action_from_gdb(struct gdb_action * act) {
   enum gdb_cmd cmd;
   json_t *pkg;
   pkg = read_pkg_from_gdb();
@@ -328,31 +306,6 @@ parse_action_from_gdb(struct gdb_action * act) {
   cmd=get_command_num(pkg);
   act->command=cmd;
   act->pkg=pkg;
-  switch(cmd) {
-    case MCGDB_MARK:
-    case MCGDB_UNMARK:
-    case MCGDB_GOTO:
-    case MCGDB_BREAKPOINTS:
-      break;
-//    case MCGDB_BP_REMOVE:
-//    case MCGDB_BP_INSERT:
-//      EXTRACT_FIELD_LONG(pkg,line);
-//      break;
-    case MCGDB_FOPEN:
-      EXTRACT_FIELD_LONG(pkg,line);
-      EXTRACT_FIELD_STR(pkg,filename);
-      break;
-    case MCGDB_COLOR:
-//      EXTRACT_FIELD_STR(pkg,bgcolor);
-//      EXTRACT_FIELD_STR(pkg,tecolor);
-//      act->command=MCGDB_UNKNOWN; /*TODO remove this временная мера*/
-      break;
-    case MCGDB_SET_CURLINE:
-      EXTRACT_FIELD_LONG(pkg,line);
-      break;
-    default:
-      break;
-  }
 }
 
 static void
@@ -387,55 +340,99 @@ pkg_breakpoints(json_t *pkg) {
   process_lines_array (json_object_get (pkg,"disabled"),    mcgdb_bp_insert_disabled);
 }
 
-static int
-process_action_from_gdb(WEdit * edit, struct gdb_action * act) {
+static void
+pkg_fopen (json_t *pkg, WEdit * edit) {
+  const char *filename;
+  long line = (long)json_integer_value(json_object_get(pkg, "line"));
+  filename = json_string_value(json_object_get(pkg, "filename"));
+  mcgdb_bp_remove_all ();
+  if(mcgdb_curline>0)
+    book_mark_clear (edit, mcgdb_curline, mcgdb_current_line_color);
+  mcgdb_curline=line;
+  edit_file(vfs_path_build_filename(filename, (char *) NULL),line); /*тут исполнение проваливается в эту функцию
+  и не перейдет на след. строчку, пока edit-файла не закроется. Поэтому мы не может открыть файл, и сразу же подкрасить
+  текущую строку. Это надо делать следующим пакетом.*/
+  //TODO нужно ли очищать vfs_path ?
+}
+
+static void
+pkg_goto (json_t *pkg, WEdit * edit) {
+  long line = (long)json_integer_value(json_object_get(pkg, "line"));
+  edit_move_display (edit, line - WIDGET (edit)->lines / 2 - 1);
+  edit_move_to_line (edit, line);
+}
+
+static void
+pkg_mark (json_t *pkg, WEdit * edit) {
+  long line = (long)json_integer_value(json_object_get(pkg, "line"));
+  book_mark_insert( edit, line, mcgdb_current_line_color);
+}
+
+static void
+pkg_unmark (json_t *pkg, WEdit * edit) {
+  long line = (long)json_integer_value(json_object_get(pkg, "line"));
+  book_mark_clear( edit, line, mcgdb_current_line_color);
+}
+
+static void
+pkg_unmark_all (WEdit * edit) {
+  book_mark_flush( edit, -1);
+}
+
+
+static void
+pkg_color (json_t *pkg, WEdit * edit) {
+  mcgdb_set_color(pkg,edit);
+}
+
+static void
+pkg_set_curline (json_t *pkg, WEdit * edit) {
+  long line = (long)json_integer_value(json_object_get(pkg, "line"));
+  book_mark_clear (edit, mcgdb_curline, mcgdb_current_line_color);
+  mcgdb_curline = line;
+  book_mark_insert (edit, mcgdb_curline, mcgdb_current_line_color);
+  edit_move_display (edit, line - WIDGET (edit)->lines / 2 - 1);
+  edit_move_to_line (edit, line);
+}
+
+
+int
+process_action_from_gdb_edit(WEdit * edit, struct gdb_action * act) {
+  json_t *pkg=act->pkg;
   assert(act->command!=MCGDB_FCLOSE);
   switch(act->command) {
     case MCGDB_EXIT:
-      mcgdb_exit();
+      mcgdb_exit ();
       break;
     case MCGDB_MARK:
-      book_mark_insert( edit, act->line, mcgdb_current_line_color);
+      pkg_mark (pkg,edit);
       break;
     case MCGDB_UNMARK:
-      book_mark_clear( edit, act->line, mcgdb_current_line_color);
+      pkg_unmark (pkg,edit);
       break;
     case MCGDB_UNMARK_ALL:
-      book_mark_flush( edit, -1);
+      pkg_unmark_all (edit);
       break;
     case MCGDB_BREAKPOINTS:
-      pkg_breakpoints (act->pkg);
+      pkg_breakpoints (pkg);
       break;
     case MCGDB_FOPEN:
-      mcgdb_bp_remove_all ();
-      if(mcgdb_curline>0)
-        book_mark_clear (edit, mcgdb_curline, mcgdb_current_line_color);
-      mcgdb_curline=act->line;
-      edit_file(vfs_path_build_filename(act->filename, (char *) NULL),act->line); /*тут исполнение проваливается в эту функцию
-      и не перейдет на след. строчку, пока edit-файла не закроется. Поэтому мы не может открыть файл, и сразу же подкрасить
-      текущую строку. Это надо делать следующим пакетом.*/
-      //TODO нужно ли очищать vfs_path ?
+      pkg_fopen (pkg,edit);
       break;
     case MCGDB_GOTO:
-      edit_move_display (edit, act->line - WIDGET (edit)->lines / 2 - 1);
-      edit_move_to_line (edit, act->line);
+      pkg_goto (pkg,edit);
       break;
     case MCGDB_COLOR:
-      mcgdb_set_color(act->pkg,edit);
+      pkg_color (pkg,edit);
       break;
     case MCGDB_SET_CURLINE:
-      book_mark_clear (edit, mcgdb_curline, mcgdb_current_line_color);
-      mcgdb_curline=act->line;
-      book_mark_insert (edit, mcgdb_curline, mcgdb_current_line_color);
-      edit_move_display (edit, act->line - WIDGET (edit)->lines / 2 - 1);
-      edit_move_to_line (edit, act->line);
+      pkg_set_curline(pkg,edit);
       break;
     default:
       break;
   }
   return MCGDB_OK;
 }
-
 
 
 void
@@ -461,7 +458,7 @@ mcgdb_ignore_mouse_event(WEdit * edit, mouse_event_t * event) {
   if(!edit)
     return FALSE;
   cur_col=event->x -1 - edit->start_col;
-  if( cur_col <= 7 ) { //TODO 7 заменить константой-define шириной нумерного столбца
+  if( cur_col <= 7 ) { //TODO семь заменить константой-define шириной нумерного столбца
     return TRUE;
   }
   return FALSE;
@@ -471,7 +468,7 @@ void
 mcgdb_gdbevt_read (void) {
   assert (event_from_gdb==NULL);
   event_from_gdb = g_new0 (struct gdb_action, 1);
-  parse_action_from_gdb (event_from_gdb);
+  check_action_from_gdb (event_from_gdb);
 }
 
 gboolean
@@ -494,27 +491,22 @@ mcgdb_gdbevt_covert_to_key (void) {
   return d_key;
 }
 
+
+
+
 int
-mcgdb_gdbevt_process (WEdit * edit) {
+mcgdb_gdbevt_process_edit (WEdit * edit) {
   struct gdb_action * tmp = event_from_gdb;
   int rc;
   event_from_gdb=NULL;
-  rc = process_action_from_gdb (edit, tmp);
+  rc = process_action_from_gdb_edit (edit, tmp);
   free_gdb_evt (tmp);
   return rc;
 }
 
 
-
-
-static void
+void
 free_gdb_evt (struct gdb_action * gdb_evt) {
-  if (gdb_evt->filename)
-    free(gdb_evt->filename);
-  if (gdb_evt->bgcolor)
-    free(gdb_evt->bgcolor);
-  if (gdb_evt->tecolor)
-    free(gdb_evt->tecolor);
   if (gdb_evt->pkg)
     json_decref(gdb_evt->pkg);
   g_free(gdb_evt);
@@ -532,9 +524,8 @@ evt_convertable_to_key(struct gdb_action * gdb_evt) {
 
 
 
-
 void mcgdb_checkset_read_gdb_events(WDialog * h) {
-  read_gdb_events=find_editor( h )!=0;
+  read_gdb_events = (find_editor (h)!=NULL) || is_mcgdb_aux_dialog(h);
 }
 
 
@@ -552,9 +543,9 @@ mcgdb_permissible_key(WEdit * e, int c) {
     case CK_Quit:
     case CK_QuitQuiet:
     case CK_Close: /*
-    * Обязательно надо добавлять это действие,
+    * Обязательно надо добавлять эти действия,
     * иначе мы не сможем закрыть файл даже программно
-    * и стек будет увеличиваться при каждом открытом новом файле
+    * и стек будет увеличиваться при открытии каждого файла
     */
     case CK_Up:
     case CK_Down:
@@ -781,8 +772,6 @@ void
 mcgdb_cmd_print(void) {
 
 }
-
-
 
 
 

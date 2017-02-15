@@ -871,8 +871,7 @@ edit_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *da
             }
             else if (parm==EV_GDB_MESSAGE)
             {
-              //mcgdb_queue_process_event(e);
-              mcgdb_gdbevt_process (e);
+              mcgdb_gdbevt_process_edit (e);
               ret = MSG_HANDLED;
             }
             else if (edit_translate_key (e, parm, &cmd, &ch))
