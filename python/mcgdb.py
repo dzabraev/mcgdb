@@ -336,9 +336,9 @@ class BaseWindow(object):
                 из gdb. Например, если зайти по ssh на удаленную машину, то не всегда есть возможность
                 запустить gnome-terminal.
     '''
-    self.gui_window_cmd='''LANG=C gnome-terminal -e 'bash -c "cd ~/tmp/mcgdb-debug/; touch 1; ulimit -c unlimited; {cmd}"' '''
+    #self.gui_window_cmd='''LANG=C gnome-terminal -e 'bash -c "cd ~/tmp/mcgdb-debug/; touch 1; ulimit -c unlimited; {cmd}"' '''
     #self.gui_window_cmd='''gnome-terminal -e 'valgrind --log-file=/tmp/vlg.log {cmd}' '''
-    #self.gui_window_cmd='''gnome-terminal -e '{cmd}' '''
+    self.gui_window_cmd='''gnome-terminal -e '{cmd}' '''
     self.lsock=socket.socket()
     self.lsock.bind( ('',0) )
     self.lsock.listen(1)
@@ -408,6 +408,8 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     except:
       pass
 
+
+
 class LocalVarsWindow(BaseWindow):
   ''' Representation of window with localvars of current frame
   '''
@@ -436,20 +438,33 @@ class LocalVarsWindow(BaseWindow):
     pass
   def process_pkg(self):
     pkg=self.recv()
+
   def __get_local_vars(self):
-    if gdb.selected_thread()==None:
+    try:
+      res=exec_in_main_pythread( self.__get_local_vars_1, ())
+    except (gdb.error,RuntimeError):
+      res=[]
+    return res
+
+  def __get_local_vars_1(self):
+    frame = gdb.selected_frame()
+    if not frame:
       return []
-    if not gdb_stopped():
-      return []
+    block = frame.block()
+    variables = {}
+    while block:
+      for symbol in block:
+        if (symbol.is_argument or symbol.is_variable):
+            name = symbol.name
+            if name not in variables:
+              variables[name] = symbol.value(frame)
+      if block.function:
+        break
+      block = block.superblock
     lvars=[]
-    res=exec_in_main_pythread( gdb.execute, ('info locals',False,True) )
-    for line in res.split('\n'):
-      sl=line.split('=')
-      if len(sl)!=2:
-        debug('cmd `info locals` get bad line {line}'.format(line=line))
-        continue
-      lvars.append( {'name':sl[0].strip(), 'value':sl[1].strip()} )
-    lvars.sort( lambda x,y: x['name']<y['name'] )
+    for name,value in variables.iteritems():
+      lvars.append({'name':name,'value':str(value)})
+    lvars.sort( cmp = lambda x,y: 1 if x['name']<y['name'] else -1 )
     return lvars
 
   def process_connection(self):
