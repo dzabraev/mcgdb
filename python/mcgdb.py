@@ -337,6 +337,7 @@ class BaseWindow(object):
                 запустить gnome-terminal.
     '''
     self.gui_window_cmd='''LANG=C gnome-terminal -e 'bash -c "cd ~/tmp/mcgdb-debug/; touch 1; ulimit -c unlimited; {cmd}"' '''
+    #self.gui_window_cmd='''gnome-terminal -e 'valgrind --log-file=/tmp/vlg.log {cmd}' '''
     #self.gui_window_cmd='''gnome-terminal -e '{cmd}' '''
     self.lsock=socket.socket()
     self.lsock.bind( ('',0) )
@@ -412,7 +413,7 @@ class LocalVarsWindow(BaseWindow):
   '''
 
   type='localvars_window'
-  startcmd='mcgdb open lvars'
+  startcmd='mcgdb open localvars'
 
   def __init__(self, **kwargs):
     super(LocalVarsWindow,self).__init__(**kwargs)
@@ -425,7 +426,7 @@ class LocalVarsWindow(BaseWindow):
     pass
   def gdb_update_current_frame(self,filename,line):
     pass
-  def gdb_update_localvars(self):
+  def update_localvars(self):
     lvars=self.__get_local_vars()
     pkg={'cmd':'localvars','localvars':lvars}
     self.send(pkg)
@@ -450,6 +451,13 @@ class LocalVarsWindow(BaseWindow):
       lvars.append( {'name':sl[0].strip(), 'value':sl[1].strip()} )
     lvars.sort( lambda x,y: x['name']<y['name'] )
     return lvars
+
+  def process_connection(self):
+    rc=super(LocalVarsWindow,self).process_connection()
+    if rc:
+      self.update_localvars()
+    return rc
+
 
 
 class MainWindow(BaseWindow):
@@ -646,7 +654,7 @@ class GEThread(object):
         if win.type in ('main_window','source_window'):
           win.gdb_update_current_frame(filename,line)
         elif win.type in ('localvars_window'):
-          win.gdb_update_localvars()
+          win.update_localvars()
       self.exec_filename=filename
       self.exec_line=line
 

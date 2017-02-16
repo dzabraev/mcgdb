@@ -15,6 +15,8 @@ int f3(int x) {
 
 int main(void) {
   int x=1;
+  const char * longstr = "123456789abcdef123456789abcdef";
+  int x1=1,x2=2,x3=3,x4=4,x5=5,x6=6,x7=7,x888888888888888=8888;
   MyClass mycl;
   x=f1(x);
   x=f2(x);
