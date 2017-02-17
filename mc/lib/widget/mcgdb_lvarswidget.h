@@ -13,7 +13,7 @@
 
 int mcgdb_aux_dlg(void);
 
-typedef enum lvars_redraw {
+typedef enum table_redraw {
   REDRAW_NONE   = 0,
   REDRAW_TAB    = 1
 } redraw_t;
@@ -23,39 +23,39 @@ typedef struct {
   long ncols;
   long y1;
   long y2;
-} lvars_row;
+} table_row;
 
 
-typedef struct lvars_tab {
+typedef struct Table {
   GList *rows;
   long nrows;
   long ncols;
-  lvars_row *colnames;
+  table_row *colnames;
   long x;
   long y;
   long cols;
   long lines;
   long *colstart;
   long last_row_pos;
-  int (*formula)(const struct lvars_tab * tab, int ncol);
+  int (*formula)(const struct Table * tab, int ncol);
   long row_offset;
   redraw_t redraw;
-} lvars_tab;
+} Table;
 
 
-typedef struct Wlvars
+typedef struct WTable
 {
     Widget widget;
     long lines;
     long cols;
     long x;
     long y;
-    lvars_tab * tab; /*current tab either tab_registers or tab_localvars*/
-    lvars_tab * tab_registers;
-    lvars_tab * tab_localvars;
-} Wlvars;
+    Table * tab; /*current tab either tab_registers or tab_localvars*/
+    Table * tab_registers;
+    Table * tab_localvars;
+} WTable;
 
-Wlvars *find_lvars (WDialog *h);
+WTable *find_lvars (WDialog *h);
 gboolean is_mcgdb_aux_dialog(WDialog *h);
 
 #endif
