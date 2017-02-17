@@ -46,16 +46,14 @@ typedef struct Table {
 typedef struct WTable
 {
     Widget widget;
-    long lines;
-    long cols;
-    long x;
-    long y;
     Table * tab; /*current tab either tab_registers or tab_localvars*/
-    Table * tab_registers;
-    Table * tab_localvars;
+    GHashTable *tables;
 } WTable;
 
 WTable *find_lvars (WDialog *h);
 gboolean is_mcgdb_aux_dialog(WDialog *h);
+
+#define WTABLE(x) ((WTable *)x)
+#define TABLE(x)  ((Table *)x)
 
 #endif
