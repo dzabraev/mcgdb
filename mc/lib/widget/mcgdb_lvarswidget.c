@@ -30,9 +30,10 @@
 #define TAB_BOTTOM(tab) ((tab)->y+(tab)->lines - 1)
 #define TAB_TOP(tab) ((tab)->y)
 
-
-#define FIRST_ROW_VISIBLE(tab) (((lvars_row *)((tab)->rows->data))->y1>=TAB_TOP(tab))
-#define LAST_ROW_VISIBLE(tab)  (((lvars_row *)(g_list_last ((tab)->rows)->data))->y2<TAB_BOTTOM(tab))
+#define TAB_FIRST_ROW(tab) ((lvars_row *)(((tab)->rows)->data))
+#define TAB_LAST_ROW(tab) ((lvars_row *)(     ((GList *)g_list_last ((tab)->rows))   ->data))
+//#define FIRST_ROW_VISIBLE(tab) (((lvars_row *)((tab)->rows->data))->y1>=TAB_TOP(tab))
+//#define LAST_ROW_VISIBLE(tab)  (TAB_LAST_ROW(tab)->y2-1<=TAB_BOTTOM(tab))
 
 
 #define LVARS_X 0
@@ -63,6 +64,8 @@ static void         lvars_tab_set_colwidth_formula(lvars_tab * tab, int (*formul
 static int          formula_eq_col(const lvars_tab * tab, int ncol);
 static int          formula_adapt_col(const lvars_tab * tab, int ncol);
 
+static void         add_offset(lvars_tab *tab, int off);
+
 static void
 pkg_localvars(json_t *pkg, Wlvars *lvars) {
   lvars_tab *tab = lvars->tab;
@@ -78,7 +81,7 @@ pkg_localvars(json_t *pkg, Wlvars *lvars) {
     );
   }
   lvars_tab_update_colwidth(lvars->tab);
-  //lvars_tab_update_bounds(lvars->tab, lvars->x+1,lvars->y+1,lvars->lines-2,lvars->cols-2);
+  json_decref(localvars);
 }
 
 static void
@@ -177,7 +180,7 @@ lvars_new (int y, int x, int height, int width)
     lvars->y=y;
     lvars->lines=height;
     lvars->cols=width;
-    lvars->redraw = REDRAW_NONE;
+    lvars->tab->redraw = REDRAW_NONE;
     lvars_tab_update_bounds(lvars->tab, lvars->x+1,lvars->y+1,lvars->lines-2,lvars->cols-2);
     lvars_tab_set_colwidth_formula(lvars->tab, formula_adapt_col);
     return lvars;
@@ -198,7 +201,10 @@ lvars_row_alloc(long ncols, va_list ap) {
 
 static void
 lvars_row_destroy(lvars_row *row) {
-  
+  for (int col=0;col<row->ncols;col++) {
+    free(row->columns[col]);
+  }
+  g_free(row);
 }
 
 static void
@@ -269,20 +275,18 @@ lvars_tab_draw_row (lvars_tab * tab, lvars_row *row) {
     x2 = colstart[i+1];
     rowcnt=0;
     offset=ROW_OFFSET(tab,rowcnt);
-    if (offset>=y)
+    if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
       tty_gotoyx(offset,x1);
     for(long colcnt=x1;*p;p++,colcnt++) {
       if(colcnt==x2) {
         rowcnt++;
         offset=ROW_OFFSET(tab,rowcnt);
-        if (offset>=y)
+        if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
           tty_gotoyx(offset,x1);
         colcnt=x1;
       }
       offset=ROW_OFFSET(tab,rowcnt);
-      if(offset  > TAB_BOTTOM(tab))
-        break;
-      if (offset>=TAB_TOP(tab))
+      if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
         tty_print_char(*p);
     }
     rowcnt++;
@@ -305,6 +309,8 @@ static void
 lvars_tab_draw(lvars_tab * tab) {
   GList *row = tab->rows;
   tty_setcolor(EDITOR_NORMAL_COLOR);
+  //tty_gotoyx(TAB_BOTTOM(tab),COLS-1);
+  //tty_print_char('0');
   tty_fill_region(tab->y,tab->x,tab->lines,tab->cols,' ');
   lvars_row *r;
   long offset;
@@ -315,14 +321,16 @@ lvars_tab_draw(lvars_tab * tab) {
     r = (lvars_row *)row->data;
     lvars_tab_draw_row (tab,r);
     offset=ROW_OFFSET(tab,0);
-    if (offset>tab->y && offset<tab->y+tab->lines) {
+    if (offset>TAB_TOP(tab) && offset<=TAB_BOTTOM(tab)) {
       tty_draw_hline(offset,tab->x,mc_tty_frm[MC_TTY_FRM_HORIZ],tab->cols);
-      tab->last_row_pos++;
     }
-    if(ROW_OFFSET(tab,0)>tab->y+tab->lines) {
+    tab->last_row_pos++;
+    //if(ROW_OFFSET(tab,0)>TAB_BOTTOM(tab)) {
       /*допечатали до самой последней строки*/
-      break;
-    }
+      //break;
+    //}
+    /*Делаем проход до самой последней строки что бы
+     * вычислить координаты начала и конца каждой строки*/
     row = g_list_next (row);
   }
   for(int i=1;i<tab->ncols;i++) {
@@ -372,6 +380,15 @@ lvars_tab_new (long ncols, ... ) {
 }
 
 static void
+lvars_tab_destroy(lvars_tab *tab) {
+  lvars_row_destroy(tab->colnames);
+  g_free(tab->colstart);
+  lvars_tab_clear_rows(tab);
+  g_free(tab);
+}
+
+
+static void
 lvars_tab_add_colnames (lvars_tab * tab, ...) {
   va_list ap;
   va_start (ap, tab);
@@ -391,15 +408,22 @@ lvars_tab_add_row (lvars_tab * tab, ...) {
 }
 
 static void
-lvars_tab_destroy(lvars_tab *tab) {
-  
+add_offset(lvars_tab *tab, int off) {
+  int max_offset = MAX(0,((TAB_LAST_ROW(tab)->y2 - TAB_FIRST_ROW(tab)->y1) - (TAB_BOTTOM(tab)-TAB_TOP(tab))));
+  int old_offset = tab->row_offset;
+  tab->row_offset += off;
+  tab->row_offset = MAX(tab->row_offset, 0);
+  tab->row_offset = MIN(tab->row_offset, max_offset);
+  if (tab->row_offset!=old_offset)
+    tab->redraw |= REDRAW_TAB;
 }
 
 static cb_ret_t
 lvars_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *data) {
   cb_ret_t handled = MSG_HANDLED;
   Wlvars *lvars = (Wlvars *)w;
-  long lines,cols,x,y;
+  long lines,cols,x,y, max_offset;
+  lvars_tab *tab = lvars->tab;
   switch(msg) {
     case MSG_DRAW:
       tty_setcolor(EDITOR_NORMAL_COLOR);
@@ -408,38 +432,37 @@ lvars_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *d
       lines =   lvars->lines;
       cols  =   lvars->cols;
       tty_draw_box(y, x, lines, cols, FALSE);
-      lvars->redraw |= REDRAW_TAB;
+      lvars->tab->redraw |= REDRAW_TAB;
       break;
     case MSG_KEY:
       switch (parm) {
         case KEY_UP:
-          if (!FIRST_ROW_VISIBLE(lvars->tab)) {
-            lvars->tab->row_offset-=1;
-            lvars->redraw |= REDRAW_TAB;
-          }
+          add_offset(lvars->tab,-1);
           break;
         case KEY_DOWN:
-          if (!LAST_ROW_VISIBLE(lvars->tab)) {
-            lvars->tab->row_offset+=1;
-            lvars->redraw |= REDRAW_TAB;
-          }
-          break;
-        case KEY_NPAGE:
-          /*Page Up*/
-          lvars->tab->row_offset-=lvars->tab->lines/2;
-          lvars->redraw |= REDRAW_TAB;
+          add_offset(lvars->tab,1);
           break;
         case KEY_PPAGE:
           /*Page Up*/
-          lvars->tab->row_offset+=lvars->tab->lines/2;
-          lvars->redraw |= REDRAW_TAB;
+          /*Либо перемещаемся на треть таблицы к первой строке,
+           * а если это смещение будет сильно большое, то сдвигаемся
+           * на столько, что бы верхушка верхней строки была видна в верху таблицы*/
+          add_offset(lvars->tab,-lvars->tab->lines/3);
+          break;
+        case KEY_NPAGE:
+          /*Page Down*/
+          add_offset(lvars->tab,lvars->tab->lines/3);
+          break;
+        default:
           break;
       }
       break;
+    default:
+      break;
   }
-  if (lvars->redraw & REDRAW_TAB) {
+  if (lvars->tab->redraw & REDRAW_TAB) {
     lvars_tab_draw (lvars->tab);
-    lvars->redraw = REDRAW_NONE;
+    lvars->tab->redraw = REDRAW_NONE;
   }
   widget_move (w, LINES, COLS);
   return handled;
@@ -447,6 +470,25 @@ lvars_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *d
 
 static void
 lvars_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
+  Wlvars *lvars = (Wlvars *)w;
+  lvars_tab *tab = lvars->tab;
+
+  switch (msg) {
+    case MSG_MOUSE_SCROLL_UP:
+      add_offset(lvars->tab, -2);
+      break;
+    case MSG_MOUSE_SCROLL_DOWN:
+      add_offset(lvars->tab, 2);
+      break;
+    default:
+      break;
+  }
+
+  if (lvars->tab->redraw & REDRAW_TAB) {
+    lvars_tab_draw (lvars->tab);
+    lvars->tab->redraw = REDRAW_NONE;
+  }
+  widget_move (w, LINES, COLS);
 }
 
 

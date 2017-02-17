@@ -16,7 +16,7 @@ int mcgdb_aux_dlg(void);
 typedef enum lvars_redraw {
   REDRAW_NONE   = 0,
   REDRAW_TAB    = 1
-} tab_redraw_t;
+} redraw_t;
 
 typedef struct {
   char **columns;
@@ -39,6 +39,7 @@ typedef struct lvars_tab {
   long last_row_pos;
   int (*formula)(const struct lvars_tab * tab, int ncol);
   long row_offset;
+  redraw_t redraw;
 } lvars_tab;
 
 
@@ -50,7 +51,6 @@ typedef struct Wlvars
     long x;
     long y;
     lvars_tab * tab;
-    tab_redraw_t redraw;
 } Wlvars;
 
 Wlvars *find_lvars (WDialog *h);

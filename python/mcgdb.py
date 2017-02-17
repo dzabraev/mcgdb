@@ -464,7 +464,7 @@ class LocalVarsWindow(BaseWindow):
     lvars=[]
     for name,value in variables.iteritems():
       lvars.append({'name':name,'value':str(value)})
-    lvars.sort( cmp = lambda x,y: 1 if x['name']<y['name'] else -1 )
+    lvars.sort( cmp = lambda x,y: 1 if x['name']>y['name'] else -1 )
     return lvars
 
   def process_connection(self):
