@@ -50,7 +50,9 @@ typedef struct Wlvars
     long cols;
     long x;
     long y;
-    lvars_tab * tab;
+    lvars_tab * tab; /*current tab either tab_registers or tab_localvars*/
+    lvars_tab * tab_registers;
+    lvars_tab * tab_localvars;
 } Wlvars;
 
 Wlvars *find_lvars (WDialog *h);

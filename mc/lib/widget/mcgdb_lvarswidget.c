@@ -37,17 +37,27 @@
 
 
 #define LVARS_X 0
-#define LVARS_Y 0
-#define LVARS_LINES(LINES) (LINES)
+#define LVARS_Y 1
+#define LVARS_LINES(LINES) ((LINES)-1)
 #define LVARS_COLS(COLS)  (COLS/2)
+
+#define SELBAR_X 0
+#define SELBAR_Y 0
+#define SELBAR_LINES(LINES) 1
+#define SELBAR_COLS(COLS) LVARS_COLS(COLS)
+
+#define SELBAR_BUTTON(x) ((SelbarButton *)x)
+
 
 static cb_ret_t mcgdb_aux_dialog_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *data);
 static cb_ret_t lvars_callback            (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *data);
+static cb_ret_t selbar_callback           (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *data);
 
 static void mcgdb_aux_dialog_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event);
 static void lvars_mouse_callback            (Widget * w, mouse_msg_t msg, mouse_event_t * event);
+static void selbar_mouse_callback           (Widget * w, mouse_msg_t msg, mouse_event_t * event);
 
-static Wlvars *lvars_new (int y, int x, int height, int width);
+
 
 static lvars_row *  lvars_row_alloc(long ncols, va_list ap);
 static void         lvars_row_destroy(lvars_row *row);
@@ -63,8 +73,41 @@ static void         lvars_tab_update_colwidth(lvars_tab * tab);
 static void         lvars_tab_set_colwidth_formula(lvars_tab * tab, int (*formula)(const lvars_tab * tab, int ncol));
 static int          formula_eq_col(const lvars_tab * tab, int ncol);
 static int          formula_adapt_col(const lvars_tab * tab, int ncol);
+static void         lvars_update_bound(Wlvars *lvars);
 
 static void         add_offset(lvars_tab *tab, int off);
+
+
+
+typedef struct SelbarButton {
+  char *text;
+  void (*callback) (WDialog *h);
+  gboolean selected;
+  long x1;
+  long x2;
+} SelbarButton;
+
+typedef struct Wselbar {
+  Widget widget;
+  long x;
+  long y;
+  long lines;
+  long cols;
+  GList *buttons;
+  int selected_color;
+  int normal_color;
+  gboolean redraw;
+} Wselbar;
+
+
+Wselbar *find_selbar (WDialog *h);
+
+
+static Wlvars  *lvars_new  (int y, int x, int height, int width);
+static Wselbar *selbar_new (int y, int x, int height, int width);
+
+
+
 
 static void
 pkg_localvars(json_t *pkg, Wlvars *lvars) {
@@ -81,7 +124,7 @@ pkg_localvars(json_t *pkg, Wlvars *lvars) {
     );
   }
   lvars_tab_update_colwidth(lvars->tab);
-  json_decref(localvars);
+  //json_decref(localvars);
 }
 
 static void
@@ -115,7 +158,8 @@ is_mcgdb_aux_dialog(WDialog *h) {
 static cb_ret_t
 mcgdb_aux_dialog_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *data) {
   WDialog *h = DIALOG (w);
-  Wlvars *lvars;
+  Wlvars  *lvars;
+  Wselbar *selbar;
   switch (msg) {
     case MSG_KEY:
       {
@@ -136,16 +180,22 @@ mcgdb_aux_dialog_callback (Widget * w, Widget * sender, widget_msg_t msg, int pa
       {
         w->lines = LINES;
         w->cols = COLS;
-        lvars = find_lvars(h);
+        lvars = find_lvars (h);
         if (lvars) {
           lvars->x      =LVARS_X;
           lvars->y      =LVARS_Y;
           lvars->lines  =LVARS_LINES(LINES);
           lvars->cols   =LVARS_COLS(COLS);
-          lvars_tab_update_bounds(lvars->tab,lvars->x+1,lvars->y+1,lvars->lines-2,lvars->cols-2);
+          lvars_update_bound(lvars);
+        }
+        selbar = find_selbar (h);
+        if (selbar) {
+          selbar->cols = SELBAR_COLS(COLS);
         }
         return MSG_HANDLED;
       }
+    case MSG_INIT:
+      break;
     default:
       {
         return dlg_default_callback (w, sender, msg, parm, data);
@@ -160,7 +210,11 @@ mcgdb_aux_dialog_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * ev
   event->result.abort = unhandled;
 }
 
-
+static void
+lvars_update_bound(Wlvars *lvars) {
+  lvars_tab_update_bounds(lvars->tab_registers, lvars->y+1,lvars->x+1,lvars->lines-2,lvars->cols-2);
+  lvars_tab_update_bounds(lvars->tab_localvars, lvars->y+1,lvars->x+1,lvars->lines-2,lvars->cols-2);
+}
 
 static Wlvars *
 lvars_new (int y, int x, int height, int width)
@@ -171,18 +225,21 @@ lvars_new (int y, int x, int height, int width)
     if (height <= 0)
         height = 1;
 
-    lvars = g_new (Wlvars, 1);
+    lvars = g_new0 (Wlvars, 1);
     w = WIDGET (lvars);
     widget_init (w, y, x, height, width, lvars_callback, lvars_mouse_callback);
     w->options |=   WOP_SELECTABLE;
-    lvars->tab = lvars_tab_new(2,"name","value");
+    lvars->tab_localvars = lvars_tab_new(2,"name","value");
+    lvars->tab_registers = lvars_tab_new(3,"","","");
     lvars->x=x;
     lvars->y=y;
     lvars->lines=height;
     lvars->cols=width;
+    lvars_update_bound(lvars);
+    lvars_tab_set_colwidth_formula(lvars->tab_localvars, formula_adapt_col);
+    lvars_tab_set_colwidth_formula(lvars->tab_registers, formula_adapt_col);
+    lvars->tab = lvars->tab_localvars;
     lvars->tab->redraw = REDRAW_NONE;
-    lvars_tab_update_bounds(lvars->tab, lvars->x+1,lvars->y+1,lvars->lines-2,lvars->cols-2);
-    lvars_tab_set_colwidth_formula(lvars->tab, formula_adapt_col);
     return lvars;
 }
 
@@ -308,12 +365,10 @@ lvars_tab_draw_colnames (lvars_tab * tab, lvars_row *r) {
 static void
 lvars_tab_draw(lvars_tab * tab) {
   GList *row = tab->rows;
-  tty_setcolor(EDITOR_NORMAL_COLOR);
-  //tty_gotoyx(TAB_BOTTOM(tab),COLS-1);
-  //tty_print_char('0');
-  tty_fill_region(tab->y,tab->x,tab->lines,tab->cols,' ');
   lvars_row *r;
   long offset;
+  tty_setcolor(EDITOR_NORMAL_COLOR);
+  tty_fill_region(tab->y,tab->x,tab->lines,tab->cols,' ');
   tab->last_row_pos = tab->y - tab->row_offset;
   lvars_tab_draw_colnames (tab,tab->colnames);
 
@@ -325,10 +380,6 @@ lvars_tab_draw(lvars_tab * tab) {
       tty_draw_hline(offset,tab->x,mc_tty_frm[MC_TTY_FRM_HORIZ],tab->cols);
     }
     tab->last_row_pos++;
-    //if(ROW_OFFSET(tab,0)>TAB_BOTTOM(tab)) {
-      /*допечатали до самой последней строки*/
-      //break;
-    //}
     /*Делаем проход до самой последней строки что бы
      * вычислить координаты начала и конца каждой строки*/
     row = g_list_next (row);
@@ -372,7 +423,7 @@ lvars_tab_new (long ncols, ... ) {
   tab->ncols=ncols;
   tab->nrows=0;
   tab->colnames = lvars_row_alloc(ncols, ap);
-  tab->colstart = (long *)g_new(long,ncols+1);
+  tab->colstart = (long *)g_new0(long,ncols+1);
   tab->row_offset=0;
   lvars_tab_set_colwidth_formula(tab,formula_adapt_col);
   va_end(ap);
@@ -457,6 +508,8 @@ lvars_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *d
           break;
       }
       break;
+    //case MSG_INIT:
+    //  lvars_tab_draw(lvars->tab);
     default:
       break;
   }
@@ -497,13 +550,168 @@ find_lvars (WDialog *h) {
   return (Wlvars *) find_widget_type (h, lvars_callback);
 }
 
+Wselbar *
+find_selbar (WDialog *h) {
+  return (Wselbar *) find_widget_type (h, selbar_callback);
+}
+
+/////////////////////////////////////////////////////////////
+
+
+static void
+selbar_draw (Wselbar *bar) {
+  GList * button = bar->buttons;
+  int cnt=0;
+  bar->redraw=FALSE;
+  tty_setcolor(EDITOR_NORMAL_COLOR);
+  tty_fill_region(bar->y,bar->x,bar->lines,bar->cols,' ');
+  tty_gotoyx(bar->y,bar->x);
+  cnt++;
+  tty_print_char(' ');
+  while(button) {
+    SelbarButton * btn = ((SelbarButton *)(button->data));
+    btn->x1 = cnt;
+    if (btn->selected)
+      tty_setcolor(bar->selected_color);
+    else
+      tty_setcolor(bar->normal_color);
+    const char *p = btn->text;
+    if (cnt > bar->cols)
+      break;
+    while(*p) {
+      tty_print_char(*p++);
+      if (++cnt>=bar->cols)
+        break;
+    }
+    btn->x2 = cnt;
+    if (cnt<bar->cols) {
+      cnt++;
+      tty_setcolor(EDITOR_NORMAL_COLOR);
+      tty_print_char(' ');
+    }
+    else {
+      break;
+    }
+    button = g_list_next(button);
+  }
+  tty_gotoyx(LINES,COLS);
+  return;
+}
+
+static cb_ret_t
+selbar_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *data) {
+  Wselbar *bar = (Wselbar *)w;
+  switch (msg) {
+    case MSG_DRAW:
+      selbar_draw (bar);
+      break;
+    default:
+      break;
+  }
+  return MSG_HANDLED;
+}
+
+gint
+find_button_in_list(gconstpointer a, gconstpointer b) {
+  SelbarButton *btn = (SelbarButton *)a;
+  int x_click = ((int *)b)[0];
+  if ((btn->x1 <= x_click) && (btn->x2 > x_click)) {
+    return 0;
+  }
+  else {
+    return 1;
+  }
+}
+
+
+static void
+reset_selected (gpointer data, gpointer user_data) {
+  SELBAR_BUTTON(data)->selected=FALSE;
+}
+
+static void
+selbar_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
+  int click_x;
+  Wselbar *selbar = (Wselbar *)w;
+  switch (msg) {
+    case MSG_MOUSE_CLICK:
+      click_x = event->x;
+      GList * button = g_list_find_custom ( selbar->buttons, &click_x, find_button_in_list );
+      if (button) {
+        g_list_foreach (selbar->buttons, reset_selected, NULL);
+        SELBAR_BUTTON(button->data)->selected=TRUE;
+        selbar->redraw = TRUE;
+        SELBAR_BUTTON(button->data)->callback(DIALOG(w->owner));
+      }
+      break;
+    default:
+      break;
+  }
+  if (selbar->redraw)
+    selbar_draw (selbar);
+}
+
+
+static Wselbar *
+selbar_new (int y, int x, int height, int width) {
+    Wselbar *selbar;
+    Widget *w;
+
+    if (height <= 0)
+        height = 1;
+
+    selbar = g_new0 (Wselbar, 1);
+    w = WIDGET (selbar);
+    widget_init (w, y, x, height, width, selbar_callback, selbar_mouse_callback);
+    w->options = 0; //|=   WOP_SELECTABLE;
+    selbar->x=x;
+    selbar->y=y;
+    selbar->lines=height;
+    selbar->cols=width;
+    selbar->buttons=NULL;
+    selbar->selected_color = tty_try_alloc_color_pair2 ("red", "black", "bold", FALSE);
+    selbar->normal_color = tty_try_alloc_color_pair2 ("white", "cyan",   NULL, FALSE);
+    return selbar;
+
+}
+
+void selbar_add_button(Wselbar *selbar, const char * text, void (*callback) (WDialog *h), gboolean selected) {
+  SelbarButton *btn = g_new0 (SelbarButton,1);
+  btn->text = strdup(text);
+  btn->callback=callback;
+  btn->selected = selected;
+  selbar->buttons = g_list_append (selbar->buttons, (gpointer)btn);
+}
+
+static void
+stub (WDialog *h) {}
+
+static void
+localvars_selected (WDialog *h) {
+  Wlvars *lvars = find_lvars(h);
+  lvars->tab = lvars->tab_localvars;
+  lvars_tab_draw(lvars->tab);
+}
+
+static void
+registers_selected (WDialog *h) {
+  Wlvars *lvars = find_lvars(h);
+  lvars->tab = lvars->tab_registers;
+  lvars_tab_draw(lvars->tab);
+}
+
+
 int
 mcgdb_aux_dlg(void) {
   WDialog *aux_dlg;
-  Wlvars *lvars = lvars_new (LVARS_X, LVARS_Y, LVARS_LINES(LINES), LVARS_COLS(COLS));
+  Wlvars  *lvars = lvars_new (LVARS_Y, LVARS_X, LVARS_LINES(LINES), LVARS_COLS(COLS));
+  Wselbar *bar = selbar_new  (SELBAR_Y,SELBAR_X, SELBAR_LINES(LINES), SELBAR_COLS(COLS));
+  selbar_add_button (bar,"localvars",localvars_selected,TRUE);
+  selbar_add_button (bar,"registers",registers_selected,FALSE);
   aux_dlg = dlg_create (FALSE, 0, 0, 0, 0, WPOS_FULLSCREEN, FALSE, NULL, mcgdb_aux_dialog_callback,
                     mcgdb_aux_dialog_mouse_callback, "[GDB]", NULL);
   add_widget (aux_dlg, lvars);
+  add_widget (aux_dlg, bar);
   dlg_run (aux_dlg);
   return 0;
 }
