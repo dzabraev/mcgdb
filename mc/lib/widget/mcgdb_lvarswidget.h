@@ -13,6 +13,26 @@
 
 int mcgdb_aux_dlg(void);
 
+
+typedef struct SelbarButton {
+  char *text;
+  gboolean selected;
+  long x1;
+  long x2;
+} SelbarButton;
+
+typedef struct Selbar {
+  GList *buttons;
+  int selected_color;
+  int normal_color;
+  gboolean redraw;
+  long x;
+  long y;
+  long lines;
+  long cols;
+} Selbar;
+
+
 typedef enum table_redraw {
   REDRAW_NONE   = 0,
   REDRAW_TAB    = 1
@@ -46,7 +66,8 @@ typedef struct Table {
 typedef struct WTable
 {
     Widget widget;
-    Table * tab; /*current tab either tab_registers or tab_localvars*/
+    Table * tab;
+    Selbar *selbar;
     GHashTable *tables;
 } WTable;
 
@@ -55,5 +76,6 @@ gboolean is_mcgdb_aux_dialog(WDialog *h);
 
 #define WTABLE(x) ((WTable *)x)
 #define TABLE(x)  ((Table *)x)
+#define SELBAR_BUTTON(x) ((SelbarButton *)x)
 
 #endif

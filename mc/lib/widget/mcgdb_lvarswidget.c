@@ -33,6 +33,10 @@
 
 
 
+#define VARS_REGS_WIDGET_X      1
+#define VARS_REGS_WIDGET_Y      1
+#define VARS_REGS_WIDGET_LINES  (LINES - VARS_REGS_WIDGET_Y)
+#define VARS_REGS_WIDGET_COLS   (COLS/2 - VARS_REGS_WIDGET)
 
 
 #define VARS_REGS_BAR_X(COLS)      0
@@ -101,35 +105,17 @@ WTable  *           find_wtable (WDialog *h);
 
 gint    find_button_in_list(gconstpointer a, gconstpointer b);
 
-
-typedef struct SelbarButton {
-  char *text;
-  void (*callback) (WDialog *h);
-  gboolean selected;
-  long x1;
-  long x2;
-} SelbarButton;
-
-typedef struct Wselbar {
-  Widget widget;
-  GList *buttons;
-  int selected_color;
-  int normal_color;
-  gboolean redraw;
-} Wselbar;
-
-
-Wselbar *find_selbar (WDialog *h);
+Selbar *find_selbar (WDialog *h);
 
 
 static  WTable  *wtable_new  (int y, int x, int height, int width);
-static  Wselbar *selbar_new (int y, int x, int height, int width);
-void    selbar_add_button(Wselbar *selbar, const char * text, void (*callback) (WDialog *h), gboolean selected);
+static  Selbar *selbar_new (int y, int x, int height, int width);
+void    selbar_add_button(Selbar *selbar, const char * text);
 void    ghfunc_table_update_bounds(__attribute__((unused)) gpointer key, gpointer value, gpointer user_data);
-
-
-
-
+static void     selbar_set_current_button(Selbar *selbar, const char *tabname);
+static void     selbar_draw (Selbar *bar);
+static void     reset_selected (gpointer data, gpointer user_data);
+static Table *  wtable_get_table(WTable *wtab, const char *tabname);
 
 
 static table_row *
@@ -144,9 +130,9 @@ TAB_FIRST_ROW(Table * tab) {
 
 static void
 pkg_localvars(json_t *pkg, WTable *wtab) {
-  Table *tab = wtab->tab;
   json_t *localvars = json_object_get(pkg,"localvars");
   size_t size = json_array_size(localvars);
+  Table *tab = wtable_get_table(wtab,"localvars");
   table_clear_rows(tab);
   tty_setcolor(EDITOR_NORMAL_COLOR);
   for(size_t i=0;i<size;i++) {
@@ -191,7 +177,6 @@ static cb_ret_t
 mcgdb_aux_dialog_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *data) {
   WDialog *h = DIALOG (w);
   WTable  *vars_regs_table, *bt_th_table;
-  Wselbar *vars_regs_bar, *bt_th_bar;
   switch (msg) {
     case MSG_KEY:
       {
@@ -218,19 +203,19 @@ mcgdb_aux_dialog_callback (Widget * w, Widget * sender, widget_msg_t msg, int pa
         WIDGET(vars_regs_table)->lines  =VARS_REGS_TABLE_LINES(LINES);
         WIDGET(vars_regs_table)->cols   =VARS_REGS_TABLE_COLS(COLS);
         wtable_update_bound(vars_regs_table);
-
-        vars_regs_bar = (Wselbar *) dlg_find_by_id(h, VARS_REGS_BAR_ID);
+/*
+        vars_regs_bar = (Selbar *) dlg_find_by_id(h, VARS_REGS_BAR_ID);
         WIDGET(vars_regs_bar)->x      =   VARS_REGS_BAR_X(COLS);
         WIDGET(vars_regs_bar)->y      =   VARS_REGS_BAR_Y(LINES);
         WIDGET(vars_regs_bar)->lines  =   VARS_REGS_BAR_LINES(LINES);
         WIDGET(vars_regs_bar)->cols   =   VARS_REGS_BAR_COLS(COLS);
 
-        bt_th_bar = (Wselbar *) dlg_find_by_id(h, BT_TH_BAR_ID);
+        bt_th_bar = (Selbar *) dlg_find_by_id(h, BT_TH_BAR_ID);
         WIDGET(bt_th_bar)->x      =   BT_TH_BAR_X(COLS);
         WIDGET(bt_th_bar)->y      =   BT_TH_BAR_Y(LINES);
         WIDGET(bt_th_bar)->lines  =   BT_TH_BAR_LINES(LINES);
         WIDGET(bt_th_bar)->cols   =   BT_TH_BAR_COLS(COLS);
-        
+*/
 
 
         bt_th_table = (WTable *) dlg_find_by_id(h, BT_TH_TABLE_ID);
@@ -266,12 +251,17 @@ ghfunc_table_update_bounds(__attribute__((unused)) gpointer key, gpointer value,
   WTable * wtab = WTABLE(user_data);
   Widget * w = WIDGET(wtab);
   Table  * tab  = TABLE(value);
-  table_update_bounds(tab, w->y+1,w->x+1,w->lines-2,w->cols-2);
+  table_update_bounds(tab, w->y+2,w->x+1,w->lines-3,w->cols-2);
 }
 
 static void
 wtable_update_bound(WTable *wtab) {
+  Selbar *selbar = wtab->selbar;
   g_hash_table_foreach (wtab->tables, ghfunc_table_update_bounds, wtab);
+  selbar->x     = WIDGET(wtab)->x;
+  selbar->y     = WIDGET(wtab)->y;
+  selbar->cols  = WIDGET(wtab)->cols;
+  selbar->lines = 1;
 }
 
 static WTable *
@@ -288,6 +278,7 @@ wtable_new (int y, int x, int height, int width)
     widget_init (w, y, x, height, width, wtable_callback, wtable_mouse_callback);
     w->options |=   WOP_SELECTABLE;
     wtab->tables = g_hash_table_new (g_str_hash,  g_str_equal );
+    wtab->selbar = selbar_new (y,x,1,width);
     return wtab;
 }
 
@@ -299,15 +290,22 @@ wtable_add_table(WTable *wtab, const char *tabname, int ncols, ...) {
   tab = table_new(ncols,ap);
   table_set_colwidth_formula(tab, formula_adapt_col);
   g_hash_table_insert ( wtab->tables, (gpointer) tabname, (gpointer) tab);
+  selbar_add_button   ( wtab->selbar, tabname);
   va_end(ap);
 }
 
 static void
 wtable_set_current_table(WTable *wtab, const char *tabname) {
   wtab->tab = g_hash_table_lookup (wtab->tables, tabname);
-  table_draw (wtab->tab);
   assert(wtab->tab!=NULL);
+  selbar_set_current_button(wtab->selbar,tabname);
 }
+
+static Table *
+wtable_get_table(WTable *wtab, const char *tabname) {
+  return g_hash_table_lookup (wtab->tables, tabname);
+}
+
 
 static table_row *
 table_row_alloc(long ncols, va_list ap) {
@@ -577,14 +575,20 @@ wtable_callback (Widget * w, __attribute__((unused)) Widget * sender, widget_msg
 static void
 wtable_draw(WTable *wtab) {
   table_draw (wtab->tab);
-  tty_draw_box(WIDGET(wtab)->y, WIDGET(wtab)->x, WIDGET(wtab)->lines, WIDGET(wtab)->cols, FALSE);
+  tty_draw_box (WIDGET(wtab)->y+1, WIDGET(wtab)->x, WIDGET(wtab)->lines-1, WIDGET(wtab)->cols, FALSE);
+  selbar_draw (wtab->selbar);
   wtab->tab->redraw = REDRAW_NONE;
   //widget_move (wtab, LINES, COLS);
 }
 
 static void
-wtable_mouse_callback (Widget * w, mouse_msg_t msg, __attribute__((unused)) mouse_event_t * event) {
+wtable_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
   WTable *wtab = (WTable *)w;
+
+  if (event->y==0) {
+    selbar_mouse_callback (w, msg, event);
+    return;
+  }
 
   switch (msg) {
     case MSG_MOUSE_SCROLL_UP:
@@ -610,23 +614,36 @@ find_wtable (WDialog *h) {
   return (WTable *) find_widget_type(h, wtable_callback);
 }
 
-Wselbar *
+Selbar *
 find_selbar (WDialog *h) {
-  return (Wselbar *) find_widget_type (h, selbar_callback);
+  return (Selbar *) find_widget_type (h, selbar_callback);
 }
 
 /////////////////////////////////////////////////////////////
 
+static void
+selbar_set_current_button(Selbar *selbar, const char *tabname) {
+  GList *button = selbar->buttons;
+  g_list_foreach (selbar->buttons, reset_selected, NULL);
+  while (button) {
+    SelbarButton * btn = SELBAR_BUTTON(button->data);
+    if( !strcmp(btn->text,tabname) ) {
+      btn->selected=TRUE;
+      return;
+    }
+    button = button->next;
+  }
+}
 
 static void
-selbar_draw (Wselbar *bar) {
+selbar_draw (Selbar *bar) {
   GList * button = bar->buttons;
-  Widget *w = WIDGET(bar);
+  long x=bar->x,y=bar->y,cols=bar->cols,lines=bar->lines;
   int cnt=0;
   bar->redraw=FALSE;
   tty_setcolor(EDITOR_NORMAL_COLOR);
-  tty_fill_region(w->y,w->x,w->lines,w->cols,' ');
-  tty_gotoyx(w->y,w->x);
+  tty_fill_region(y,x,lines,cols,' ');
+  tty_gotoyx(y,x);
   cnt++;
   tty_print_char(' ');
   while(button) {
@@ -638,15 +655,15 @@ selbar_draw (Wselbar *bar) {
     else
       tty_setcolor(bar->normal_color);
     p = btn->text;
-    if (cnt > w->cols)
+    if (cnt > cols)
       break;
     while(*p) {
       tty_print_char(*p++);
-      if (++cnt>=w->cols)
+      if (++cnt>=cols)
         break;
     }
     btn->x2 = cnt;
-    if (cnt<w->cols) {
+    if (cnt<cols) {
       cnt++;
       tty_setcolor(EDITOR_NORMAL_COLOR);
       tty_print_char(' ');
@@ -666,7 +683,7 @@ selbar_callback (Widget * w,
                             widget_msg_t msg,
     __attribute__((unused)) int parm,
     __attribute__((unused)) void *data) {
-  Wselbar *bar = (Wselbar *)w;
+  Selbar *bar = (Selbar *)w;
   switch (msg) {
     case MSG_DRAW:
       selbar_draw (bar);
@@ -698,57 +715,60 @@ reset_selected (gpointer data, __attribute__((unused)) gpointer user_data) {
 static void
 selbar_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
   int click_x;
-  Wselbar *selbar = (Wselbar *)w;
+  WTable *wtab = WTABLE(w);
+  Selbar *selbar = wtab->selbar;
   GList * button;
   switch (msg) {
     case MSG_MOUSE_CLICK:
       click_x = event->x;
       button = g_list_find_custom ( selbar->buttons, &click_x, find_button_in_list );
       if (button) {
-        g_list_foreach (selbar->buttons, reset_selected, NULL);
-        SELBAR_BUTTON(button->data)->selected=TRUE;
+        SelbarButton *btn = SELBAR_BUTTON(button->data);
+        //g_list_foreach (selbar->buttons, reset_selected, NULL);
+        //btn->selected=TRUE;
+        wtable_set_current_table(wtab,btn->text);
         selbar->redraw = TRUE;
-        SELBAR_BUTTON(button->data)->callback(DIALOG(w->owner));
       }
       break;
     default:
       break;
   }
   if (selbar->redraw)
-    selbar_draw (selbar);
+    wtable_draw (wtab);
 }
 
 
-static Wselbar *
+static Selbar *
 selbar_new (int y, int x, int height, int width) {
-    Wselbar *selbar;
-    Widget *w;
+    Selbar *selbar;
 
     if (height <= 0)
         height = 1;
 
-    selbar = g_new0 (Wselbar, 1);
-    w = WIDGET (selbar);
-    widget_init (w, y, x, height, width, selbar_callback, selbar_mouse_callback);
-    w->options = 0;
+    selbar = g_new0 (Selbar, 1);
     selbar->buttons=NULL;
     selbar->selected_color = tty_try_alloc_color_pair2 ("red", "black", "bold", FALSE);
     selbar->normal_color = tty_try_alloc_color_pair2 ("white", "cyan",   NULL, FALSE);
+    selbar->x=x;
+    selbar->y=y;
+    selbar->lines=height;
+    selbar->cols=width;
     return selbar;
 
 }
 
-void selbar_add_button(Wselbar *selbar, const char * text, void (*callback) (WDialog *h), gboolean selected) {
+
+void selbar_add_button(Selbar *selbar, const char * text) {
   SelbarButton *btn = g_new0 (SelbarButton,1);
-  btn->text = strdup(text);
-  btn->callback=callback;
-  btn->selected = selected;
+  btn->text = strdup (text);
+  btn->selected = FALSE;
   selbar->buttons = g_list_append (selbar->buttons, (gpointer)btn);
 }
 
 static void
 stub (__attribute__((unused)) WDialog *h) {}
 
+/*
 #define SELECTBAR_CALLBACK(NAME,ID)\
 static void \
 NAME ## _selected (WDialog *h) {\
@@ -760,12 +780,11 @@ SELECTBAR_CALLBACK(localvars,VARS_REGS_TABLE_ID)
 SELECTBAR_CALLBACK(registers,VARS_REGS_TABLE_ID)
 SELECTBAR_CALLBACK(backtrace,BT_TH_TABLE_ID)
 SELECTBAR_CALLBACK(threads,  BT_TH_TABLE_ID)
-
+*/
 
 int
 mcgdb_aux_dlg(void) {
   WDialog *aux_dlg;
-  Wselbar *vars_regs_bar, *bt_th_bar;
   WTable  *vars_regs_table, *bt_th_table;
 
   //int wait_gdb=1;
@@ -794,7 +813,7 @@ mcgdb_aux_dlg(void) {
   wtable_update_bound(bt_th_table);
 
 
-
+/*
   vars_regs_bar = selbar_new (
     VARS_REGS_BAR_Y(LINES),
     VARS_REGS_BAR_X(COLS),
@@ -812,17 +831,17 @@ mcgdb_aux_dlg(void) {
     BT_TH_BAR_COLS(COLS));
   selbar_add_button (bt_th_bar,"backtrace",backtrace_selected,TRUE);
   selbar_add_button (bt_th_bar,"threads",threads_selected,FALSE);
-
+*/
   aux_dlg = dlg_create (FALSE, 0, 0, 0, 0, WPOS_FULLSCREEN, FALSE, NULL, mcgdb_aux_dialog_callback,
                     mcgdb_aux_dialog_mouse_callback, "[GDB]", NULL);
   add_widget (aux_dlg, vars_regs_table);
-  add_widget (aux_dlg, vars_regs_bar);
+  //add_widget (aux_dlg, vars_regs_bar);
   add_widget (aux_dlg, bt_th_table);
-  add_widget (aux_dlg, bt_th_bar);
+  //add_widget (aux_dlg, bt_th_bar);
   VARS_REGS_TABLE_ID    =   WIDGET(vars_regs_table)->id;
-  VARS_REGS_BAR_ID      =   WIDGET(vars_regs_bar)->id;
+  //VARS_REGS_BAR_ID      =   WIDGET(vars_regs_bar)->id;
   BT_TH_TABLE_ID        =   WIDGET(bt_th_table)->id;
-  BT_TH_BAR_ID          =   WIDGET(bt_th_bar)->id;
+  //BT_TH_BAR_ID          =   WIDGET(bt_th_bar)->id;
   dlg_run (aux_dlg);
   return 0;
 }
