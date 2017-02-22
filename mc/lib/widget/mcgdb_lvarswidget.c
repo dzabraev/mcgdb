@@ -33,42 +33,21 @@
 
 
 
-#define VARS_REGS_WIDGET_X      1
-#define VARS_REGS_WIDGET_Y      1
-#define VARS_REGS_WIDGET_LINES  (LINES - VARS_REGS_WIDGET_Y)
-#define VARS_REGS_WIDGET_COLS   (COLS/2 - VARS_REGS_WIDGET)
+#define VARS_REGS_WIDGET_X      0
+#define VARS_REGS_WIDGET_Y      0
+#define VARS_REGS_WIDGET_LINES  (LINES)
+#define VARS_REGS_WIDGET_COLS   (COLS/2)
 
 
-#define VARS_REGS_BAR_X(COLS)      0
-#define VARS_REGS_BAR_Y(LINES)     0
-#define VARS_REGS_BAR_LINES(LINES) 1
-#define VARS_REGS_BAR_COLS(COLS)   (COLS/2)
-
-
-#define VARS_REGS_TABLE_X(COLS)       VARS_REGS_BAR_X(COLS)
-#define VARS_REGS_TABLE_Y(LINES)      (VARS_REGS_BAR_Y(LINES)+1)
-#define VARS_REGS_TABLE_LINES(LINES)  ((LINES)-1)
-#define VARS_REGS_TABLE_COLS(COLS)    VARS_REGS_BAR_COLS(COLS)
-
-#define BT_TH_BAR_X(COLS)       ((COLS/2))
-#define BT_TH_BAR_Y(LINES)      0
-#define BT_TH_BAR_LINES(LINES)  1
-#define BT_TH_BAR_COLS(COLS)    (COLS - (COLS/2))
-
-#define BT_TH_TABLE_X(COLS)       BT_TH_BAR_X(COLS)
-#define BT_TH_TABLE_Y(LINES)      1
-#define BT_TH_TABLE_LINES(LINES)  (LINES-1)
-#define BT_TH_TABLE_COLS(COLS)    BT_TH_BAR_COLS(COLS)
-
-#define SELBAR_BUTTON(x) ((SelbarButton *)x)
+#define BT_TH_WIDGET_X      (COLS/2)
+#define BT_TH_WIDGET_Y      0
+#define BT_TH_WIDGET_LINES  (LINES)
+#define BT_TH_WIDGET_COLS   (COLS-BT_TH_WIDGET_X)
 
 
 
 static int VARS_REGS_TABLE_ID;
-static int VARS_REGS_BAR_ID;
 static int BT_TH_TABLE_ID;
-static int BT_TH_BAR_ID;
-
 
 
 
@@ -142,7 +121,62 @@ pkg_localvars(json_t *pkg, WTable *wtab) {
       json_string_value(json_object_get(elem,"value"))
     );
   }
-  table_update_colwidth(wtab->tab);
+  table_update_colwidth(tab);
+}
+
+static char *
+make_func_args (json_t * elem) {
+  json_t *args = json_object_get(elem,"args");
+  size_t size = json_array_size(args), psize=0;
+  char *buf = malloc(1024);
+  size_t bufsize=1024;
+  psize+=snprintf(buf+psize,bufsize-psize,"%s (", //)
+    json_string_value(json_object_get(elem,"func")));
+  for(size_t i=0;i<size;i++) {
+    json_t * arg = json_array_get(args,i);
+    psize+=snprintf(buf+psize,bufsize-psize,"%s=%s,",
+      json_string_value(json_object_get(arg,"name")),
+      json_string_value(json_object_get(arg,"value"))
+    );
+  }
+  if(size>0)
+    buf[psize-1]=0;
+  psize+=snprintf(buf+psize,bufsize-psize,/*(*/")");
+  return buf;
+}
+
+static char *
+make_filename_line (json_t * elem) {
+  char *ptr;
+  asprintf(&ptr,"%s:%d",
+    json_string_value(json_object_get(elem,"filename")),
+    json_integer_value(json_object_get(elem,"line"))
+  );
+  return ptr;
+}
+
+
+static void
+pkg_backtrace(json_t *pkg, WTable *wtab) {
+  json_t *backtrace = json_object_get(pkg,"backtrace");
+  size_t size = json_array_size(backtrace);
+  Table *tab = wtable_get_table(wtab,"backtrace");
+  table_clear_rows(tab);
+  for(size_t i=0;i<size;i++) {
+    json_t * elem = json_array_get(backtrace,i);
+    char * func_args_str = make_func_args (elem);
+    char * filename_line = make_filename_line (elem);
+    char nframe[100];
+    snprintf(nframe,sizeof(nframe),"%d",json_integer_value(json_object_get(elem,"nframe")));
+    table_add_row (tab,
+      nframe,
+      func_args_str,
+      filename_line
+    );
+    free(func_args_str);
+    free(filename_line);
+  }
+  table_update_colwidth(tab);
 }
 
 static void
@@ -155,9 +189,11 @@ mcgdb_aux_dialog_gdbevt (WDialog *h) {
   switch(act->command) {
     case MCGDB_LOCALVARS:
       wtab = (WTable *)dlg_find_by_id(h, VARS_REGS_TABLE_ID);
-      if (wtab) {
-        pkg_localvars(pkg,wtab);
-      }
+      pkg_localvars(pkg,wtab);
+      break;
+    case MCGDB_BACKTRACE:
+      wtab = (WTable *)dlg_find_by_id(h, BT_TH_TABLE_ID);
+      pkg_backtrace(pkg,wtab);
       break;
     default:
       break;
@@ -198,31 +234,17 @@ mcgdb_aux_dialog_callback (Widget * w, Widget * sender, widget_msg_t msg, int pa
         w->lines = LINES;
         w->cols = COLS;
         vars_regs_table = (WTable *) dlg_find_by_id(h, VARS_REGS_TABLE_ID);
-        WIDGET(vars_regs_table)->x      =VARS_REGS_TABLE_X(COLS);
-        WIDGET(vars_regs_table)->y      =VARS_REGS_TABLE_Y(LINES);
-        WIDGET(vars_regs_table)->lines  =VARS_REGS_TABLE_LINES(LINES);
-        WIDGET(vars_regs_table)->cols   =VARS_REGS_TABLE_COLS(COLS);
+        WIDGET(vars_regs_table)->x      =VARS_REGS_WIDGET_X;
+        WIDGET(vars_regs_table)->y      =VARS_REGS_WIDGET_Y;
+        WIDGET(vars_regs_table)->lines  =VARS_REGS_WIDGET_LINES;
+        WIDGET(vars_regs_table)->cols   =VARS_REGS_WIDGET_COLS;
         wtable_update_bound(vars_regs_table);
-/*
-        vars_regs_bar = (Selbar *) dlg_find_by_id(h, VARS_REGS_BAR_ID);
-        WIDGET(vars_regs_bar)->x      =   VARS_REGS_BAR_X(COLS);
-        WIDGET(vars_regs_bar)->y      =   VARS_REGS_BAR_Y(LINES);
-        WIDGET(vars_regs_bar)->lines  =   VARS_REGS_BAR_LINES(LINES);
-        WIDGET(vars_regs_bar)->cols   =   VARS_REGS_BAR_COLS(COLS);
-
-        bt_th_bar = (Selbar *) dlg_find_by_id(h, BT_TH_BAR_ID);
-        WIDGET(bt_th_bar)->x      =   BT_TH_BAR_X(COLS);
-        WIDGET(bt_th_bar)->y      =   BT_TH_BAR_Y(LINES);
-        WIDGET(bt_th_bar)->lines  =   BT_TH_BAR_LINES(LINES);
-        WIDGET(bt_th_bar)->cols   =   BT_TH_BAR_COLS(COLS);
-*/
-
 
         bt_th_table = (WTable *) dlg_find_by_id(h, BT_TH_TABLE_ID);
-        WIDGET(bt_th_table)->x      =   BT_TH_TABLE_X(COLS);
-        WIDGET(bt_th_table)->y      =   BT_TH_TABLE_Y(LINES);
-        WIDGET(bt_th_table)->lines  =   BT_TH_TABLE_LINES(LINES);
-        WIDGET(bt_th_table)->cols   =   BT_TH_TABLE_COLS(COLS);
+        WIDGET(bt_th_table)->x      =   BT_TH_WIDGET_X;
+        WIDGET(bt_th_table)->y      =   BT_TH_WIDGET_Y;
+        WIDGET(bt_th_table)->lines  =   BT_TH_WIDGET_LINES;
+        WIDGET(bt_th_table)->cols   =   BT_TH_WIDGET_COLS;
         wtable_update_bound(bt_th_table);
 
 
@@ -455,6 +477,7 @@ table_update_colwidth(Table * tab) {
   long x        = tab->x;
   long ncols    = tab->ncols;
   long cols     = tab->cols;
+  tab->colstart[0] = x;
   for(int i=0;i<ncols;i++) {
     tab->colstart[i+1] = tab->colstart[i] + tab->formula(tab,i);
   }
@@ -578,7 +601,6 @@ wtable_draw(WTable *wtab) {
   tty_draw_box (WIDGET(wtab)->y+1, WIDGET(wtab)->x, WIDGET(wtab)->lines-1, WIDGET(wtab)->cols, FALSE);
   selbar_draw (wtab->selbar);
   wtab->tab->redraw = REDRAW_NONE;
-  //widget_move (wtab, LINES, COLS);
 }
 
 static void
@@ -724,8 +746,6 @@ selbar_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
       button = g_list_find_custom ( selbar->buttons, &click_x, find_button_in_list );
       if (button) {
         SelbarButton *btn = SELBAR_BUTTON(button->data);
-        //g_list_foreach (selbar->buttons, reset_selected, NULL);
-        //btn->selected=TRUE;
         wtable_set_current_table(wtab,btn->text);
         selbar->redraw = TRUE;
       }
@@ -768,19 +788,6 @@ void selbar_add_button(Selbar *selbar, const char * text) {
 static void
 stub (__attribute__((unused)) WDialog *h) {}
 
-/*
-#define SELECTBAR_CALLBACK(NAME,ID)\
-static void \
-NAME ## _selected (WDialog *h) {\
-  WTable *wtab = (WTable *) dlg_find_by_id(h, ID);\
-  wtable_set_current_table(wtab,#NAME);\
-}\
-
-SELECTBAR_CALLBACK(localvars,VARS_REGS_TABLE_ID)
-SELECTBAR_CALLBACK(registers,VARS_REGS_TABLE_ID)
-SELECTBAR_CALLBACK(backtrace,BT_TH_TABLE_ID)
-SELECTBAR_CALLBACK(threads,  BT_TH_TABLE_ID)
-*/
 
 int
 mcgdb_aux_dlg(void) {
@@ -791,10 +798,10 @@ mcgdb_aux_dlg(void) {
   //while(wait_gdb) {}
 
   vars_regs_table = wtable_new (
-    VARS_REGS_TABLE_Y(LINES),
-    VARS_REGS_TABLE_X(COLS),
-    VARS_REGS_TABLE_LINES(LINES),
-    VARS_REGS_TABLE_COLS(COLS)
+    VARS_REGS_WIDGET_Y,
+    VARS_REGS_WIDGET_X,
+    VARS_REGS_WIDGET_LINES,
+    VARS_REGS_WIDGET_COLS
   );
   wtable_add_table(vars_regs_table,"localvars",2,"name","value");
   wtable_add_table(vars_regs_table,"registers",3,"","","");
@@ -802,46 +809,22 @@ mcgdb_aux_dlg(void) {
   wtable_update_bound(vars_regs_table);
 
   bt_th_table = wtable_new (
-    BT_TH_TABLE_Y(LINES),
-    BT_TH_TABLE_X(COLS),
-    BT_TH_TABLE_LINES(LINES),
-    BT_TH_TABLE_COLS(COLS)
+    BT_TH_WIDGET_Y,
+    BT_TH_WIDGET_X,
+    BT_TH_WIDGET_LINES,
+    BT_TH_WIDGET_COLS
   );
-  wtable_add_table (bt_th_table,"backtrace",5,"","","","","");
+  wtable_add_table (bt_th_table,"backtrace",3,"","","");
   wtable_add_table (bt_th_table,"threads",3,"","","");
   wtable_set_current_table (bt_th_table,"backtrace");
   wtable_update_bound(bt_th_table);
 
-
-/*
-  vars_regs_bar = selbar_new (
-    VARS_REGS_BAR_Y(LINES),
-    VARS_REGS_BAR_X(COLS),
-    VARS_REGS_BAR_LINES(LINES),
-    VARS_REGS_BAR_COLS(COLS)
-  );
-
-  selbar_add_button (vars_regs_bar,"localvars",localvars_selected,TRUE);
-  selbar_add_button (vars_regs_bar,"registers",registers_selected,FALSE);
-
-  bt_th_bar = selbar_new (
-    BT_TH_BAR_Y(LINES),
-    BT_TH_BAR_X(COLS),
-    BT_TH_BAR_LINES(LINES),
-    BT_TH_BAR_COLS(COLS));
-  selbar_add_button (bt_th_bar,"backtrace",backtrace_selected,TRUE);
-  selbar_add_button (bt_th_bar,"threads",threads_selected,FALSE);
-*/
   aux_dlg = dlg_create (FALSE, 0, 0, 0, 0, WPOS_FULLSCREEN, FALSE, NULL, mcgdb_aux_dialog_callback,
                     mcgdb_aux_dialog_mouse_callback, "[GDB]", NULL);
   add_widget (aux_dlg, vars_regs_table);
-  //add_widget (aux_dlg, vars_regs_bar);
   add_widget (aux_dlg, bt_th_table);
-  //add_widget (aux_dlg, bt_th_bar);
   VARS_REGS_TABLE_ID    =   WIDGET(vars_regs_table)->id;
-  //VARS_REGS_BAR_ID      =   WIDGET(vars_regs_bar)->id;
   BT_TH_TABLE_ID        =   WIDGET(bt_th_table)->id;
-  //BT_TH_BAR_ID          =   WIDGET(bt_th_bar)->id;
   dlg_run (aux_dlg);
   return 0;
 }

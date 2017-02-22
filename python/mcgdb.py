@@ -432,6 +432,16 @@ class LocalVarsWindow(BaseWindow):
     lvars=self.__get_local_vars()
     pkg={'cmd':'localvars','localvars':lvars}
     self.send(pkg)
+  def update_backtrace(self):
+    try:
+      backtrace = self.get_stack()
+    except gdb.error:
+      return
+    pkg={
+      'cmd':'backtrace',
+      'backtrace':backtrace,
+    }
+    self.send(pkg)
   def gdb_check_breakpoint(self):
     pass
   def set_color(self,pkg):
@@ -473,6 +483,40 @@ class LocalVarsWindow(BaseWindow):
       self.update_localvars()
     return rc
 
+  def _get_frame_func_args(self,frame):
+    args=[]
+    block=frame.block()
+    while block:
+      for sym in block:
+        if sym.is_argument:
+          args.append({'name':sym.name,'value':str(sym.value(frame))})
+      block=block.superblock
+      if (not block) or block.function:
+        break
+    return args
+
+  def _get_stack_1(self):
+    frame = gdb.newest_frame ()
+    nframe=0
+    frames=[]
+    while frame:
+      frame_func_name = frame.name()
+      frame_func_args = self._get_frame_func_args(frame)
+      frame_line      = frame.find_sal().line
+      frame_filename  = frame.find_sal().symtab.filename
+      frames.append({
+        'func'    :   frame_func_name,
+        'line'    :   frame_line,
+        'filename':   frame_filename,
+        'args'    :   frame_func_args,
+        'nframe'  :   nframe,
+      })
+      nframe+=1
+      frame = frame.older()
+    return frames
+
+  def get_stack(self):
+    return exec_in_main_pythread (self._get_stack_1,())
 
 
 class MainWindow(BaseWindow):
@@ -670,6 +714,7 @@ class GEThread(object):
           win.gdb_update_current_frame(filename,line)
         elif win.type in ('localvars_window'):
           win.update_localvars()
+          win.update_backtrace()
       self.exec_filename=filename
       self.exec_line=line
 

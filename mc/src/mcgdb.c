@@ -283,6 +283,9 @@ get_command_num(json_t *pkg) {
     else if (compare_cmd("localvars")) {
       return MCGDB_LOCALVARS;
     }
+    else if (compare_cmd("backtrace")) {
+      return MCGDB_BACKTRACE;
+    }
     else {
       return MCGDB_UNKNOWN;
     }

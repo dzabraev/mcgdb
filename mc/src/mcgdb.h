@@ -28,6 +28,7 @@ enum gdb_cmd {
 
   /*localwars widget*/
   MCGDB_LOCALVARS,
+  MCGDB_BACKTRACE,
 };
 
 enum window_type {
