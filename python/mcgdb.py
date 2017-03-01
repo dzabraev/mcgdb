@@ -509,13 +509,16 @@ class LocalVarsWindow(BaseWindow):
       frame_line      = frame.find_sal().line
       symtab = frame.find_sal().symtab
       frame_filename  = symtab.filename if symtab else ''
-      frames.append({
+      frm={
         'func'    :   frame_func_name,
         'line'    :   frame_line,
         'filename':   frame_filename,
         'args'    :   frame_func_args,
         'nframe'  :   nframe,
-      })
+      }
+      if frame == gdb.selected_frame ():
+        frm['selected_frame']=True
+      frames.append(frm)
       nframe+=1
       frame = frame.older()
     return frames

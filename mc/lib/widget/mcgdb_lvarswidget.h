@@ -43,6 +43,7 @@ typedef struct {
   long ncols;
   long y1;
   long y2;
+  int *color; /*color of cells*/
 } table_row;
 
 

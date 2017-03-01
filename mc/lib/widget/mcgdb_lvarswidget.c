@@ -49,7 +49,7 @@
 static int VARS_REGS_TABLE_ID;
 static int BT_TH_TABLE_ID;
 
-
+int color_selected_frame;
 
 static cb_ret_t mcgdb_aux_dialog_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *data);
 static cb_ret_t wtable_callback           (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *data);
@@ -65,7 +65,7 @@ static table_row *  table_row_alloc(long ncols, va_list ap);
 static void         table_row_destroy(table_row *row);
 static void         table_update_bounds(Table * tab, long y, long x, long lines, long cols);
 static Table *      table_new (long ncols, va_list ap);
-static void         table_add_row (Table * tab, ...);
+static int          table_add_row (Table * tab, ...);
 static void         table_destroy(Table *tab);
 static void         table_clear_rows(Table * tab);
 static void         table_draw(Table * tab);
@@ -73,6 +73,7 @@ static void         table_draw_row (Table * tab, table_row *r);
 static void         table_draw_colnames (Table * tab, table_row *r);
 static void         table_update_colwidth(Table * tab);
 static void         table_set_colwidth_formula(Table * tab, int (*formula)(const Table * tab, int ncol));
+static void         table_setcolor(Table *tab, int nrow, int ncol, int color);
 static int          formula_eq_col(const Table * tab, int ncol);
 static int          formula_adapt_col(const Table * tab, int ncol);
 static void         wtable_update_bound(WTable *wtab);
@@ -164,18 +165,23 @@ pkg_backtrace(json_t *pkg, WTable *wtab) {
   json_t *backtrace = json_object_get(pkg,"backtrace");
   size_t size = json_array_size(backtrace);
   Table *tab = wtable_get_table(wtab,"backtrace");
+  int nrow;
   table_clear_rows(tab);
   for(size_t i=0;i<size;i++) {
-    json_t * elem = json_array_get(backtrace,i);
+    json_t * elem = json_array_get(backtrace,i), *sf;
     char * func_args_str = make_func_args (elem);
     char * filename_line = make_filename_line (elem);
     char nframe[100];
     snprintf(nframe,sizeof(nframe),"%d",json_integer_value(json_object_get(elem,"nframe")));
-    table_add_row (tab,
+    nrow = table_add_row (tab,
       nframe,
       func_args_str,
       filename_line
     );
+    sf = json_object_get (elem, "selected_frame");
+    if (sf && json_boolean_value (sf)) {
+      table_setcolor(tab, nrow, 0, color_selected_frame);
+    }
     free(func_args_str);
     free(filename_line);
   }
@@ -337,11 +343,20 @@ table_row_alloc(long ncols, va_list ap) {
   table_row * row = g_new0 (table_row,1);
   row->ncols=ncols;
   row->columns = (char **)g_new0(char *, ncols);
+  row->color   = (int *)g_new(int, ncols);
   for (int col=0;col<ncols;col++) {
     char *val = va_arg(ap, char *);
     row->columns[col] = strdup(val);
+    row->color[col]=EDITOR_NORMAL_COLOR;
   }
   return row;
+}
+
+
+static void
+table_row_setcolor(table_row *row, int col, int color) {
+  assert(col<row->ncols);
+  row->color[col]=color;
 }
 
 static void
@@ -362,6 +377,7 @@ static void
 table_clear_rows(Table * tab) {
   g_list_free_full (tab->rows,table_row_destroy_g);
   tab->rows = NULL;
+  tab->nrows=0;
 }
 
 
@@ -413,6 +429,7 @@ table_draw_row (Table * tab, table_row *row) {
   long offset;
   row->y1 = ROW_OFFSET(tab,0);
   for(int i=0;i<tab->ncols;i++) {
+    tty_setcolor(row->color[i]); /*цвет ячейки*/
     p = columns[i];
     x1 = i==0?colstart[i]:colstart[i]+1;
     x2 = colstart[i+1];
@@ -422,6 +439,8 @@ table_draw_row (Table * tab, table_row *row) {
       tty_gotoyx(offset,x1);
     for(long colcnt=x1;*p;p++,colcnt++) {
       if(colcnt==x2) {
+        /*допечатали до правой границы столбца таблицы
+         *делаем перенос строки.*/
         rowcnt++;
         offset=ROW_OFFSET(tab,rowcnt);
         if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
@@ -488,6 +507,13 @@ table_update_colwidth(Table * tab) {
 }
 
 static void
+table_setcolor(Table *tab, int nrow, int ncol, int color) {
+  table_row *row = (table_row *) g_list_nth_data (tab->rows, nrow);
+  assert(row!=NULL);
+  table_row_setcolor(row, ncol, color);
+}
+
+static void
 table_update_bounds(Table * tab, long y, long x, long lines, long cols) {
   tab->x = x;
   tab->y = y;
@@ -528,7 +554,7 @@ table_add_colnames (Table * tab, ...) {
   va_end(ap);
 }
 
-static void
+static int
 table_add_row (Table * tab, ...) {
   long ncols = tab->ncols;
   table_row *row;
@@ -536,8 +562,8 @@ table_add_row (Table * tab, ...) {
   va_start (ap, tab);
   row = table_row_alloc (ncols, ap);
   tab->rows = g_list_append (tab->rows, row);
-  tab->nrows++;
   va_end(ap);
+  return tab->nrows++;
 }
 
 static void
@@ -799,6 +825,8 @@ mcgdb_aux_dlg(void) {
 
   //int wait_gdb=1;
   //while(wait_gdb) {}
+
+  color_selected_frame = tty_try_alloc_color_pair2 ("red", "black", "bold", FALSE);
 
   vars_regs_table = wtable_new (
     VARS_REGS_WIDGET_Y,
