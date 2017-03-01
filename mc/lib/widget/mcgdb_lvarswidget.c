@@ -139,19 +139,22 @@ make_func_args (json_t * elem) {
       json_string_value(json_object_get(arg,"value"))
     );
   }
-  if(size>0)
-    buf[psize-1]=0;
+  if (size>0)
+    psize-=1; /*remove last `,`*/
   psize+=snprintf(buf+psize,bufsize-psize,/*(*/")");
+  if(size>0)
+    buf[psize<bufsize?psize:bufsize-1]=0;
   return buf;
 }
 
 static char *
 make_filename_line (json_t * elem) {
   char *ptr;
-  asprintf(&ptr,"%s:%d",
-    json_string_value(json_object_get(elem,"filename")),
-    json_integer_value(json_object_get(elem,"line"))
-  );
+  const char *filename = json_string_value(json_object_get(elem,"filename"));
+  if (strlen(filename)>0)
+    asprintf(&ptr,"%s:%d",filename,json_integer_value(json_object_get(elem,"line")));
+  else
+    asprintf(&ptr,"unknown");
   return ptr;
 }
 
@@ -381,7 +384,7 @@ formula_adapt_col(const Table * tab, int ncol) {
       if (width > max_width)
         max_width=width;
     }
-    return max_width>0?max_width:max_avail_width;
+    return max_width>0?max_width+1:max_avail_width;
   }
   else {
     if (ncols<=1)

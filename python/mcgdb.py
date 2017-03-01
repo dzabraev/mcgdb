@@ -481,19 +481,23 @@ class LocalVarsWindow(BaseWindow):
     rc=super(LocalVarsWindow,self).process_connection()
     if rc:
       self.update_localvars()
+      self.update_backtrace()
     return rc
 
   def _get_frame_func_args(self,frame):
     args=[]
-    block=frame.block()
-    while block:
-      for sym in block:
-        if sym.is_argument:
-          args.append({'name':sym.name,'value':str(sym.value(frame))})
-      block=block.superblock
-      if (not block) or block.function:
-        break
-    return args
+    try:
+      block=frame.block()
+      while block:
+        for sym in block:
+          if sym.is_argument:
+            args.append({'name':sym.name,'value':str(sym.value(frame))})
+        block=block.superblock
+        if (not block) or block.function:
+          break
+      return args
+    except RuntimeError:
+      return []
 
   def _get_stack_1(self):
     frame = gdb.newest_frame ()
@@ -503,7 +507,8 @@ class LocalVarsWindow(BaseWindow):
       frame_func_name = frame.name()
       frame_func_args = self._get_frame_func_args(frame)
       frame_line      = frame.find_sal().line
-      frame_filename  = frame.find_sal().symtab.filename
+      symtab = frame.find_sal().symtab
+      frame_filename  = symtab.filename if symtab else ''
       frames.append({
         'func'    :   frame_func_name,
         'line'    :   frame_line,
@@ -704,6 +709,14 @@ class GEThread(object):
     return exec_in_main_pythread(
           self.__get_current_position_main_thread,())
 
+  def _update_aux_window(self):
+    for fd in self.fte:
+      win=self.fte[fd]
+      if win.type in ('localvars_window'):
+        win.update_localvars()
+        win.update_backtrace()
+
+
   def __update_current_position_in_win(self):
     filename,line = self.__get_current_position()
     if (not filename or filename!=self.exec_filename) or \
@@ -712,9 +725,6 @@ class GEThread(object):
         win=self.fte[fd]
         if win.type in ('main_window','source_window'):
           win.gdb_update_current_frame(filename,line)
-        elif win.type in ('localvars_window'):
-          win.update_localvars()
-          win.update_backtrace()
       self.exec_filename=filename
       self.exec_line=line
 
@@ -770,21 +780,26 @@ class GEThread(object):
     elif cmd=='check_frame':
       self.__update_current_position_in_win()
       self.__check_breakpoint(pkg)
+      self._update_aux_window()
       breakpoint_queue.process()
     elif cmd=='inferior_stop':
       self.__update_current_position_in_win()
       self.__check_breakpoint(pkg)
+      self._update_aux_window()
       breakpoint_queue.process()
     elif cmd=='new_objfile':
       self.__update_current_position_in_win()
       self.__check_breakpoint(pkg)
+      self._update_aux_window()
       breakpoint_queue.process()
     elif cmd=='check_breakpoint':
       self.__check_breakpoint(pkg)
+      self._update_aux_window()
       breakpoint_queue.process()
     elif cmd=='inferior_exited':
       self.__update_current_position_in_win()
       self.__check_breakpoint(pkg)
+      self._update_aux_window()
       breakpoint_queue.process()
     elif cmd=='color':
       self.__set_color(pkg)
