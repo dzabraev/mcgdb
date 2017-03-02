@@ -66,6 +66,7 @@ static void         table_row_destroy(table_row *row);
 static void         table_update_bounds(Table * tab, long y, long x, long lines, long cols);
 static Table *      table_new (long ncols, va_list ap);
 static int          table_add_row (Table * tab, ...);
+static int          table_add_row_arr (Table * tab, const char **cols);
 static void         table_destroy(Table *tab);
 static void         table_clear_rows(Table * tab);
 static void         table_draw(Table * tab);
@@ -106,6 +107,33 @@ TAB_LAST_ROW(Table * tab) {
 static table_row *
 TAB_FIRST_ROW(Table * tab) {
   return tab->rows ? (table_row *)(tab->rows->data) : NULL;
+}
+
+
+static void
+insert_pkg_json_into_table(json_t *json_rows, Table *tab) {
+  const char ** colvals;
+  size_t size = json_array_size (json_rows);
+  if (!size)
+    return;
+  colvals = (const char **) g_new (char *, tab->ncols);
+  for (size_t i=0;i<size;i++) {
+    json_t * row = json_array_get (json_rows,i);
+    size_t rowsize = json_array_size (row);
+    assert((size_t)tab->ncols==rowsize);
+    for (int col=0;col<tab->ncols;col++) {
+      colvals[col] = json_string_value (json_array_get (row,col));
+    }
+    table_add_row_arr (tab,colvals);
+  }
+  g_free (colvals);
+}
+
+static void
+pkg_registers(json_t *pkg, WTable *wtab) {
+  Table *tab = wtable_get_table(wtab,"registers");
+  table_clear_rows(tab);
+  insert_pkg_json_into_table (json_object_get(pkg,"data"), tab);
 }
 
 static void
@@ -153,7 +181,7 @@ make_filename_line (json_t * elem) {
   char *ptr;
   const char *filename = json_string_value(json_object_get(elem,"filename"));
   if (strlen(filename)>0)
-    asprintf(&ptr,"%s:%d",filename,json_integer_value(json_object_get(elem,"line")));
+    asprintf(&ptr,"%s:%d",filename,(int)json_integer_value(json_object_get(elem,"line")));
   else
     asprintf(&ptr,"unknown");
   return ptr;
@@ -172,7 +200,7 @@ pkg_backtrace(json_t *pkg, WTable *wtab) {
     char * func_args_str = make_func_args (elem);
     char * filename_line = make_filename_line (elem);
     char nframe[100];
-    snprintf(nframe,sizeof(nframe),"%d",json_integer_value(json_object_get(elem,"nframe")));
+    snprintf(nframe,sizeof(nframe),"%d",(int) json_integer_value(json_object_get(elem,"nframe")));
     nrow = table_add_row (tab,
       nframe,
       func_args_str,
@@ -199,6 +227,10 @@ mcgdb_aux_dialog_gdbevt (WDialog *h) {
     case MCGDB_LOCALVARS:
       wtab = (WTable *)dlg_find_by_id(h, VARS_REGS_TABLE_ID);
       pkg_localvars(pkg,wtab);
+      break;
+    case MCGDB_REGISTERS:
+      wtab = (WTable *) dlg_find_by_id (h, VARS_REGS_TABLE_ID);
+      pkg_registers (pkg, wtab);
       break;
     case MCGDB_BACKTRACE:
       wtab = (WTable *)dlg_find_by_id(h, BT_TH_TABLE_ID);
@@ -347,6 +379,20 @@ table_row_alloc(long ncols, va_list ap) {
   for (int col=0;col<ncols;col++) {
     char *val = va_arg(ap, char *);
     row->columns[col] = strdup(val);
+    row->color[col]=EDITOR_NORMAL_COLOR;
+  }
+  return row;
+}
+
+
+static table_row *
+table_row_alloc_arr(long ncols, const char ** colval) {
+  table_row * row = g_new0 (table_row,1);
+  row->ncols=ncols;
+  row->columns = (char **)g_new0(char *, ncols);
+  row->color   = (int *)g_new(int, ncols);
+  for (int col=0;col<ncols;col++) {
+    row->columns[col] = strdup(colval[col]);
     row->color[col]=EDITOR_NORMAL_COLOR;
   }
   return row;
@@ -555,16 +601,30 @@ table_add_colnames (Table * tab, ...) {
 }
 
 static int
+_table_insert_row(Table * tab, table_row * row) {
+  tab->rows = g_list_append (tab->rows, row);
+  return tab->nrows++;
+}
+
+static int
 table_add_row (Table * tab, ...) {
   long ncols = tab->ncols;
   table_row *row;
+  int rc;
   va_list ap;
   va_start (ap, tab);
   row = table_row_alloc (ncols, ap);
-  tab->rows = g_list_append (tab->rows, row);
+  rc = _table_insert_row (tab,row);
   va_end(ap);
-  return tab->nrows++;
+  return rc;
 }
+
+static int
+table_add_row_arr (Table * tab, const char **cols) {
+ table_row *row = table_row_alloc_arr (tab->ncols,cols);
+ return _table_insert_row (tab,row);
+}
+
 
 static void
 table_add_offset(Table *tab, int off) {

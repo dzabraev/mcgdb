@@ -9,6 +9,9 @@ import re
 
 import gdb
 
+#NOTES
+# PATH_TO_DEFINES_MCGDB and PATH_TO_MC defined in python/mcgdb_const.py
+
 level = logging.CRITICAL
 #level = logging.WARNING
 #level = logging.DEBUG
@@ -17,6 +20,23 @@ logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(
 TMP_FILE_NAME="/tmp/mcgdb/mcgdb-tmp-file-{pid}.txt".format(pid=os.getpid())
 main_thread_ident=threading.current_thread().ident
 mcgdb_main=None
+
+class ThQueue(object):
+  def __init__(self):
+    self.mutex = threading.Lock()
+    self.queue=[]
+  def append(self,obj):
+    self.mutex.acquire()
+    self.queue.append(obj)
+    self.mutex.release()
+  def pop(self):
+    self.mutex.acquire()
+    obj=self.queue.pop(0)
+    self.mutex.release()
+    return obj
+
+
+gdbevt_queue = ThQueue()
 
 class IOFailure(Exception): pass
 
@@ -177,7 +197,7 @@ class BreakpointQueue(GdbBreakpoints):
   ''' Очередь для уаления и создания точек останова .
 
       Если в отладчике inferior запущен, то в gdb нельзя
-      вставлять и удалять точки сотанова. Вставлять/удалять
+      вставлять и удалять точки сотанова. Нужно вставлять/удалять
       breakpoint через данный класс. Когда точки останова можно
       будет модифицировать, точки останова, добавленные в объект
       данного класса автоматически будут вставлены в gdb.
@@ -408,6 +428,29 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     except:
       pass
 
+  def __get_current_position_1(self):
+    assert is_main_thread()
+    #Данную функцию можно вызывать только из main pythread или
+    #через функцию exec_in_main_pythread
+    try:
+      frame=gdb.selected_frame ()
+      filename=frame.find_sal().symtab.fullname()
+      line=frame.find_sal().line-1
+    except: #gdb.error:
+      #no frame selected or maybe inferior exited?
+      filename=None
+      line=None
+    return filename,line
+
+  def get_current_position(self):
+    '''Возвращает текущую позицию исполнения.
+
+        return:
+        (filename,line)
+    '''
+    return exec_in_main_pythread(self.__get_current_position_1,())
+
+
 
 
 class LocalVarsWindow(BaseWindow):
@@ -419,7 +462,17 @@ class LocalVarsWindow(BaseWindow):
 
   def __init__(self, **kwargs):
     super(LocalVarsWindow,self).__init__(**kwargs)
-    pass
+    self.regex_split = re.compile('\s*([^\s]+)\s+([^\s+]+)\s+(.*)')
+
+  def process_connection(self):
+    rc=super(LocalVarsWindow,self).process_connection()
+    if rc:
+      self.update_localvars()
+      self.update_backtrace()
+      self.update_registers()
+    return rc
+
+
   def gdb_inferior_stop(self):
     pass
   def gdb_inferior_exited(self):
@@ -440,6 +493,16 @@ class LocalVarsWindow(BaseWindow):
     pkg={
       'cmd':'backtrace',
       'backtrace':backtrace,
+    }
+    self.send(pkg)
+  def update_registers(self):
+    try:
+      regs = self.get_registers()
+    except gdb.error:
+      return
+    pkg={
+      'cmd':'registers',
+      'data':regs,
     }
     self.send(pkg)
   def gdb_check_breakpoint(self):
@@ -477,12 +540,6 @@ class LocalVarsWindow(BaseWindow):
     lvars.sort( cmp = lambda x,y: 1 if x['name']>y['name'] else -1 )
     return lvars
 
-  def process_connection(self):
-    rc=super(LocalVarsWindow,self).process_connection()
-    if rc:
-      self.update_localvars()
-      self.update_backtrace()
-    return rc
 
   def _get_frame_func_args(self,frame):
     args=[]
@@ -526,6 +583,73 @@ class LocalVarsWindow(BaseWindow):
   def get_stack(self):
     return exec_in_main_pythread (self._get_stack_1,())
 
+  def _get_regs_1(self):
+    regs=[]
+    for reginfo in gdb.execute('info all-registers',False,True).split('\n'):
+      reginfo = re.sub('\s+',' ',reginfo)
+      match=self.regex_split.match(reginfo)
+      if not match:
+        continue
+      regs.append(match.groups())
+    return regs
+
+  def get_registers(self):
+    return exec_in_main_pythread (self._get_regs_1,())
+
+  def process_gdbevt(self,name,evt):
+    if name=='cont':
+      pass
+    elif name=='exited':
+      self.update_localvars()
+      self.update_backtrace()
+      self.update_registers()
+    elif name=='stop':
+      self.update_localvars()
+      self.update_backtrace()
+      self.update_registers()
+    elif name=='new_objfile':
+      self.update_localvars()
+      self.update_backtrace()
+      self.update_registers()
+    elif name=='clear_objfiles':
+      self.update_localvars()
+      self.update_backtrace()
+      self.update_registers()
+    elif name=='inferior_call_pre':
+      pass
+    elif name=='inferior_call_post':
+      pass
+    elif name=='memory_changed':
+      self.update_localvars()
+      self.update_registers()
+    elif name=='register_changed':
+      pass
+    elif name=='breakpoint_created':
+      pass
+    elif name=='breakpoint_modified':
+      pass
+    elif name=='breakpoint_deleted':
+      pass
+
+  def process_shellcmd(self,cmdname):
+    if cmdname=='quit':
+      pass
+    elif cmdname=='bp_disable':
+      pass
+    elif cmdname=='bp_enable':
+      pass
+    elif cmdname=='frame_up':
+      self.update_backtrace()
+      self.update_registers()
+      self.update_localvars()
+    elif cmdname=='frame_down':
+      self.update_backtrace()
+      self.update_registers()
+      self.update_localvars()
+    elif cmdname=='frame':
+      pass
+
+
 
 class MainWindow(BaseWindow):
 
@@ -551,19 +675,62 @@ class MainWindow(BaseWindow):
     self.edit_filename=None #Файл, который открыт в редакторе. Отличие от self.exec_filename в
                             #том, что если исходник открыть нельзя, то открывается файл-заглушка.
 
+  def process_connection(self):
+    rc=super(MainWindow,self).process_connection()
+    if rc:
+      self.update_current_frame()
+      self.update_breakpoints()
+    return rc
 
 
-  def gdb_inferior_stop(self):
-    pass
-  def gdb_inferior_exited(self):
-    pass
-  def gdb_new_objfile(self):
-    pass
-  def gdb_update_current_frame(self,filename,line):
+  def process_gdbevt(self,name,evt):
+    if name=='cont':
+      pass
+    elif name=='exited':
+      self.update_current_frame()
+    elif name=='stop':
+      self.update_current_frame()
+      self.update_breakpoints()
+    elif name=='new_objfile':
+      self.update_current_frame()
+    elif name=='clear_objfiles':
+      self.update_current_frame()
+    elif name=='inferior_call_pre':
+      pass
+    elif name=='inferior_call_post':
+      pass
+    elif name=='memory_changed':
+      pass
+    elif name=='register_changed':
+      pass
+    elif name=='breakpoint_created':
+      self.update_breakpoints()
+    elif name=='breakpoint_modified':
+      self.update_breakpoints()
+    elif name=='breakpoint_deleted':
+      self.update_breakpoints()
+
+  def process_shellcmd(self,cmdname):
+    if cmdname=='quit':
+      pass
+    elif cmdname=='bp_disable':
+      pass
+    elif cmdname=='bp_enable':
+      pass
+    elif cmdname=='frame_up':
+      self.update_current_frame()
+    elif cmdname=='frame_down':
+      self.update_current_frame()
+    elif cmdname=='frame':
+      pass
+
+
+  def update_current_frame(self):
     '''Данная функция извлекает из gdb текущий файл
         и номер строки исполнения. После чего, если необходимо, открывает
         файл с исходником в редакторе и перемещает экран к линии исполнения.
     '''
+    filename,line = self.get_current_position()
     if (not filename and self.edit_filename!=TMP_FILE_NAME) or filename!=self.exec_filename:
       if self.edit_filename:
         #если в редакторе был открыт файл, то закрываем его.
@@ -603,7 +770,7 @@ class MainWindow(BaseWindow):
     self.exec_line=line
 
 
-  def gdb_check_breakpoint(self):
+  def update_breakpoints(self):
     normal=breakpoint_queue.get_bps_locs_normal(self.edit_filename)
     disabled=breakpoint_queue.get_bps_locs_disabled(self.edit_filename)
     wait_remove=breakpoint_queue.get_bps_locs_wait_remove(self.edit_filename)
@@ -655,21 +822,8 @@ class MainWindow(BaseWindow):
     if gdb_stopped():
       exec_cmd_in_gdb("finish")
 
-
-#  def __save_curline_color(self,background_color,text_color,attr):
-#    pass
-#  def __load_curline_color(self):
-#    pass
-#    try:
-#      with open('{HOME}/.mcgdb/color/curline', 'w') as f:
-#        fd=f.fileno()
-#        fcntl.flock(fd,fcntl.LOCK_EX)
-
-
   def set_color(self,pkg):
     self.send(pkg)
-
-
 
   def process_pkg(self):
     '''Обработать сообщение из редактора'''
@@ -694,43 +848,6 @@ class GEThread(object):
     self.exec_line=None
     self.wait_connection={}
 
-  def __get_current_position_main_thread(self):
-    assert is_main_thread()
-    #Данную функцию можно вызывать только из main pythread или
-    #через функцию exec_in_main_pythread
-    try:
-      frame=gdb.selected_frame ()
-      filename=frame.find_sal().symtab.fullname()
-      line=frame.find_sal().line-1
-    except: #gdb.error:
-      #no frame selected or maybe inferior exited?
-      filename=None
-      line=None
-    return filename,line
-
-  def __get_current_position(self):
-    return exec_in_main_pythread(
-          self.__get_current_position_main_thread,())
-
-  def _update_aux_window(self):
-    for fd in self.fte:
-      win=self.fte[fd]
-      if win.type in ('localvars_window'):
-        win.update_localvars()
-        win.update_backtrace()
-
-
-  def __update_current_position_in_win(self):
-    filename,line = self.__get_current_position()
-    if (not filename or filename!=self.exec_filename) or \
-       (not line or line!=self.exec_line):
-      for fd in self.fte:
-        win=self.fte[fd]
-        if win.type in ('main_window','source_window'):
-          win.gdb_update_current_frame(filename,line)
-      self.exec_filename=filename
-      self.exec_line=line
-
   def __open_window(self, pkg):
     # Процесс открывания окна следующий. Создается класс, в рамках которого есть
     # listen port, затем открывается окно (напр, с редактором), этому окну дается
@@ -753,14 +870,6 @@ class GEThread(object):
       window=WinClsConstr(manually=manually)
       self.wait_connection[window.listen_fd] = window
 
-
-
-  def __check_breakpoint(self,pkg):
-    for fd in self.fte:
-      win = self.fte[fd]
-      win.gdb_check_breakpoint()
-
-
   def __set_color(self,pkg):
     for fd in self.fte:
       win=self.fte[fd]
@@ -769,9 +878,22 @@ class GEThread(object):
   def __process_pkg_from_gdb(self):
     pkg=pkgrecv(self.gdb_rfd)
     cmd=pkg['cmd']
-    if   cmd=='open_window':
+    if cmd=='gdbevt':
+      name,evt=gdbevt_queue.pop()
+      for fd in self.fte:
+        win=self.fte[fd]
+        win.process_gdbevt(name,evt)
+      breakpoint_queue.process()
+    elif cmd=='shellcmd':
+      cmdname=pkg['cmdname']
+      for fd in self.fte:
+        win=self.fte[fd]
+        win.process_shellcmd(cmdname)
+    ####mcgdb events
+    elif   cmd=='open_window':
       self.__open_window(pkg)
-      self.__check_breakpoint(pkg)
+    elif cmd=='color':
+      self.__set_color(pkg)
     elif cmd=='stop_event_loop':
       try:
         os.remove(TMP_FILE_NAME)
@@ -780,32 +902,6 @@ class GEThread(object):
       for fd,win in self.fte.iteritems():
         win.terminate()
       sys.exit(0)
-    elif cmd=='check_frame':
-      self.__update_current_position_in_win()
-      self.__check_breakpoint(pkg)
-      self._update_aux_window()
-      breakpoint_queue.process()
-    elif cmd=='inferior_stop':
-      self.__update_current_position_in_win()
-      self.__check_breakpoint(pkg)
-      self._update_aux_window()
-      breakpoint_queue.process()
-    elif cmd=='new_objfile':
-      self.__update_current_position_in_win()
-      self.__check_breakpoint(pkg)
-      self._update_aux_window()
-      breakpoint_queue.process()
-    elif cmd=='check_breakpoint':
-      self.__check_breakpoint(pkg)
-      self._update_aux_window()
-      breakpoint_queue.process()
-    elif cmd=='inferior_exited':
-      self.__update_current_position_in_win()
-      self.__check_breakpoint(pkg)
-      self._update_aux_window()
-      breakpoint_queue.process()
-    elif cmd=='color':
-      self.__set_color(pkg)
     else:
       debug('unrecognized package: `{}`'.format(pkg))
       return
@@ -815,7 +911,6 @@ class GEThread(object):
     cmd=pkg['cmd']
     if cmd=='check_breakpoint':
       breakpoint_queue.process()
-      self.__check_breakpoint(pkg)
     else:
       debug('unrecognized package: `{}`'.format(pkg))
       return
@@ -826,7 +921,7 @@ class GEThread(object):
     self.WasCalled=True
     self.entities_evt_queue=[] #Если при обработке пакета от editor или от чего-то еще
     #трубется оповестить другие окна о каком-то событии, то entity.process_pkg()
-    #должен вернуть пакет(ы), которые будут обрабатываться в классам соотв. окнам
+    #должен вернуть пакет(ы), которые будут обрабатываться в классах, которые соотв. окнам
     while True:
       if len(self.entities_evt_queue)>0:
         self.__process_pkg_from_entity ()
@@ -851,7 +946,7 @@ class GEThread(object):
           del self.wait_connection[fd]
           if ok:
             self.fte[entity.fd]=entity
-            entity.gdb_update_current_frame(self.exec_filename,self.exec_line)
+            #entity.gdb_update_current_frame(self.exec_filename,self.exec_line)
         else:
           entity=self.fte[fd]
           try:
@@ -872,7 +967,6 @@ class GEThread(object):
 
 class McgdbMain(object):
   def __init__(self):
-  #global event_thread,gdb_listen_port,   main_thread_ident,mcgdb_initialized
     if not self.__is_gdb_version_correct():
       return
     gdb_rfd,gdb_wfd=os.pipe() #Through gdb_[rw]fd main pythread will be send commands to another thread
@@ -883,11 +977,19 @@ class McgdbMain(object):
     event_thread=threading.Thread (target=gethread,args=()) #this thread will be communicate with editors
     event_thread.start()
     self.event_thread=event_thread
-    gdb.events.stop.connect( self.notify_inferior_stop )
-    gdb.events.exited.connect( self.notify_inferior_exited )
-    gdb.events.new_objfile.connect( self.notify_new_objfile )
-    gdb.events.breakpoint_created.connect( self.notify_breakpoint )
-    gdb.events.breakpoint_deleted.connect( self.notify_breakpoint )
+    #unused events commented
+    #gdb.events.cont.connect(               self.notify_gdb_cont )
+    gdb.events.exited.connect(             self.notify_gdb_exited )
+    gdb.events.stop.connect(               self.notify_gdb_stop )
+    gdb.events.new_objfile.connect(        self.notify_gdb_new_objfile )
+    gdb.events.clear_objfiles.connect(      self.notify_gdb_clear_objfiles )
+    #gdb.events.inferior_call_pre.connect(  self.notify_gdb_inferior_call_pre )
+    #gdb.events.inferior_call_post.connect( self.notify_gdb_inferior_call_post )
+    gdb.events.memory_changed.connect(     self.notify_gdb_memory_changed)
+    gdb.events.register_changed.connect(   self.notify_gdb_register_changed)
+    gdb.events.breakpoint_created.connect( self.notify_gdb_breakpoint_created  )
+    gdb.events.breakpoint_deleted.connect( self.notify_gdb_breakpoint_deleted  )
+    gdb.events.breakpoint_modified.connect(self.notify_gdb_breakpoint_modified )
 
     self.open_window('main')
     self.open_window('localvars')
@@ -923,20 +1025,52 @@ class McgdbMain(object):
   def stop_event_loop(self):
     pkgsend(self.gdb_wfd,{'cmd':'stop_event_loop',})
 
-  def notify_inferior_stop(self,x):
-    pkgsend(self.gdb_wfd,{'cmd':'inferior_stop',})
 
-  def notify_inferior_exited(self,exit_code):
-    pkgsend(self.gdb_wfd,{'cmd':'inferior_exited',})
+  def notify_shellcmd(self,cmdname):
+    if cmdname!='quit':
+      pkgsend(self.gdb_wfd,{'cmd':'shellcmd','cmdname':cmdname})
+    else:
+      pkgsend(self.gdb_wfd,{'cmd':'stop_event_loop'})
 
-  def notify_new_objfile(self,x):
-    pkgsend(self.gdb_wfd,{'cmd':'new_objfile',})
+  def notify_gdbevt(self,evt,name):
+    gdbevt_queue.append((name,evt))
+    pkgsend(self.gdb_wfd,{'cmd':'gdbevt'})
 
-  def notify_check_frame(self):
-    pkgsend(self.gdb_wfd,{'cmd':'check_frame',})
+  def notify_gdb_cont (self, evt):
+    self.notify_gdbevt(evt,'cont')
 
-  def notify_breakpoint(self,x):
-    pkgsend(self.gdb_wfd,{'cmd':'check_breakpoint',})
+  def notify_gdb_exited (self, evt):
+    self.notify_gdbevt(evt,'exited')
+
+  def notify_gdb_stop (self, evt):
+    self.notify_gdbevt(evt,'stop')
+
+  def notify_gdb_new_objfile (self, evt):
+    self.notify_gdbevt(evt,'new_objfile')
+
+  def notify_gdb_clear_objfiles (self, evt):
+    self.notify_gdbevt(evt,'clear_objfiles')
+
+  def notify_gdb_inferior_call_pre (self, evt):
+    self.notify_gdbevt(evt,'inferior_call_pre')
+
+  def notify_gdb_inferior_call_post (self, evt):
+    self.notify_gdbevt(evt,'inferior_call_post')
+
+  def notify_gdb_memory_changed (self, evt):
+    self.notify_gdbevt(evt,'memory_changed')
+
+  def notify_gdb_register_changed (self, evt):
+    self.notify_gdbevt(evt,'register_changed')
+
+  def notify_gdb_breakpoint_created (self, evt):
+    self.notify_gdbevt(evt,'breakpoint_created')
+
+  def notify_gdb_breakpoint_deleted (self, evt):
+    self.notify_gdbevt(evt,'breakpoint_deleted')
+
+  def notify_gdb_breakpoint_modified (self, evt):
+    self.notify_gdbevt(evt,'breakpoint_modified')
 
   def open_window(self,type, **kwargs):
     pkg={'cmd':'open_window','type':type}

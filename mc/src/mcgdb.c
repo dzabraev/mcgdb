@@ -25,7 +25,7 @@
 
 #include "src/mcgdb.h"
 #include "src/mcgdb-bp.h"
-#include "lib/widget/mcgdb_lvarswidget.c"
+#include "lib/widget/mcgdb_lvarswidget.h"
 
 #include <jansson.h>
 
@@ -285,6 +285,9 @@ get_command_num(json_t *pkg) {
     }
     else if (compare_cmd("backtrace")) {
       return MCGDB_BACKTRACE;
+    }
+    else if (compare_cmd("registers")) {
+      return MCGDB_REGISTERS;
     }
     else {
       return MCGDB_UNKNOWN;
