@@ -136,6 +136,15 @@ pkg_registers(json_t *pkg, WTable *wtab) {
   insert_pkg_json_into_table (json_object_get(pkg,"data"), tab);
 }
 
+
+
+static void
+pkg_threads(json_t *pkg, WTable *wtab) {
+  Table *tab = wtable_get_table(wtab,"threads");
+  table_clear_rows(tab);
+  insert_pkg_json_into_table (json_object_get(pkg,"data"), tab);
+}
+
 static void
 pkg_localvars(json_t *pkg, WTable *wtab) {
   json_t *localvars = json_object_get(pkg,"localvars");
@@ -236,6 +245,11 @@ mcgdb_aux_dialog_gdbevt (WDialog *h) {
       wtab = (WTable *)dlg_find_by_id(h, BT_TH_TABLE_ID);
       pkg_backtrace(pkg,wtab);
       break;
+    case MCGDB_THREADS:
+      wtab = (WTable *)dlg_find_by_id(h, BT_TH_TABLE_ID);
+      pkg_threads(pkg,wtab);
+      break;
+
     default:
       break;
   }
@@ -695,6 +709,8 @@ wtable_draw(WTable *wtab) {
 static void
 wtable_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
   WTable *wtab = (WTable *)w;
+
+  widget_select (w);
 
   if (event->y==0) {
     selbar_mouse_callback (w, msg, event);

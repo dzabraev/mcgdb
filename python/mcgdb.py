@@ -505,6 +505,14 @@ class LocalVarsWindow(BaseWindow):
       'data':regs,
     }
     self.send(pkg)
+  def update_threads(self):
+    try:
+      self.send({
+        'cmd':'threads',
+        'data':self.get_threads(),
+      })
+    except:
+      return
   def gdb_check_breakpoint(self):
     pass
   def set_color(self,pkg):
@@ -596,6 +604,12 @@ class LocalVarsWindow(BaseWindow):
   def get_registers(self):
     return exec_in_main_pythread (self._get_regs_1,())
 
+  def _get_threads_1(self):
+    return []
+
+  def get_threads(self):
+    return exec_in_main_pythread (self._get_threads_1,())
+
   def process_gdbevt(self,name,evt):
     if name=='cont':
       pass
@@ -603,10 +617,12 @@ class LocalVarsWindow(BaseWindow):
       self.update_localvars()
       self.update_backtrace()
       self.update_registers()
+      self.update_threads()
     elif name=='stop':
       self.update_localvars()
       self.update_backtrace()
       self.update_registers()
+      self.update_threads()
     elif name=='new_objfile':
       self.update_localvars()
       self.update_backtrace()
@@ -647,7 +663,10 @@ class LocalVarsWindow(BaseWindow):
       self.update_registers()
       self.update_localvars()
     elif cmdname=='frame':
-      pass
+      self.update_backtrace()
+      self.update_registers()
+      self.update_localvars()
+
 
 
 

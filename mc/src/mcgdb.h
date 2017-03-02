@@ -30,6 +30,7 @@ enum gdb_cmd {
   MCGDB_LOCALVARS,
   MCGDB_BACKTRACE,
   MCGDB_REGISTERS,
+  MCGDB_THREADS,
 };
 
 enum window_type {

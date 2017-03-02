@@ -289,6 +289,9 @@ get_command_num(json_t *pkg) {
     else if (compare_cmd("registers")) {
       return MCGDB_REGISTERS;
     }
+    else if (compare_cmd("threads")) {
+      return MCGDB_THREADS;
+    }
     else {
       return MCGDB_UNKNOWN;
     }
