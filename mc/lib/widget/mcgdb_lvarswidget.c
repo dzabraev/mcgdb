@@ -31,7 +31,23 @@
 #define TAB_TOP(tab) ((tab)->y)
 
 
+/* Table coordinates
+  B------------|-----
+  |            |  /|\
+  |            |   |tab->row_offset
+  |            |  \|/
+  A============--------------->x
+  |            |visible region
+  |            |
+  |            |
+  |============|
+  |            |
+  |------------|
 
+  (x,y)
+  point A have coordinates (0,0)
+  point B have coords      (0,ROW_OFFSET(tab,0))
+*/
 
 #define VARS_REGS_WIDGET_X      0
 #define VARS_REGS_WIDGET_Y      0
@@ -75,6 +91,7 @@ static void         table_draw_colnames (Table * tab, table_row *r);
 static void         table_update_colwidth(Table * tab);
 static void         table_set_colwidth_formula(Table * tab, int (*formula)(const Table * tab, int ncol));
 static void         table_setcolor(Table *tab, int nrow, int ncol, int color);
+static void         table_process_click(Table *tab, mouse_event_t * event);
 static int          formula_eq_col(const Table * tab, int ncol);
 static int          formula_adapt_col(const Table * tab, int ncol);
 static void         wtable_update_bound(WTable *wtab);
@@ -412,6 +429,11 @@ table_row_alloc_arr(long ncols, const char ** colval) {
   return row;
 }
 
+static void
+table_process_click(Table *tab, mouse_event_t * event) {
+
+}
+
 
 static void
 table_row_setcolor(table_row *row, int col, int color) {
@@ -724,6 +746,9 @@ wtable_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
     case MSG_MOUSE_SCROLL_DOWN:
       table_add_offset(wtab->tab, 2);
       break;
+    case MSG_MOUSE_CLICK:
+      table_process_click(wtab->tab, event);
+      break;
     default:
       break;
   }
@@ -911,7 +936,7 @@ mcgdb_aux_dlg(void) {
     VARS_REGS_WIDGET_COLS
   );
   wtable_add_table(vars_regs_table,"localvars",2,"name","value");
-  wtable_add_table(vars_regs_table,"registers",3,"","","");
+  wtable_add_table(vars_regs_table,"registers",2,"","");
   wtable_set_current_table(vars_regs_table, "localvars");
   wtable_update_bound(vars_regs_table);
 

@@ -463,6 +463,14 @@ class LocalVarsWindow(BaseWindow):
   def __init__(self, **kwargs):
     super(LocalVarsWindow,self).__init__(**kwargs)
     self.regex_split = re.compile('\s*([^\s]+)\s+([^\s+]+)\s+(.*)')
+    self.regnames=[]
+    regtab = gdb.execute('maint print registers',False,True).split('\n')[1:]
+    for reg in regtab:
+      if reg=="*1: Register type's name NULL.":
+        continue
+      reg=reg.split()
+      if len(reg)>0 and reg[0] and reg[0]!="''" and len(reg[0])>0:
+        self.regnames.append('$'+reg[0])
 
   def process_connection(self):
     rc=super(LocalVarsWindow,self).process_connection()
@@ -610,12 +618,8 @@ class LocalVarsWindow(BaseWindow):
 
   def _get_regs_1(self):
     regs=[]
-    for reginfo in gdb.execute('info all-registers',False,True).split('\n'):
-      reginfo = re.sub('\s+',' ',reginfo)
-      match=self.regex_split.match(reginfo)
-      if not match:
-        continue
-      regs.append(match.groups())
+    for regname in self.regnames:
+      regs.append( [regname,str(gdb.parse_and_eval(regname))]  )
     return regs
 
   def get_registers(self):
