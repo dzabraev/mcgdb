@@ -922,7 +922,7 @@ mcgdb_aux_dlg(void) {
     BT_TH_WIDGET_COLS
   );
   wtable_add_table (bt_th_table,"backtrace",3,"","","");
-  wtable_add_table (bt_th_table,"threads",3,"","","");
+  wtable_add_table (bt_th_table,"threads",5,"","","","","");
   wtable_set_current_table (bt_th_table,"backtrace");
   wtable_update_bound(bt_th_table);
 

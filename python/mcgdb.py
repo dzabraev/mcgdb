@@ -564,6 +564,23 @@ class LocalVarsWindow(BaseWindow):
     except RuntimeError:
       return []
 
+  def _get_frame_funcname_with_args(self,frame):
+    frame_func_name = frame.name()
+    frame_func_args = self._get_frame_func_args(frame)
+    return '{funcname} ({funcargs})'.format(
+      funcname=frame_func_name,
+      funcargs=','.join(frame_func_args)
+    )
+
+  def _get_frame_fileline(self,frame):
+    frame_line      = frame.find_sal().line
+    symtab = frame.find_sal().symtab
+    frame_filename  = symtab.filename if symtab else 'unknown'
+    return '{filename}:{line}'.format(
+      filename  =   frame_filename,
+      line      =   frame_line,
+    )
+
   def _get_stack_1(self):
     frame = gdb.newest_frame ()
     nframe=0
@@ -605,7 +622,21 @@ class LocalVarsWindow(BaseWindow):
     return exec_in_main_pythread (self._get_regs_1,())
 
   def _get_threads_1(self):
-    return []
+    selected_thread = gdb.selected_thread()
+    thtable=[]
+    threads=gdb.selected_inferior().threads()
+    for thread in threads:
+      thread.switch()
+      frame = gdb.selected_frame()
+      global_num    =   str(thread.global_num)
+      tid           =   str(thread.ptid[1])
+      threadname    =   str(thread.name) if thread.name else ''
+      funcname      =   self._get_frame_funcname_with_args(frame)
+      fileline      =   self._get_frame_fileline(frame)
+      thtable.append( (global_num,tid,threadname,funcname,fileline) )
+    if selected_thread!=None:
+      selected_thread.switch()
+    return thtable
 
   def get_threads(self):
     return exec_in_main_pythread (self._get_threads_1,())
