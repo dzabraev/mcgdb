@@ -31,24 +31,6 @@
 #define TAB_TOP(tab) ((tab)->y)
 
 
-/* Table coordinates
-  B------------|-----
-  |            |  /|\
-  |            |   |tab->row_offset
-  |            |  \|/
-  A============--------------->x
-  |            |visible region
-  |            |
-  |            |
-  |============|
-  |            |
-  |------------|
-
-  (x,y)
-  point A have coordinates (0,0)
-  point B have coords      (0,ROW_OFFSET(tab,0))
-*/
-
 #define VARS_REGS_WIDGET_X      0
 #define VARS_REGS_WIDGET_Y      0
 #define VARS_REGS_WIDGET_LINES  (LINES)
@@ -77,11 +59,11 @@ static void selbar_mouse_callback           (Widget * w, mouse_msg_t msg, mouse_
 
 
 
-static table_row *  table_row_alloc(long ncols, va_list ap);
+static table_row *  table_row_alloc(long ncols);
 static void         table_row_destroy(table_row *row);
 static void         table_update_bounds(Table * tab, long y, long x, long lines, long cols);
-static Table *      table_new (long ncols, va_list ap);
-static int          table_add_row (Table * tab, ...);
+static Table *      table_new (long ncols);
+static int          table_add_row (Table * tab);
 static int          table_add_row_arr (Table * tab, const char **cols);
 static void         table_destroy(Table *tab);
 static void         table_clear_rows(Table * tab);
@@ -92,6 +74,7 @@ static void         table_update_colwidth(Table * tab);
 static void         table_set_colwidth_formula(Table * tab, int (*formula)(const Table * tab, int ncol));
 static void         table_setcolor(Table *tab, int nrow, int ncol, int color);
 static void         table_process_click(Table *tab, mouse_event_t * event);
+static void         table_set_cell_text(Table *tab, int nrow, int ncol, const char *text);
 static int          formula_eq_col(const Table * tab, int ncol);
 static int          formula_adapt_col(const Table * tab, int ncol);
 static void         wtable_update_bound(WTable *wtab);
@@ -129,28 +112,40 @@ TAB_FIRST_ROW(Table * tab) {
 
 static void
 insert_pkg_json_into_table(json_t *json_rows, Table *tab) {
-  const char ** colvals;
   size_t size = json_array_size (json_rows);
+  long nrow;
   if (!size)
     return;
-  colvals = (const char **) g_new (char *, tab->ncols);
   for (size_t i=0;i<size;i++) {
     json_t * row = json_array_get (json_rows,i);
     size_t rowsize = json_array_size (row);
     assert((size_t)tab->ncols==rowsize);
+    nrow = table_add_row (tab);
     for (int col=0;col<tab->ncols;col++) {
-      colvals[col] = json_string_value (json_array_get (row,col));
+      table_set_cell_text (
+        tab,nrow,col,
+        json_string_value (json_array_get (row,col))
+      );
     }
-    table_add_row_arr (tab,colvals);
   }
-  g_free (colvals);
+}
+
+static void
+pkg_table_package(json_t *pkg, WTable *wtab, const char *tabname) {
+  /* Данная функция предназначена для обработки
+   * табличных пакетов. Функция вставляет данные из пакета "table_data"
+   * в таблицу tabname
+   */
+  Table *tab = wtable_get_table(wtab,tabname);
+  table_clear_rows(tab);
+  insert_pkg_json_into_table (json_object_get(pkg,"table_data"), tab);
 }
 
 static void
 pkg_registers(json_t *pkg, WTable *wtab) {
   Table *tab = wtable_get_table(wtab,"registers");
   table_clear_rows(tab);
-  insert_pkg_json_into_table (json_object_get(pkg,"data"), tab);
+  insert_pkg_json_into_table (json_object_get(pkg,"table_data"), tab);
 }
 
 
@@ -158,8 +153,8 @@ pkg_registers(json_t *pkg, WTable *wtab) {
 static void
 pkg_threads(json_t *pkg, WTable *wtab) {
   Table *tab = wtable_get_table(wtab,"threads");
-  table_clear_rows(tab);
-  insert_pkg_json_into_table (json_object_get(pkg,"data"), tab);
+  table_clear_rows (tab);
+  insert_pkg_json_into_table (json_object_get(pkg,"table_data"), tab);
 }
 
 static void
@@ -252,19 +247,23 @@ mcgdb_aux_dialog_gdbevt (WDialog *h) {
   switch(act->command) {
     case MCGDB_LOCALVARS:
       wtab = (WTable *)dlg_find_by_id(h, VARS_REGS_TABLE_ID);
-      pkg_localvars(pkg,wtab);
+      pkg_table_package (pkg,wtab,"localvars");
+      //pkg_localvars(pkg,wtab);
       break;
     case MCGDB_REGISTERS:
       wtab = (WTable *) dlg_find_by_id (h, VARS_REGS_TABLE_ID);
-      pkg_registers (pkg, wtab);
+      pkg_table_package (pkg,wtab,"registers");
+      //pkg_registers (pkg, wtab);
       break;
     case MCGDB_BACKTRACE:
       wtab = (WTable *)dlg_find_by_id(h, BT_TH_TABLE_ID);
-      pkg_backtrace(pkg,wtab);
+      pkg_table_package (pkg,wtab,"backtrace");
+      //pkg_backtrace(pkg,wtab);
       break;
     case MCGDB_THREADS:
       wtab = (WTable *)dlg_find_by_id(h, BT_TH_TABLE_ID);
-      pkg_threads(pkg,wtab);
+      //pkg_threads(pkg,wtab);
+      pkg_table_package (pkg,wtab,"threads");
       break;
 
     default:
@@ -377,15 +376,12 @@ wtable_new (int y, int x, int height, int width)
 }
 
 static void
-wtable_add_table(WTable *wtab, const char *tabname, int ncols, ...) {
+wtable_add_table(WTable *wtab, const char *tabname, int ncols) {
   Table *tab;
-  va_list ap;
-  va_start (ap, ncols);
-  tab = table_new(ncols,ap);
+  tab = table_new(ncols);
   table_set_colwidth_formula(tab, formula_adapt_col);
   g_hash_table_insert ( wtab->tables, (gpointer) tabname, (gpointer) tab);
   selbar_add_button   ( wtab->selbar, tabname);
-  va_end(ap);
 }
 
 static void
@@ -402,19 +398,27 @@ wtable_get_table(WTable *wtab, const char *tabname) {
 
 
 static table_row *
-table_row_alloc(long ncols, va_list ap) {
+table_row_alloc(long ncols) {
   table_row * row = g_new0 (table_row,1);
   row->ncols=ncols;
   row->columns = (char **)g_new0(char *, ncols);
   row->color   = (int *)g_new(int, ncols);
   for (int col=0;col<ncols;col++) {
-    char *val = va_arg(ap, char *);
-    row->columns[col] = strdup(val);
+    row->columns[col] = strdup(strdup(" "));
     row->color[col]=EDITOR_NORMAL_COLOR;
   }
   return row;
 }
 
+static void
+table_set_cell(Table *tab, int nrow, int ncol, const char *text) {
+  table_row *row = g_list_nth_data(tab->rows,nrow);
+  assert(row);
+  assert(row->ncols>ncol);
+  if (row->colnames[ncol])
+    free(row->colnames[ncol]);
+  row->colnames[ncol] = strdup (text);
+}
 
 static table_row *
 table_row_alloc_arr(long ncols, const char ** colval) {
@@ -431,7 +435,43 @@ table_row_alloc_arr(long ncols, const char ** colval) {
 
 static void
 table_process_click(Table *tab, mouse_event_t * event) {
-
+  long line = event->y;
+  GList *grow = tab->rows;
+  long nrow=0,ncol;
+  table_row * row;
+  gboolean handled=FALSE;
+  if (  (event->y < tab->y) ||
+        (event->y >= tab->y+tab->lines) ||
+        (event->x < tab->x) ||
+        (event->x >= tab->x+tab->cols)
+     ) { /*click out of table*/
+     return;
+  }
+  while(grow) {
+    row = grow->data;
+    if (row->y1<=line && row->y2>=line) {
+      break;
+    }
+    nrow++;
+    grow=grow->next;
+  }
+  assert(grow);
+  for (ncol=0;ncol<tab->ncols;ncol++) {
+    if (tab->colstart[ncol]<=event->x && tab->colstart[ncol+1]>event->x) {
+      break;
+    }
+  }
+  /*`nrow` есть номер строки таблицы, по которой был сделан клик.
+   *`ncol` есть номер столбца таблицы по которому был сделан клик.
+  */
+  assert (ncol<tab->ncols);
+  if (tab->row_callback) {
+    handled = tab->row_callback(row,nrow,ncol);
+    if (handled)
+      return;
+  }
+  if (tab->cell_callbacks)
+    handled = tab->cell_callbacks[ncol](row,nrow,ncol);
 }
 
 
@@ -607,12 +647,11 @@ table_update_bounds(Table * tab, long y, long x, long lines, long cols) {
 
 
 static Table *
-table_new (long ncols, va_list colnames) {
+table_new (long ncols) {
   Table *tab;
   tab = g_new0(Table,1);
   tab->ncols=ncols;
   tab->nrows=0;
-  tab->colnames = table_row_alloc(ncols, colnames);
   tab->colstart = (long *)g_new0(long,ncols+1);
   tab->row_offset=0;
   table_set_colwidth_formula(tab,formula_adapt_col);
@@ -628,13 +667,6 @@ table_destroy(Table *tab) {
 }
 
 
-static void
-table_add_colnames (Table * tab, ...) {
-  va_list ap;
-  va_start (ap, tab);
-  tab->colnames = table_row_alloc (tab->ncols, ap);
-  va_end(ap);
-}
 
 static int
 _table_insert_row(Table * tab, table_row * row) {
@@ -643,15 +675,12 @@ _table_insert_row(Table * tab, table_row * row) {
 }
 
 static int
-table_add_row (Table * tab, ...) {
+table_add_row (Table * tab) {
   long ncols = tab->ncols;
   table_row *row;
   int rc;
-  va_list ap;
-  va_start (ap, tab);
-  row = table_row_alloc (ncols, ap);
+  row = table_row_alloc (ncols);
   rc = _table_insert_row (tab,row);
-  va_end(ap);
   return rc;
 }
 
@@ -935,8 +964,8 @@ mcgdb_aux_dlg(void) {
     VARS_REGS_WIDGET_LINES,
     VARS_REGS_WIDGET_COLS
   );
-  wtable_add_table(vars_regs_table,"localvars",2,"name","value");
-  wtable_add_table(vars_regs_table,"registers",2,"","");
+  wtable_add_table(vars_regs_table,"localvars",2);
+  wtable_add_table(vars_regs_table,"registers",2);
   wtable_set_current_table(vars_regs_table, "localvars");
   wtable_update_bound(vars_regs_table);
 
@@ -946,8 +975,8 @@ mcgdb_aux_dlg(void) {
     BT_TH_WIDGET_LINES,
     BT_TH_WIDGET_COLS
   );
-  wtable_add_table (bt_th_table,"backtrace",3,"","","");
-  wtable_add_table (bt_th_table,"threads",5,"","","","","");
+  wtable_add_table (bt_th_table,"backtrace",3);
+  wtable_add_table (bt_th_table,"threads",5);
   wtable_set_current_table (bt_th_table,"backtrace");
   wtable_update_bound(bt_th_table);
 

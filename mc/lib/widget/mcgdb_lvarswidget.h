@@ -51,7 +51,6 @@ typedef struct Table {
   GList *rows;
   long nrows;
   long ncols;
-  table_row *colnames;
   long x;
   long y;
   long cols;
@@ -61,6 +60,8 @@ typedef struct Table {
   int (*formula)(const struct Table * tab, int ncol);
   long row_offset;
   redraw_t redraw;
+  gboolean (*row_callback)   (table_row *row, long nrow, long ncol);
+  gboolean (**cell_callbacks) (table_row *row, long nrow, long ncol);
 } Table;
 
 

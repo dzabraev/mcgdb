@@ -510,14 +510,14 @@ class LocalVarsWindow(BaseWindow):
       return
     pkg={
       'cmd':'registers',
-      'data':regs,
+      'table_data':regs,
     }
     self.send(pkg)
   def update_threads(self):
     try:
       self.send({
         'cmd':'threads',
-        'data':self.get_threads(),
+        'table_data':self.get_threads(),
       })
     except:
       return
