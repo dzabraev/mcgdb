@@ -69,12 +69,12 @@ static void         table_destroy(Table *tab);
 static void         table_clear_rows(Table * tab);
 static void         table_draw(Table * tab);
 static void         table_draw_row (Table * tab, table_row *r);
-static void         table_draw_colnames (Table * tab, table_row *r);
 static void         table_update_colwidth(Table * tab);
 static void         table_set_colwidth_formula(Table * tab, int (*formula)(const Table * tab, int ncol));
 static void         table_setcolor(Table *tab, int nrow, int ncol, int color);
 static void         table_process_click(Table *tab, mouse_event_t * event);
 static void         table_set_cell_text(Table *tab, int nrow, int ncol, const char *text);
+static void         table_set_cell_color(Table *tab, int nrow, int ncol, const char *fg, const char *bg, const char *attrib);
 static int          formula_eq_col(const Table * tab, int ncol);
 static int          formula_adapt_col(const Table * tab, int ncol);
 static void         wtable_update_bound(WTable *wtab);
@@ -111,12 +111,13 @@ TAB_FIRST_ROW(Table * tab) {
 
 
 static void
-insert_pkg_json_into_table(json_t *json_rows, Table *tab) {
-  size_t size = json_array_size (json_rows);
+insert_pkg_json_into_table(json_t *json_tab, Table *tab) {
+  json_t *json_rows = json_object_get (json_tab, "rows");
+  json_t *colors    = json_object_get (json_tab, "color");
+  size_t size_rows = json_array_size (json_rows);
+  size_t size_colors = json_array_size (colors);
   long nrow;
-  if (!size)
-    return;
-  for (size_t i=0;i<size;i++) {
+  for (size_t i=0;i<size_rows;i++) {
     json_t * row = json_array_get (json_rows,i);
     size_t rowsize = json_array_size (row);
     assert((size_t)tab->ncols==rowsize);
@@ -128,6 +129,17 @@ insert_pkg_json_into_table(json_t *json_rows, Table *tab) {
       );
     }
   }
+  for (size_t i=0; i<size_colors; i++) {
+    json_t *color = json_array_get(colors,i);
+    table_set_cell_color (
+      tab,
+      json_integer_value (json_object_get (color,"nrow")),
+      json_integer_value (json_object_get (color,"ncol")),
+      json_string_value  (json_object_get (color,"fg")),
+      json_string_value  (json_object_get (color,"bg")),
+      json_string_value  (json_object_get (color,"attrib"))
+    );
+  }
 }
 
 static void
@@ -138,9 +150,9 @@ pkg_table_package(json_t *pkg, WTable *wtab, const char *tabname) {
    */
   Table *tab = wtable_get_table(wtab,tabname);
   table_clear_rows(tab);
-  insert_pkg_json_into_table (json_object_get(pkg,"table_data"), tab);
+  insert_pkg_json_into_table (json_object_get(pkg,"table"), tab);
 }
-
+#if 0
 static void
 pkg_registers(json_t *pkg, WTable *wtab) {
   Table *tab = wtable_get_table(wtab,"registers");
@@ -236,6 +248,8 @@ pkg_backtrace(json_t *pkg, WTable *wtab) {
   }
   table_update_colwidth(tab);
 }
+
+#endif
 
 static void
 mcgdb_aux_dialog_gdbevt (WDialog *h) {
@@ -411,14 +425,22 @@ table_row_alloc(long ncols) {
 }
 
 static void
-table_set_cell(Table *tab, int nrow, int ncol, const char *text) {
+table_set_cell_text (Table *tab, int nrow, int ncol, const char *text) {
   table_row *row = g_list_nth_data(tab->rows,nrow);
   assert(row);
   assert(row->ncols>ncol);
-  if (row->colnames[ncol])
-    free(row->colnames[ncol]);
-  row->colnames[ncol] = strdup (text);
+  if (row->columns[ncol])
+    free(row->columns[ncol]);
+  row->columns[ncol] = strdup (text);
 }
+
+static void
+table_set_cell_color(Table *tab, int nrow, int ncol, const char *fg, const char *bg, const char *attrib) {
+  ((table_row * )g_list_nth_data(tab->rows,nrow))->color[ncol] =
+    tty_try_alloc_color_pair2 (fg, bg, attrib, FALSE);
+}
+
+
 
 static table_row *
 table_row_alloc_arr(long ncols, const char ** colval) {
@@ -581,12 +603,6 @@ table_draw_row (Table * tab, table_row *row) {
   row->y2 = ROW_OFFSET(tab,0);
 }
 
-static void
-table_draw_colnames (Table * tab, table_row *r) {
-  if (!r)
-    return
-  table_draw_row (tab,r);
-}
 
 
 static void
@@ -597,7 +613,6 @@ table_draw(Table * tab) {
   tty_setcolor(EDITOR_NORMAL_COLOR);
   tty_fill_region(tab->y,tab->x,tab->lines,tab->cols,' ');
   tab->last_row_pos = tab->y - tab->row_offset;
-  table_draw_colnames (tab,tab->colnames);
 
   while(row) {
     r = (table_row *)row->data;
@@ -660,7 +675,6 @@ table_new (long ncols) {
 
 static void
 table_destroy(Table *tab) {
-  table_row_destroy(tab->colnames);
   g_free(tab->colstart);
   table_clear_rows(tab);
   g_free(tab);

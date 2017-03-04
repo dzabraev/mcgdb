@@ -38,3 +38,10 @@ end
 end
 
 
+define hookpost-thread
+python
+mcgdb_main.notify_shellcmd('thread')
+end
+end
+
+

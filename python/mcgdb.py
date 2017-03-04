@@ -17,6 +17,8 @@ level = logging.CRITICAL
 #level = logging.DEBUG
 logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
 
+debug_wins={}
+
 TMP_FILE_NAME="/tmp/mcgdb/mcgdb-tmp-file-{pid}.txt".format(pid=os.getpid())
 main_thread_ident=threading.current_thread().ident
 mcgdb_main=None
@@ -356,6 +358,7 @@ class BaseWindow(object):
                 из gdb. Например, если зайти по ssh на удаленную машину, то не всегда есть возможность
                 запустить gnome-terminal.
     '''
+    debug_wins[self.type]=self #debug
     #self.gui_window_cmd='''LANG=C gnome-terminal -e 'bash -c "cd ~/tmp/mcgdb-debug/; touch 1; ulimit -c unlimited; {cmd}"' '''
     #self.gui_window_cmd='''gnome-terminal -e 'valgrind --log-file=/tmp/vlg.log {cmd}' '''
     self.gui_window_cmd='''gnome-terminal -e '{cmd}' '''
@@ -478,6 +481,7 @@ class LocalVarsWindow(BaseWindow):
       self.update_localvars()
       self.update_backtrace()
       self.update_registers()
+      self.update_threads()
     return rc
 
 
@@ -490,8 +494,8 @@ class LocalVarsWindow(BaseWindow):
   def gdb_update_current_frame(self,filename,line):
     pass
   def update_localvars(self):
-    lvars=self.__get_local_vars()
-    pkg={'cmd':'localvars','localvars':lvars}
+    lvars=self._get_local_vars()
+    pkg={'cmd':'localvars','table':lvars}
     self.send(pkg)
   def update_backtrace(self):
     try:
@@ -500,7 +504,7 @@ class LocalVarsWindow(BaseWindow):
       return
     pkg={
       'cmd':'backtrace',
-      'backtrace':backtrace,
+      'table':backtrace,
     }
     self.send(pkg)
   def update_registers(self):
@@ -510,14 +514,14 @@ class LocalVarsWindow(BaseWindow):
       return
     pkg={
       'cmd':'registers',
-      'table_data':regs,
+      'table':regs,
     }
     self.send(pkg)
   def update_threads(self):
     try:
       self.send({
         'cmd':'threads',
-        'table_data':self.get_threads(),
+        'table':self.get_threads(),
       })
     except:
       return
@@ -528,14 +532,14 @@ class LocalVarsWindow(BaseWindow):
   def process_pkg(self):
     pkg=self.recv()
 
-  def __get_local_vars(self):
+  def _get_local_vars(self):
     try:
-      res=exec_in_main_pythread( self.__get_local_vars_1, ())
+      res=exec_in_main_pythread( self._get_local_vars_1, ())
     except (gdb.error,RuntimeError):
       res=[]
     return res
 
-  def __get_local_vars_1(self):
+  def _get_local_vars_1(self):
     frame = gdb.selected_frame()
     if not frame:
       return []
@@ -552,9 +556,9 @@ class LocalVarsWindow(BaseWindow):
       block = block.superblock
     lvars=[]
     for name,value in variables.iteritems():
-      lvars.append({'name':name,'value':str(value)})
-    lvars.sort( cmp = lambda x,y: 1 if x['name']>y['name'] else -1 )
-    return lvars
+      lvars.append([name,str(value)])
+    lvars.sort( cmp = lambda x,y: 1 if x[0]>y[0] else -1 )
+    return {'rows':lvars}
 
 
   def _get_frame_func_args(self,frame):
@@ -564,7 +568,7 @@ class LocalVarsWindow(BaseWindow):
       while block:
         for sym in block:
           if sym.is_argument:
-            args.append({'name':sym.name,'value':str(sym.value(frame))})
+            args.append(  (sym.name,str(sym.value(frame)))  )
         block=block.superblock
         if (not block) or block.function:
           break
@@ -577,7 +581,9 @@ class LocalVarsWindow(BaseWindow):
     frame_func_args = self._get_frame_func_args(frame)
     return '{funcname} ({funcargs})'.format(
       funcname=frame_func_name,
-      funcargs=','.join(frame_func_args)
+      funcargs=','.join ([
+        '{}={}'.format(name,value) for name,value in frame_func_args
+      ])
     )
 
   def _get_frame_fileline(self,frame):
@@ -593,25 +599,23 @@ class LocalVarsWindow(BaseWindow):
     frame = gdb.newest_frame ()
     nframe=0
     frames=[]
+    nrow_mark=None
     while frame:
-      frame_func_name = frame.name()
-      frame_func_args = self._get_frame_func_args(frame)
-      frame_line      = frame.find_sal().line
-      symtab = frame.find_sal().symtab
-      frame_filename  = symtab.filename if symtab else ''
-      frm={
-        'func'    :   frame_func_name,
-        'line'    :   frame_line,
-        'filename':   frame_filename,
-        'args'    :   frame_func_args,
-        'nframe'  :   nframe,
-      }
       if frame == gdb.selected_frame ():
-        frm['selected_frame']=True
-      frames.append(frm)
+        nrow_mark = nframe
+      frames.append([
+        str(nframe),
+        self._get_frame_funcname_with_args(frame),
+        self._get_frame_fileline(frame),
+      ])
       nframe+=1
       frame = frame.older()
-    return frames
+    table={
+      'rows':frames,
+    }
+    if nrow_mark != None:
+      table['color'] = [self.mark_row(nrow_mark,0)]
+    return table
 
   def get_stack(self):
     return exec_in_main_pythread (self._get_stack_1,())
@@ -620,16 +624,28 @@ class LocalVarsWindow(BaseWindow):
     regs=[]
     for regname in self.regnames:
       regs.append( [regname,str(gdb.parse_and_eval(regname))]  )
-    return regs
+    return {'rows' : regs}
 
   def get_registers(self):
     return exec_in_main_pythread (self._get_regs_1,())
 
+  def mark_row(self,nrow,ncol):
+    return {
+        'nrow'  : nrow,
+        'ncol'  : ncol,
+        'fg'    : 'red',
+        'bg'    : 'black',
+      }
+
   def _get_threads_1(self):
     selected_thread = gdb.selected_thread()
-    thtable=[]
+    throws=[]
     threads=gdb.selected_inferior().threads()
+    nrow=0
+    nrow_mark=None
     for thread in threads:
+      if thread==selected_thread:
+        nrow_mark = nrow
       thread.switch()
       frame = gdb.selected_frame()
       global_num    =   str(thread.global_num)
@@ -637,35 +653,35 @@ class LocalVarsWindow(BaseWindow):
       threadname    =   str(thread.name) if thread.name else ''
       funcname      =   self._get_frame_funcname_with_args(frame)
       fileline      =   self._get_frame_fileline(frame)
-      thtable.append( (global_num,tid,threadname,funcname,fileline) )
+      throws.append( (global_num,tid,threadname,funcname,fileline) )
+      nrow+=1
     if selected_thread!=None:
       selected_thread.switch()
-    return thtable
+    table = {'rows':throws}
+    if nrow_mark!=None:
+      table['color'] = [self.mark_row(nrow_mark,0)]
+    return table
 
   def get_threads(self):
     return exec_in_main_pythread (self._get_threads_1,())
+
+  def update_all(self):
+    self.update_localvars()
+    self.update_backtrace()
+    self.update_registers()
+    self.update_threads()
 
   def process_gdbevt(self,name,evt):
     if name=='cont':
       pass
     elif name=='exited':
-      self.update_localvars()
-      self.update_backtrace()
-      self.update_registers()
-      self.update_threads()
+      self.update_all()
     elif name=='stop':
-      self.update_localvars()
-      self.update_backtrace()
-      self.update_registers()
-      self.update_threads()
+      self.update_all()
     elif name=='new_objfile':
-      self.update_localvars()
-      self.update_backtrace()
-      self.update_registers()
+      self.update_all()
     elif name=='clear_objfiles':
-      self.update_localvars()
-      self.update_backtrace()
-      self.update_registers()
+      self.update_all()
     elif name=='inferior_call_pre':
       pass
     elif name=='inferior_call_post':
@@ -690,17 +706,13 @@ class LocalVarsWindow(BaseWindow):
     elif cmdname=='bp_enable':
       pass
     elif cmdname=='frame_up':
-      self.update_backtrace()
-      self.update_registers()
-      self.update_localvars()
+      self.update_all()
     elif cmdname=='frame_down':
-      self.update_backtrace()
-      self.update_registers()
-      self.update_localvars()
+      self.update_all()
     elif cmdname=='frame':
-      self.update_backtrace()
-      self.update_registers()
-      self.update_localvars()
+      self.update_all()
+    elif cmdname=='thread':
+      self.update_all()
 
 
 
