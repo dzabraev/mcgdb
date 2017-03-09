@@ -453,6 +453,13 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     '''
     return exec_in_main_pythread(self.__get_current_position_1,())
 
+def stringify_value(value):
+  return unicode(value)
+#  try:
+#    value = str(value)
+#  except:
+#    value=value.string('utf-8').encode('utf8')
+#  return value
 
 
 
@@ -536,6 +543,8 @@ class LocalVarsWindow(BaseWindow):
     try:
       res=exec_in_main_pythread( self._get_local_vars_1, ())
     except (gdb.error,RuntimeError):
+      #import traceback
+      #traceback.print_exc()
       res=[]
     return res
 
@@ -556,7 +565,7 @@ class LocalVarsWindow(BaseWindow):
       block = block.superblock
     lvars=[]
     for name,value in variables.iteritems():
-      lvars.append([name,str(value)])
+      lvars.append([name,stringify_value(value)])
     lvars.sort( cmp = lambda x,y: 1 if x[0]>y[0] else -1 )
     return {'rows':lvars}
 
@@ -568,8 +577,8 @@ class LocalVarsWindow(BaseWindow):
       while block:
         for sym in block:
           if sym.is_argument:
-            value = sym.value(frame).string('utf-8')
-            args.append(  (sym.name,value)  )
+            value = sym.value(frame)
+            args.append(  (sym.name,stringify_value(value))  )
         block=block.superblock
         if (not block) or block.function:
           break
@@ -580,10 +589,10 @@ class LocalVarsWindow(BaseWindow):
   def _get_frame_funcname_with_args(self,frame):
     frame_func_name = frame.name()
     frame_func_args = self._get_frame_func_args(frame)
-    return '{funcname} ({funcargs})'.format(
+    return u'{funcname} ({funcargs})'.format(
       funcname=frame_func_name,
       funcargs=','.join ([
-        '{}={}'.format(name,value) for name,value in frame_func_args
+        u'{}={}'.format(name,value) for name,value in frame_func_args
       ])
     )
 
@@ -591,7 +600,7 @@ class LocalVarsWindow(BaseWindow):
     frame_line      = frame.find_sal().line
     symtab = frame.find_sal().symtab
     frame_filename  = symtab.filename if symtab else 'unknown'
-    return '{filename}:{line}'.format(
+    return u'{filename}:{line}'.format(
       filename  =   frame_filename,
       line      =   frame_line,
     )
@@ -789,7 +798,7 @@ class MainWindow(BaseWindow):
     elif cmdname=='frame_down':
       self.update_current_frame()
     elif cmdname=='frame':
-      pass
+      self.update_current_frame()
 
 
   def update_current_frame(self):

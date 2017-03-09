@@ -24,6 +24,8 @@
 #include "lib/tty/tty.h"
 #include "lib/skin.h"
 
+#include "lib/util.h"
+
 #include <jansson.h>
 
 #define ROW_OFFSET(tab,rowcnt) (((tab)->last_row_pos)+(rowcnt))
@@ -57,7 +59,8 @@ static void mcgdb_aux_dialog_mouse_callback (Widget * w, mouse_msg_t msg, mouse_
 static void wtable_mouse_callback           (Widget * w, mouse_msg_t msg, mouse_event_t * event);
 static void selbar_mouse_callback           (Widget * w, mouse_msg_t msg, mouse_event_t * event);
 
-
+size_t tty_print_utf8(const char *str);
+size_t tty_charlength_utf8(const char *str);
 
 static table_row *  table_row_alloc(long ncols);
 static void         table_row_destroy(table_row *row);
@@ -477,7 +480,8 @@ table_process_click(Table *tab, mouse_event_t * event) {
     nrow++;
     grow=grow->next;
   }
-  assert(grow);
+  if (!grow)
+    return;
   for (ncol=0;ncol<tab->ncols;ncol++) {
     if (tab->colstart[ncol]<=event->x && tab->colstart[ncol+1]>event->x) {
       break;
@@ -581,7 +585,7 @@ table_draw_row (Table * tab, table_row *row) {
     offset=ROW_OFFSET(tab,rowcnt);
     if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
       tty_gotoyx(offset,x1);
-    for(long colcnt=x1;*p;p++,colcnt++) {
+    for(long colcnt=x1;*p;colcnt++) {
       if(colcnt==x2) {
         /*допечатали до правой границы столбца таблицы
          *делаем перенос строки.*/
@@ -593,7 +597,9 @@ table_draw_row (Table * tab, table_row *row) {
       }
       offset=ROW_OFFSET(tab,rowcnt);
       if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
-        tty_print_char(*p);
+        p+=tty_print_utf8(p);
+      else
+        p+=tty_charlength_utf8(p);
     }
     rowcnt++;
     if(rowcnt>max_rowcnt)
@@ -1004,4 +1010,44 @@ mcgdb_aux_dlg(void) {
   return 0;
 }
 
+void
+mcgdb_change_value() {
 
+}
+
+
+size_t
+tty_print_utf8(const char *str) {
+  gunichar c;
+  gchar *next_ch;
+  if (!str || !*str)
+    return 0;
+  c = g_utf8_get_char_validated (str, -1);
+  if (c == (gunichar) (-2) || c == (gunichar) (-1)) {
+    tty_print_anychar('.');
+    return 1;
+  }
+  if ((mc_global.utf8_display && g_unichar_isprint (c)) ||
+      (!mc_global.utf8_display && is_printable (c)))
+  {
+      tty_print_anychar(c);
+      next_ch = g_utf8_next_char (str);
+      return next_ch - str;
+  }
+  else
+  {
+      tty_print_anychar('.');
+      return 1;
+  }
+}
+
+size_t
+tty_charlength_utf8(const char *str) {
+  gunichar c;
+  if (!str || !*str)
+    return 0;
+  c = g_utf8_get_char_validated (str, -1);
+  if (c == (gunichar) (-2) || c == (gunichar) (-1))
+    return 1;
+  return g_utf8_next_char (str) - str;
+}

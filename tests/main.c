@@ -26,6 +26,10 @@ int f3(int x) {
 
 
 int main(void) {
+  struct {
+    const char *s;
+  } test_utf8;
+  test_utf8.s = "тест кодировки abdc";
   int x=1;
   struct mystruct d;
   const char * longstr = "123456789abcdef123456789abcdef";
