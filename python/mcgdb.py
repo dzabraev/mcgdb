@@ -578,7 +578,9 @@ class LocalVarsWindow(BaseWindow):
         for sym in block:
           if sym.is_argument:
             value = sym.value(frame)
-            args.append(  (sym.name,stringify_value(value))  )
+            args.append(
+              (sym.name,stringify_value(value))
+            )
         block=block.superblock
         if (not block) or block.function:
           break
@@ -586,24 +588,51 @@ class LocalVarsWindow(BaseWindow):
     except RuntimeError:
       return []
 
-  def _get_frame_funcname_with_args(self,frame):
+  def _get_frame_funcname(self,frame):
     frame_func_name = frame.name()
-    frame_func_args = self._get_frame_func_args(frame)
-    return u'{funcname} ({funcargs})'.format(
-      funcname=frame_func_name,
-      funcargs=','.join ([
-        u'{}={}'.format(name,value) for name,value in frame_func_args
-      ])
-    )
+    return frame_func_name
+
+  def _get_frame_funcname_with_args(self,frame):
+    frame_func_name = {'str':self._get_frame_funcname(frame),'name':'frame_func_name'}
+    frame_func_args = []
+    func_args = self._get_frame_func_args(frame)
+    for argname,argval in func_args:
+      frame_func_args.append({'str':'\n  '})
+      frame_func_args.append({'str':argname,'name':'frame_func_arg'})
+      frame_func_args.append({'str':'='})
+      frame_func_args.append({'str':argval, 'name':'frame_func_argval'})
+#    if len(frame_func_args)>0:
+#      funcargs = u',\n  '.join ([u'{}={}'.format(name,value) for name,value in frame_func_args])
+#      funcargs = u'\n  '+funcargs+'\n'
+#    elif len(frame_func_args)==1:
+#      funcargs=u'{}={}'.format(frame_func_args[0][0],frame_func_args[0][1])
+#    else:
+#      funcargs=''
+    res = [frame_func_name, {'str':'('}] + frame_func_args
+    if len(func_args) > 0:
+      res.append ({'str':'\n)'})
+    else :
+      res.append ({'str':')'})
+    return res
+#    return  u'{funcname} ({funcargs})'.format(
+#        funcname=frame_func_name,
+#        funcargs=funcargs
+#      )
+
 
   def _get_frame_fileline(self,frame):
     frame_line      = frame.find_sal().line
     symtab = frame.find_sal().symtab
     frame_filename  = symtab.filename if symtab else 'unknown'
-    return u'{filename}:{line}'.format(
-      filename  =   frame_filename,
-      line      =   frame_line,
-    )
+    return [
+      {'str':frame_filename,'name':'frame_filename'},
+      {'str':':'},
+      {'str':str(frame_line),'name':'frame_line'},
+    ]
+    #return u'{filename}:{line}'.format(
+    #  filename  =   frame_filename,
+    #  line      =   frame_line,
+    #)
 
   def _get_stack_1(self):
     frame = gdb.newest_frame ()
@@ -611,20 +640,29 @@ class LocalVarsWindow(BaseWindow):
     frames=[]
     nrow_mark=None
     while frame:
+      framenumber = {'str':'#{}'.format(str(nframe)),'name':'frame_num'}
       if frame == gdb.selected_frame ():
-        nrow_mark = nframe
-      frames.append([
-        str(nframe),
-        self._get_frame_funcname_with_args(frame),
-        self._get_frame_fileline(frame),
-      ])
+        framenumber['selected']=True
+      framecol = [
+        framenumber,
+        {'str':'  '},
+      ] + self._get_frame_fileline(frame) + \
+      [
+        {'str':'\n'},
+      ] + self._get_frame_funcname_with_args(frame)
+#      frames.append([
+#        str(nframe),
+#        self._get_frame_funcname_with_args(frame),
+#        self._get_frame_fileline(frame),
+#      ])
+      frames.append([framecol])
       nframe+=1
       frame = frame.older()
     table={
       'rows':frames,
     }
-    if nrow_mark != None:
-      table['color'] = [self.mark_row(nrow_mark,0)]
+    #if nrow_mark != None:
+    #  table['color'] = [self.mark_row(nrow_mark,0)]
     return table
 
   def get_stack(self):

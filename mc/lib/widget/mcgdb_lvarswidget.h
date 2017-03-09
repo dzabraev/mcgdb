@@ -8,6 +8,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <jansson.h>
+
 #include "lib/global.h"
 
 
@@ -39,7 +41,8 @@ typedef enum table_redraw {
 } redraw_t;
 
 typedef struct {
-  char **columns;
+  //char **columns;
+  json_t **columns;
   long ncols;
   long y1;
   long y2;

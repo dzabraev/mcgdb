@@ -60,14 +60,14 @@ static void wtable_mouse_callback           (Widget * w, mouse_msg_t msg, mouse_
 static void selbar_mouse_callback           (Widget * w, mouse_msg_t msg, mouse_event_t * event);
 
 size_t tty_print_utf8(const char *str);
-size_t tty_charlength_utf8(const char *str);
+size_t charlength_utf8(const char *str);
 
 static table_row *  table_row_alloc(long ncols);
 static void         table_row_destroy(table_row *row);
 static void         table_update_bounds(Table * tab, long y, long x, long lines, long cols);
 static Table *      table_new (long ncols);
 static int          table_add_row (Table * tab);
-static int          table_add_row_arr (Table * tab, const char **cols);
+//static int          table_add_row_arr (Table * tab, const char **cols);
 static void         table_destroy(Table *tab);
 static void         table_clear_rows(Table * tab);
 static void         table_draw(Table * tab);
@@ -76,7 +76,7 @@ static void         table_update_colwidth(Table * tab);
 static void         table_set_colwidth_formula(Table * tab, int (*formula)(const Table * tab, int ncol));
 static void         table_setcolor(Table *tab, int nrow, int ncol, int color);
 static void         table_process_click(Table *tab, mouse_event_t * event);
-static void         table_set_cell_text(Table *tab, int nrow, int ncol, const char *text);
+static void         table_set_cell_text(Table *tab, int nrow, int ncol, json_t *text);
 static void         table_set_cell_color(Table *tab, int nrow, int ncol, const char *fg, const char *bg, const char *attrib);
 static int          formula_eq_col(const Table * tab, int ncol);
 static int          formula_adapt_col(const Table * tab, int ncol);
@@ -128,7 +128,7 @@ insert_pkg_json_into_table(json_t *json_tab, Table *tab) {
     for (int col=0;col<tab->ncols;col++) {
       table_set_cell_text (
         tab,nrow,col,
-        json_string_value (json_array_get (row,col))
+        json_array_get (row,col)
       );
     }
   }
@@ -155,104 +155,6 @@ pkg_table_package(json_t *pkg, WTable *wtab, const char *tabname) {
   table_clear_rows(tab);
   insert_pkg_json_into_table (json_object_get(pkg,"table"), tab);
 }
-#if 0
-static void
-pkg_registers(json_t *pkg, WTable *wtab) {
-  Table *tab = wtable_get_table(wtab,"registers");
-  table_clear_rows(tab);
-  insert_pkg_json_into_table (json_object_get(pkg,"table_data"), tab);
-}
-
-
-
-static void
-pkg_threads(json_t *pkg, WTable *wtab) {
-  Table *tab = wtable_get_table(wtab,"threads");
-  table_clear_rows (tab);
-  insert_pkg_json_into_table (json_object_get(pkg,"table_data"), tab);
-}
-
-static void
-pkg_localvars(json_t *pkg, WTable *wtab) {
-  json_t *localvars = json_object_get(pkg,"localvars");
-  size_t size = json_array_size(localvars);
-  Table *tab = wtable_get_table(wtab,"localvars");
-  table_clear_rows(tab);
-  tty_setcolor(EDITOR_NORMAL_COLOR);
-  for(size_t i=0;i<size;i++) {
-    json_t * elem = json_array_get(localvars,i);
-    table_add_row (tab,
-      json_string_value(json_object_get(elem,"name")),
-      json_string_value(json_object_get(elem,"value"))
-    );
-  }
-  table_update_colwidth(tab);
-}
-
-static char *
-make_func_args (json_t * elem) {
-  json_t *args = json_object_get(elem,"args");
-  size_t size = json_array_size(args), psize=0;
-  char *buf = malloc(1024);
-  size_t bufsize=1024;
-  psize+=snprintf(buf+psize,bufsize-psize,"%s (", //)
-    json_string_value(json_object_get(elem,"func")));
-  for(size_t i=0;i<size;i++) {
-    json_t * arg = json_array_get(args,i);
-    psize+=snprintf(buf+psize,bufsize-psize,"%s=%s,",
-      json_string_value(json_object_get(arg,"name")),
-      json_string_value(json_object_get(arg,"value"))
-    );
-  }
-  if (size>0)
-    psize-=1; /*remove last `,`*/
-  psize+=snprintf(buf+psize,bufsize-psize,/*(*/")");
-  if(size>0)
-    buf[psize<bufsize?psize:bufsize-1]=0;
-  return buf;
-}
-
-static char *
-make_filename_line (json_t * elem) {
-  char *ptr;
-  const char *filename = json_string_value(json_object_get(elem,"filename"));
-  if (strlen(filename)>0)
-    asprintf(&ptr,"%s:%d",filename,(int)json_integer_value(json_object_get(elem,"line")));
-  else
-    asprintf(&ptr,"unknown");
-  return ptr;
-}
-
-
-static void
-pkg_backtrace(json_t *pkg, WTable *wtab) {
-  json_t *backtrace = json_object_get(pkg,"backtrace");
-  size_t size = json_array_size(backtrace);
-  Table *tab = wtable_get_table(wtab,"backtrace");
-  int nrow;
-  table_clear_rows(tab);
-  for(size_t i=0;i<size;i++) {
-    json_t * elem = json_array_get(backtrace,i), *sf;
-    char * func_args_str = make_func_args (elem);
-    char * filename_line = make_filename_line (elem);
-    char nframe[100];
-    snprintf(nframe,sizeof(nframe),"%d",(int) json_integer_value(json_object_get(elem,"nframe")));
-    nrow = table_add_row (tab,
-      nframe,
-      func_args_str,
-      filename_line
-    );
-    sf = json_object_get (elem, "selected_frame");
-    if (sf && json_boolean_value (sf)) {
-      table_setcolor(tab, nrow, 0, color_selected_frame);
-    }
-    free(func_args_str);
-    free(filename_line);
-  }
-  table_update_colwidth(tab);
-}
-
-#endif
 
 static void
 mcgdb_aux_dialog_gdbevt (WDialog *h) {
@@ -264,23 +166,20 @@ mcgdb_aux_dialog_gdbevt (WDialog *h) {
   switch(act->command) {
     case MCGDB_LOCALVARS:
       wtab = (WTable *)dlg_find_by_id(h, VARS_REGS_TABLE_ID);
-      pkg_table_package (pkg,wtab,"localvars");
+      //pkg_table_package (pkg,wtab,"localvars");
       //pkg_localvars(pkg,wtab);
       break;
     case MCGDB_REGISTERS:
       wtab = (WTable *) dlg_find_by_id (h, VARS_REGS_TABLE_ID);
-      pkg_table_package (pkg,wtab,"registers");
-      //pkg_registers (pkg, wtab);
+      //pkg_table_package (pkg,wtab,"registers");
       break;
     case MCGDB_BACKTRACE:
       wtab = (WTable *)dlg_find_by_id(h, BT_TH_TABLE_ID);
       pkg_table_package (pkg,wtab,"backtrace");
-      //pkg_backtrace(pkg,wtab);
       break;
     case MCGDB_THREADS:
       wtab = (WTable *)dlg_find_by_id(h, BT_TH_TABLE_ID);
-      //pkg_threads(pkg,wtab);
-      pkg_table_package (pkg,wtab,"threads");
+      //pkg_table_package (pkg,wtab,"threads");
       break;
 
     default:
@@ -418,23 +317,24 @@ static table_row *
 table_row_alloc(long ncols) {
   table_row * row = g_new0 (table_row,1);
   row->ncols=ncols;
-  row->columns = (char **)g_new0(char *, ncols);
+  row->columns = (json_t **)g_new0(json_t *, ncols);
   row->color   = (int *)g_new(int, ncols);
   for (int col=0;col<ncols;col++) {
-    row->columns[col] = strdup(strdup(" "));
+    row->columns[col] = NULL;
     row->color[col]=EDITOR_NORMAL_COLOR;
   }
   return row;
 }
 
 static void
-table_set_cell_text (Table *tab, int nrow, int ncol, const char *text) {
+table_set_cell_text (Table *tab, int nrow, int ncol, json_t *text) {
   table_row *row = g_list_nth_data(tab->rows,nrow);
+  json_incref (text);
   assert(row);
-  assert(row->ncols>ncol);
+  assert(row->ncols > ncol);
   if (row->columns[ncol])
-    free(row->columns[ncol]);
-  row->columns[ncol] = strdup (text);
+    json_decref (row->columns[ncol]);
+  row->columns[ncol] = text;
 }
 
 static void
@@ -444,7 +344,7 @@ table_set_cell_color(Table *tab, int nrow, int ncol, const char *fg, const char 
 }
 
 
-
+/*
 static table_row *
 table_row_alloc_arr(long ncols, const char ** colval) {
   table_row * row = g_new0 (table_row,1);
@@ -456,7 +356,7 @@ table_row_alloc_arr(long ncols, const char ** colval) {
     row->color[col]=EDITOR_NORMAL_COLOR;
   }
   return row;
-}
+}*/
 
 static void
 table_process_click(Table *tab, mouse_event_t * event) {
@@ -534,6 +434,21 @@ formula_eq_col(const Table * tab, __attribute__((unused)) int ncol) {
   return (tab->cols/tab->ncols);
 }
 
+static size_t
+get_jsonstr_len_utf(json_t * str) {
+  size_t size = json_array_size(str);
+  size_t str_size=0;
+  for (size_t nchunk=0;nchunk<size;nchunk++) {
+    json_t * chunk = json_array_get(str,nchunk);
+    const char * chunk_str = json_string_value (json_object_get (chunk, "str"));
+    while (*chunk_str) {
+      chunk_str += charlength_utf8 (chunk_str);
+      str_size+=1;
+    }
+  }
+  return str_size;
+}
+
 static int
 formula_adapt_col(const Table * tab, int ncol) {
   int ncols = tab->ncols;
@@ -542,7 +457,7 @@ formula_adapt_col(const Table * tab, int ncol) {
   if(ncol<ncols) {
     GList * row = tab->rows;
     for(;row;row=g_list_next(row)) {
-      width = strlen(((table_row *)row->data)->columns[ncol]);
+      width = get_jsonstr_len_utf (((table_row *)row->data)->columns[ncol]);
       if (width >= max_avail_width)
         return max_avail_width;
       if (width > max_width)
@@ -566,40 +481,68 @@ table_set_colwidth_formula(Table * tab, int (*formula)(const Table * tab, int nc
   tab->formula = formula;
 }
 
+static void
+set_color_by_chunkname (json_t *chunk) {
+  char *name = json_object_get (chunk,"name");
+  int color;
+  if (!name)
+    return;
+  if (!strcmp(name,"frame_num")) {
+    json_t *selected = json_object_get (chunk,"selected");
+    if (selected && json_boolean_value(selected))
+      color = tty_try_alloc_color_pair2 ("red", "black", "bold", FALSE);
+      tty_setcolor (color);
+  }
+}
 
 static void
 table_draw_row (Table * tab, table_row *row) {
   long * colstart = tab->colstart;
-  char ** columns = row->columns;
-  char *p;
+  json_t ** columns = row->columns;
+  json_t * column;
   long rowcnt;
   long max_rowcnt=1, x1, x2;
   long offset;
   row->y1 = ROW_OFFSET(tab,0);
   for(int i=0;i<tab->ncols;i++) {
+    long colcnt;
     tty_setcolor(row->color[i]); /*цвет ячейки*/
-    p = columns[i];
+    column = columns[i];
     x1 = i==0?colstart[i]:colstart[i]+1;
     x2 = colstart[i+1];
     rowcnt=0;
     offset=ROW_OFFSET(tab,rowcnt);
     if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
       tty_gotoyx(offset,x1);
-    for(long colcnt=x1;*p;colcnt++) {
-      if(colcnt==x2) {
-        /*допечатали до правой границы столбца таблицы
-         *делаем перенос строки.*/
-        rowcnt++;
-        offset=ROW_OFFSET(tab,rowcnt);
-        if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
-          tty_gotoyx(offset,x1);
-        colcnt=x1;
+    colcnt=x1;
+    for (size_t nchunk=0;nchunk<json_array_size(column); nchunk++) {
+      json_t * chunk = json_array_get (column,nchunk);
+      const char * p = json_string_value (json_object_get (chunk,"str"));
+      set_color_by_chunkname (chunk);
+      for(;*p;colcnt++) {
+        if(colcnt>=x2) {
+          /*допечатали до правой границы столбца таблицы
+           *делаем перенос строки.*/
+          rowcnt++;
+          offset=ROW_OFFSET(tab,rowcnt);
+          if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
+            tty_gotoyx(offset,x1);
+          colcnt=x1;
+        }
+        switch(*p) {
+        case '\n':
+          p++;
+          if (colcnt!=x1)
+            colcnt=x2;
+          break;
+        default:
+          offset=ROW_OFFSET(tab,rowcnt);
+          if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
+            p+=tty_print_utf8(p);
+          else
+            p+=charlength_utf8(p);
+        }
       }
-      offset=ROW_OFFSET(tab,rowcnt);
-      if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
-        p+=tty_print_utf8(p);
-      else
-        p+=tty_charlength_utf8(p);
     }
     rowcnt++;
     if(rowcnt>max_rowcnt)
@@ -704,11 +647,12 @@ table_add_row (Table * tab) {
   return rc;
 }
 
+/*
 static int
 table_add_row_arr (Table * tab, const char **cols) {
  table_row *row = table_row_alloc_arr (tab->ncols,cols);
  return _table_insert_row (tab,row);
-}
+}*/
 
 
 static void
@@ -995,7 +939,7 @@ mcgdb_aux_dlg(void) {
     BT_TH_WIDGET_LINES,
     BT_TH_WIDGET_COLS
   );
-  wtable_add_table (bt_th_table,"backtrace",3);
+  wtable_add_table (bt_th_table,"backtrace",1);
   wtable_add_table (bt_th_table,"threads",5);
   wtable_set_current_table (bt_th_table,"backtrace");
   wtable_update_bound(bt_th_table);
@@ -1042,7 +986,7 @@ tty_print_utf8(const char *str) {
 }
 
 size_t
-tty_charlength_utf8(const char *str) {
+charlength_utf8(const char *str) {
   gunichar c;
   if (!str || !*str)
     return 0;
