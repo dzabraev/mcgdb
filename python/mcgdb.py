@@ -568,7 +568,8 @@ class LocalVarsWindow(BaseWindow):
       while block:
         for sym in block:
           if sym.is_argument:
-            args.append(  (sym.name,str(sym.value(frame)))  )
+            value = sym.value(frame).string('utf-8')
+            args.append(  (sym.name,value)  )
         block=block.superblock
         if (not block) or block.function:
           break
