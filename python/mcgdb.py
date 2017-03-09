@@ -359,7 +359,7 @@ class BaseWindow(object):
                 запустить gnome-terminal.
     '''
     debug_wins[self.type]=self #debug
-    #self.gui_window_cmd='''LANG=C gnome-terminal -e 'bash -c "cd ~/tmp/mcgdb-debug/; touch 1; ulimit -c unlimited; {cmd}"' '''
+    #self.gui_window_cmd='''gnome-terminal -e 'bash -c "cd ~/tmp/mcgdb-debug/; touch 1; ulimit -c unlimited; {cmd}"' '''
     #self.gui_window_cmd='''gnome-terminal -e 'valgrind --log-file=/tmp/vlg.log {cmd}' '''
     self.gui_window_cmd='''gnome-terminal -e '{cmd}' '''
     self.lsock=socket.socket()
@@ -507,6 +507,10 @@ class LocalVarsWindow(BaseWindow):
   def update_backtrace(self):
     try:
       backtrace = self.get_stack()
+#      for row in backtrace['rows']:
+#        for col in row:
+#          for chunk in col:
+#            assert 'str' in chunk
     except gdb.error:
       return
     pkg={
@@ -565,8 +569,14 @@ class LocalVarsWindow(BaseWindow):
       block = block.superblock
     lvars=[]
     for name,value in variables.iteritems():
-      lvars.append([name,stringify_value(value)])
-    lvars.sort( cmp = lambda x,y: 1 if x[0]>y[0] else -1 )
+      lvars.append([
+        [
+          {'str':name,'name':'varname'},
+          {'str':'='},
+          {'str':stringify_value(value),'name':'varvalue'}
+        ]
+      ])
+    lvars.sort( cmp = lambda x,y: 1 if x[0][0]['str']>y[0][0]['str'] else -1 )
     return {'rows':lvars}
 
 
@@ -598,26 +608,15 @@ class LocalVarsWindow(BaseWindow):
     func_args = self._get_frame_func_args(frame)
     for argname,argval in func_args:
       frame_func_args.append({'str':'\n  '})
-      frame_func_args.append({'str':argname,'name':'frame_func_arg'})
+      frame_func_args.append({'str':argname,'name':'varname'})
       frame_func_args.append({'str':'='})
-      frame_func_args.append({'str':argval, 'name':'frame_func_argval'})
-#    if len(frame_func_args)>0:
-#      funcargs = u',\n  '.join ([u'{}={}'.format(name,value) for name,value in frame_func_args])
-#      funcargs = u'\n  '+funcargs+'\n'
-#    elif len(frame_func_args)==1:
-#      funcargs=u'{}={}'.format(frame_func_args[0][0],frame_func_args[0][1])
-#    else:
-#      funcargs=''
+      frame_func_args.append({'str':argval, 'name':'varvalue'})
     res = [frame_func_name, {'str':'('}] + frame_func_args
     if len(func_args) > 0:
       res.append ({'str':'\n)'})
     else :
       res.append ({'str':')'})
     return res
-#    return  u'{funcname} ({funcargs})'.format(
-#        funcname=frame_func_name,
-#        funcargs=funcargs
-#      )
 
 
   def _get_frame_fileline(self,frame):
@@ -626,13 +625,9 @@ class LocalVarsWindow(BaseWindow):
     frame_filename  = symtab.filename if symtab else 'unknown'
     return [
       {'str':frame_filename,'name':'frame_filename'},
-      {'str':':'},
+      {'str':':', 'name':'frame_fileline_delimiter'},
       {'str':str(frame_line),'name':'frame_line'},
     ]
-    #return u'{filename}:{line}'.format(
-    #  filename  =   frame_filename,
-    #  line      =   frame_line,
-    #)
 
   def _get_stack_1(self):
     frame = gdb.newest_frame ()
@@ -650,19 +645,12 @@ class LocalVarsWindow(BaseWindow):
       [
         {'str':'\n'},
       ] + self._get_frame_funcname_with_args(frame)
-#      frames.append([
-#        str(nframe),
-#        self._get_frame_funcname_with_args(frame),
-#        self._get_frame_fileline(frame),
-#      ])
       frames.append([framecol])
       nframe+=1
       frame = frame.older()
     table={
       'rows':frames,
     }
-    #if nrow_mark != None:
-    #  table['color'] = [self.mark_row(nrow_mark,0)]
     return table
 
   def get_stack(self):
@@ -701,13 +689,19 @@ class LocalVarsWindow(BaseWindow):
       threadname    =   str(thread.name) if thread.name else ''
       funcname      =   self._get_frame_funcname_with_args(frame)
       fileline      =   self._get_frame_fileline(frame)
-      throws.append( (global_num,tid,threadname,funcname,fileline) )
+      throws.append([ #row
+        [{'str':global_num,     'name':'th_global_num'}],
+        [{'str':tid,            'name':'th_tid'}],
+        [{'str':threadname,     'name':'th_threadname'}],
+        [{'str':funcname,       'name':'th_funcname'}],
+        [{'str':fileline,       'name':'th_fileline'}],
+      ])
       nrow+=1
     if selected_thread!=None:
       selected_thread.switch()
     table = {'rows':throws}
-    if nrow_mark!=None:
-      table['color'] = [self.mark_row(nrow_mark,0)]
+    #if nrow_mark!=None:
+    #  table['color'] = [self.mark_row(nrow_mark,0)]
     return table
 
   def get_threads(self):

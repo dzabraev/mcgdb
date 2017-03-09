@@ -166,8 +166,7 @@ mcgdb_aux_dialog_gdbevt (WDialog *h) {
   switch(act->command) {
     case MCGDB_LOCALVARS:
       wtab = (WTable *)dlg_find_by_id(h, VARS_REGS_TABLE_ID);
-      //pkg_table_package (pkg,wtab,"localvars");
-      //pkg_localvars(pkg,wtab);
+      pkg_table_package (pkg,wtab,"localvars");
       break;
     case MCGDB_REGISTERS:
       wtab = (WTable *) dlg_find_by_id (h, VARS_REGS_TABLE_ID);
@@ -179,7 +178,7 @@ mcgdb_aux_dialog_gdbevt (WDialog *h) {
       break;
     case MCGDB_THREADS:
       wtab = (WTable *)dlg_find_by_id(h, BT_TH_TABLE_ID);
-      //pkg_table_package (pkg,wtab,"threads");
+      pkg_table_package (pkg,wtab,"threads");
       break;
 
     default:
@@ -483,16 +482,33 @@ table_set_colwidth_formula(Table * tab, int (*formula)(const Table * tab, int nc
 
 static void
 set_color_by_chunkname (json_t *chunk) {
-  char *name = json_object_get (chunk,"name");
-  int color;
-  if (!name)
-    return;
-  if (!strcmp(name,"frame_num")) {
-    json_t *selected = json_object_get (chunk,"selected");
-    if (selected && json_boolean_value(selected))
-      color = tty_try_alloc_color_pair2 ("red", "black", "bold", FALSE);
-      tty_setcolor (color);
+  char *name = json_string_value (json_object_get (chunk,"name"));
+  int color = EDITOR_NORMAL_COLOR;
+  if (name) {
+    if (!strcmp(name,"frame_num")) {
+      json_t *selected = json_object_get (chunk,"selected");
+      if (selected && json_boolean_value(selected))
+        color = tty_try_alloc_color_pair2 ("red", "black", "bold", FALSE);
+    }
+    else if (!strcmp(name,"varname")) {
+        color = tty_try_alloc_color_pair2 ("yellow", "blue", NULL, FALSE);
+    }
+    else if (!strcmp(name,"varvalue")) {
+        color = tty_try_alloc_color_pair2 ("green", "blue", NULL, FALSE);
+    }
+    else if (!strcmp(name,"frame_func_name")) {
+        color = tty_try_alloc_color_pair2 ("cyan", "blue", NULL, FALSE);
+    }
+//    else if (
+//        !strcmp(name,"frame_filename") ||
+//        !strcmp(name,"frame_line") ||
+//        !strcmp(name,"frame_fileline_delimiter")
+//       ) {
+//        color = tty_try_alloc_color_pair2 ("brown", "blue", NULL, FALSE);
+//    }
+
   }
+  tty_setcolor(color);
 }
 
 static void
@@ -518,6 +534,8 @@ table_draw_row (Table * tab, table_row *row) {
     for (size_t nchunk=0;nchunk<json_array_size(column); nchunk++) {
       json_t * chunk = json_array_get (column,nchunk);
       const char * p = json_string_value (json_object_get (chunk,"str"));
+      if (!p)
+        p="???";
       set_color_by_chunkname (chunk);
       for(;*p;colcnt++) {
         if(colcnt>=x2) {
@@ -559,15 +577,16 @@ table_draw(Table * tab) {
   GList *row = tab->rows;
   table_row *r;
   long offset;
-  tty_setcolor(EDITOR_NORMAL_COLOR);
   tty_fill_region(tab->y,tab->x,tab->lines,tab->cols,' ');
   tab->last_row_pos = tab->y - tab->row_offset;
 
   while(row) {
     r = (table_row *)row->data;
+    tty_setcolor(EDITOR_NORMAL_COLOR);
     table_draw_row (tab,r);
     offset=ROW_OFFSET(tab,0);
     if (offset>TAB_TOP(tab) && offset<=TAB_BOTTOM(tab)) {
+      tty_setcolor(EDITOR_NORMAL_COLOR);
       tty_draw_hline(offset,tab->x,mc_tty_frm[MC_TTY_FRM_HORIZ],tab->cols);
     }
     tab->last_row_pos++;
@@ -575,6 +594,7 @@ table_draw(Table * tab) {
      * вычислить координаты начала и конца каждой строки*/
     row = g_list_next (row);
   }
+  tty_setcolor(EDITOR_NORMAL_COLOR);
   for(int i=1;i<tab->ncols;i++) {
     tty_draw_vline(tab->y,tab->colstart[i],mc_tty_frm[MC_TTY_FRM_VERT],tab->lines);
   }
@@ -716,6 +736,7 @@ wtable_callback (Widget * w, __attribute__((unused)) Widget * sender, widget_msg
 static void
 wtable_draw(WTable *wtab) {
   table_draw (wtab->tab);
+  tty_setcolor(EDITOR_NORMAL_COLOR);
   tty_draw_box (WIDGET(wtab)->y+1, WIDGET(wtab)->x, WIDGET(wtab)->lines-1, WIDGET(wtab)->cols, FALSE);
   selbar_draw (wtab->selbar);
   wtab->tab->redraw = REDRAW_NONE;
@@ -928,7 +949,7 @@ mcgdb_aux_dlg(void) {
     VARS_REGS_WIDGET_LINES,
     VARS_REGS_WIDGET_COLS
   );
-  wtable_add_table(vars_regs_table,"localvars",2);
+  wtable_add_table(vars_regs_table,"localvars",1);
   wtable_add_table(vars_regs_table,"registers",2);
   wtable_set_current_table(vars_regs_table, "localvars");
   wtable_update_bound(vars_regs_table);
