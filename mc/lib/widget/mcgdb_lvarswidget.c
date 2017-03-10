@@ -86,6 +86,15 @@ static void         wtable_draw(WTable *wtab);
 static void         table_add_offset(Table *tab, int off);
 WTable  *           find_wtable (WDialog *h);
 
+static int
+print_chunks (json_t *chunk, int x1, int x2, int start_pos, int right_bound, Table *tab, int * rowcnt);
+
+static int
+print_str_chunk (json_t *chunk, int x1, int x2, int start_pos, int right_bound, Table * tab, int * rowcnt);
+
+static int
+get_chunk_horiz_shift(json_t * chunk);
+
 
 gint    find_button_in_list(gconstpointer a, gconstpointer b);
 
@@ -433,19 +442,30 @@ formula_eq_col(const Table * tab, __attribute__((unused)) int ncol) {
   return (tab->cols/tab->ncols);
 }
 
+
 static size_t
-get_jsonstr_len_utf(json_t * str) {
-  size_t size = json_array_size(str);
-  size_t str_size=0;
-  for (size_t nchunk=0;nchunk<size;nchunk++) {
-    json_t * chunk = json_array_get(str,nchunk);
-    const char * chunk_str = json_string_value (json_object_get (chunk, "str"));
-    while (*chunk_str) {
-      chunk_str += charlength_utf8 (chunk_str);
-      str_size+=1;
+get_jsonstr_len_utf(json_t * chunks) {
+  /*вычисляет максимальную ширину строки (array of chunks)*/
+  json_t * child_chunks;
+  size_t str_size = 0, max_str_size=0;
+  for (size_t nchunk=0;nchunk<json_array_size(chunks); nchunk++) {
+    json_t * chunk = json_array_get (chunks,nchunk);
+    str_size=0;
+    if (json_object_get (chunk,"str")) {
+      const char * chunk_str = json_string_value (json_object_get (chunk, "str"));
+      while (*chunk_str) {
+        chunk_str += charlength_utf8 (chunk_str);
+        str_size+=1;
+      }
     }
+    else if ((child_chunks = json_object_get (chunk,"chunks"))) {
+      str_size = get_jsonstr_len_utf (child_chunks);
+      str_size += get_chunk_horiz_shift (chunk);
+    }
+    if (max_str_size > str_size)
+      max_str_size = str_size;
   }
-  return str_size;
+  return max_str_size;
 }
 
 static int
@@ -482,7 +502,7 @@ table_set_colwidth_formula(Table * tab, int (*formula)(const Table * tab, int nc
 
 static void
 set_color_by_chunkname (json_t *chunk) {
-  char *name = json_string_value (json_object_get (chunk,"name"));
+  const char *name = json_string_value (json_object_get (chunk,"name"));
   int color = EDITOR_NORMAL_COLOR;
   if (name) {
     if (!strcmp(name,"frame_num") || !strcmp(name,"th_global_num")) {
@@ -499,7 +519,7 @@ set_color_by_chunkname (json_t *chunk) {
     else if (!strcmp(name,"frame_func_name")) {
         color = tty_try_alloc_color_pair2 ("cyan", "blue", NULL, FALSE);
     }
-//    else if (
+//   else if (
 //        !strcmp(name,"frame_filename") ||
 //        !strcmp(name,"frame_line") ||
 //        !strcmp(name,"frame_fileline_delimiter")
@@ -512,16 +532,102 @@ set_color_by_chunkname (json_t *chunk) {
 }
 
 static void
+tty_setalloc_color (const char *fg, const char *bg, const char * attr, gboolean x) {
+  int color = tty_try_alloc_color_pair2 (fg, bg, attr, x);
+  tty_setcolor(color);
+}
+
+static int
+print_str_chunk(json_t *chunk, int x1, int x2, int start_pos, int right_bound, Table * tab, int * rowcnt) {
+  const char * p;
+  int offset;
+  int colcnt=start_pos;
+  p = json_string_value (json_object_get (chunk,"str"));
+  if (!p)
+    p="???";
+  offset=ROW_OFFSET(tab,rowcnt[0]);
+  tty_gotoyx(offset,start_pos);
+  for(;;colcnt++) {
+    if(colcnt>=x2) {
+      /*допечатали до правой границы столбца таблицы
+       *делаем перенос строки.*/
+      rowcnt[0]++;
+      offset=ROW_OFFSET(tab,rowcnt[0]);
+      if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
+        tty_gotoyx(offset,x1);
+      colcnt=x1;
+    }
+    if (!*p)
+      break;
+    switch(*p) {
+    case '\n':
+      p++;
+      if (colcnt!=x1)
+        colcnt=x2;
+      break;
+    default:
+      offset=ROW_OFFSET(tab,rowcnt[0]);
+      if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab) && colcnt<right_bound) {
+        set_color_by_chunkname (chunk);
+        p+=tty_print_utf8(p);
+      }
+      else {
+        tty_gotoyx(offset,right_bound);
+        tty_setalloc_color ("brown", "blue", NULL, FALSE);
+        tty_print_char('>'); /*print on widget frame*/
+        p+=charlength_utf8(p);
+      }
+    }
+  }
+  return colcnt;
+}
+
+static int
+get_chunk_horiz_shift(json_t * chunk) {
+  int horiz_shift=0;
+  json_t * type = json_object_get (chunk,"type");
+  if (type) {
+    const char * strval = json_string_value (type);
+    if (!strcmp(strval,"struct")) {
+      horiz_shift=2;
+    }
+  }
+  return horiz_shift;
+}
+
+static int
+print_chunks(json_t * chunks, int x1, int x2, int start_pos, int right_bound, Table *tab, int * rowcnt) {
+  json_t * child_chunks, * type;
+  for (size_t nchunk=0;nchunk<json_array_size(chunks); nchunk++) {
+    json_t * chunk = json_array_get (chunks,nchunk);
+    if (json_object_get (chunk,"str")) {
+      start_pos = print_str_chunk (chunk,x1,x2,start_pos,right_bound,tab,rowcnt);
+    }
+    else if ((child_chunks = json_object_get (chunk,"chunks"))) {
+      int horiz_shift = get_chunk_horiz_shift (chunk);
+      if ((type=json_object_get(chunk,"type")) && !strcmp(json_string_value(type),"struct")) {
+        int start_pos_chunks=x1 + horiz_shift;
+        print_chunks (child_chunks,x1+horiz_shift,x2+horiz_shift,start_pos_chunks,right_bound,tab,rowcnt);
+        start_pos=x1;
+      }
+      else {
+        start_pos = print_chunks (child_chunks,x1+horiz_shift,x2+horiz_shift,start_pos,right_bound,tab,rowcnt);
+      }
+    }
+  }
+  return start_pos;
+}
+
+static void
 table_draw_row (Table * tab, table_row *row) {
   long * colstart = tab->colstart;
   json_t ** columns = row->columns;
   json_t * column;
-  long rowcnt;
+  int rowcnt;
   long max_rowcnt=1, x1, x2;
   long offset;
   row->y1 = ROW_OFFSET(tab,0);
   for(int i=0;i<tab->ncols;i++) {
-    long colcnt;
     tty_setcolor(row->color[i]); /*цвет ячейки*/
     column = columns[i];
     x1 = i==0?colstart[i]:colstart[i]+1;
@@ -530,38 +636,7 @@ table_draw_row (Table * tab, table_row *row) {
     offset=ROW_OFFSET(tab,rowcnt);
     if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
       tty_gotoyx(offset,x1);
-    colcnt=x1;
-    for (size_t nchunk=0;nchunk<json_array_size(column); nchunk++) {
-      json_t * chunk = json_array_get (column,nchunk);
-      const char * p = json_string_value (json_object_get (chunk,"str"));
-      if (!p)
-        p="???";
-      set_color_by_chunkname (chunk);
-      for(;*p;colcnt++) {
-        if(colcnt>=x2) {
-          /*допечатали до правой границы столбца таблицы
-           *делаем перенос строки.*/
-          rowcnt++;
-          offset=ROW_OFFSET(tab,rowcnt);
-          if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
-            tty_gotoyx(offset,x1);
-          colcnt=x1;
-        }
-        switch(*p) {
-        case '\n':
-          p++;
-          if (colcnt!=x1)
-            colcnt=x2;
-          break;
-        default:
-          offset=ROW_OFFSET(tab,rowcnt);
-          if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
-            p+=tty_print_utf8(p);
-          else
-            p+=charlength_utf8(p);
-        }
-      }
-    }
+    print_chunks (column, x1, x2, x1, x2, tab, &rowcnt);
     rowcnt++;
     if(rowcnt>max_rowcnt)
       max_rowcnt=rowcnt;
@@ -735,9 +810,9 @@ wtable_callback (Widget * w, __attribute__((unused)) Widget * sender, widget_msg
 
 static void
 wtable_draw(WTable *wtab) {
+  tty_draw_box (WIDGET(wtab)->y+1, WIDGET(wtab)->x, WIDGET(wtab)->lines-1, WIDGET(wtab)->cols, FALSE);
   table_draw (wtab->tab);
   tty_setcolor(EDITOR_NORMAL_COLOR);
-  tty_draw_box (WIDGET(wtab)->y+1, WIDGET(wtab)->x, WIDGET(wtab)->lines-1, WIDGET(wtab)->cols, FALSE);
   selbar_draw (wtab->selbar);
   wtab->tab->redraw = REDRAW_NONE;
 }

@@ -545,12 +545,64 @@ class LocalVarsWindow(BaseWindow):
 
   def _get_local_vars(self):
     try:
-      res=exec_in_main_pythread( self._get_local_vars_1, ())
+      res=exec_in_main_pythread( self._get_local_vars_chunks, ())
     except (gdb.error,RuntimeError):
       #import traceback
       #traceback.print_exc()
       res=[]
     return res
+
+  def struct_fields_to_chunks(self,parent_value):
+    chunks=[]
+    for field in parent_value.type.fields():
+      field_name = field.name
+      value = parent_value[field_name]
+      chunks.append({'str' : field_name,'name' : 'varname'})
+      chunks.append({'str' : ' = '})
+      if value.type.code==gdb.TYPE_CODE_STRUCT:
+        chunks.append (self.struct_to_chunks(value))
+      else:
+        chunks.append({'str' : stringify_value(value),'name' : 'varvalue'})
+      chunks.append({'str' : '\n'})
+    return {
+      'type':'struct',
+      'chunks':chunks,
+    }
+
+
+  def struct_to_chunks(self,parent_value):
+    chunks=[
+      {'str':'{\n'},
+      self.struct_fields_to_chunks(parent_value),
+      {'str':'\n}'},
+    ]
+    parent_chunk={
+      'chunks'  : chunks,
+      'type'    : 'parenthesis',
+    }
+    return parent_chunk
+
+  def _get_local_vars_chunks(self):
+    variables = self._get_local_vars_1 ()
+    lvars=[]
+    for name,value in variables.iteritems():
+      if value.type.code==gdb.TYPE_CODE_STRUCT:
+        row = [[
+          {'str':name, 'name':'varname'},
+          {'str':' = '},
+          self.struct_to_chunks(value),
+        ]]
+      else:
+        row = [
+          [
+            {'str':name,'name':'varname'},
+            {'str':'='},
+            {'str':stringify_value(value),'name':'varvalue'}
+          ]
+        ]
+      lvars.append(row)
+    lvars.sort( cmp = lambda x,y: 1 if x[0][0]['str']>y[0][0]['str'] else -1 )
+    return {'rows':lvars}
 
   def _get_local_vars_1(self):
     frame = gdb.selected_frame()
@@ -568,16 +620,7 @@ class LocalVarsWindow(BaseWindow):
         break
       block = block.superblock
     lvars=[]
-    for name,value in variables.iteritems():
-      lvars.append([
-        [
-          {'str':name,'name':'varname'},
-          {'str':'='},
-          {'str':stringify_value(value),'name':'varvalue'}
-        ]
-      ])
-    lvars.sort( cmp = lambda x,y: 1 if x[0][0]['str']>y[0][0]['str'] else -1 )
-    return {'rows':lvars}
+    return variables
 
 
   def _get_frame_func_args(self,frame):
