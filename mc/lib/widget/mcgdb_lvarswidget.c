@@ -170,7 +170,7 @@ mcgdb_aux_dialog_gdbevt (WDialog *h) {
       break;
     case MCGDB_REGISTERS:
       wtab = (WTable *) dlg_find_by_id (h, VARS_REGS_TABLE_ID);
-      //pkg_table_package (pkg,wtab,"registers");
+      pkg_table_package (pkg,wtab,"registers");
       break;
     case MCGDB_BACKTRACE:
       wtab = (WTable *)dlg_find_by_id(h, BT_TH_TABLE_ID);
@@ -485,15 +485,15 @@ set_color_by_chunkname (json_t *chunk) {
   char *name = json_string_value (json_object_get (chunk,"name"));
   int color = EDITOR_NORMAL_COLOR;
   if (name) {
-    if (!strcmp(name,"frame_num")) {
+    if (!strcmp(name,"frame_num") || !strcmp(name,"th_global_num")) {
       json_t *selected = json_object_get (chunk,"selected");
       if (selected && json_boolean_value(selected))
         color = tty_try_alloc_color_pair2 ("red", "black", "bold", FALSE);
     }
-    else if (!strcmp(name,"varname")) {
+    else if (!strcmp(name,"varname") || !strcmp(name,"regname")) {
         color = tty_try_alloc_color_pair2 ("yellow", "blue", NULL, FALSE);
     }
-    else if (!strcmp(name,"varvalue")) {
+    else if (!strcmp(name,"varvalue") || !strcmp(name,"regvalue")) {
         color = tty_try_alloc_color_pair2 ("green", "blue", NULL, FALSE);
     }
     else if (!strcmp(name,"frame_func_name")) {
@@ -950,7 +950,7 @@ mcgdb_aux_dlg(void) {
     VARS_REGS_WIDGET_COLS
   );
   wtable_add_table(vars_regs_table,"localvars",1);
-  wtable_add_table(vars_regs_table,"registers",2);
+  wtable_add_table(vars_regs_table,"registers",1);
   wtable_set_current_table(vars_regs_table, "localvars");
   wtable_update_bound(vars_regs_table);
 
@@ -961,7 +961,7 @@ mcgdb_aux_dlg(void) {
     BT_TH_WIDGET_COLS
   );
   wtable_add_table (bt_th_table,"backtrace",1);
-  wtable_add_table (bt_th_table,"threads",5);
+  wtable_add_table (bt_th_table,"threads",1);
   wtable_set_current_table (bt_th_table,"backtrace");
   wtable_update_bound(bt_th_table);
 

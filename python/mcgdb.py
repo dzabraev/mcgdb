@@ -657,21 +657,19 @@ class LocalVarsWindow(BaseWindow):
     return exec_in_main_pythread (self._get_stack_1,())
 
   def _get_regs_1(self):
-    regs=[]
+    rows_regs=[]
     for regname in self.regnames:
-      regs.append( [regname,str(gdb.parse_and_eval(regname))]  )
-    return {'rows' : regs}
+      rows_regs.append([ #row
+        [ #col
+            {'str':regname, 'name':'regname'},
+            {'str':'='},
+            {'str':str(gdb.parse_and_eval(regname)), 'name':'regvalue'},
+        ]
+      ])
+    return {'rows' : rows_regs}
 
   def get_registers(self):
     return exec_in_main_pythread (self._get_regs_1,())
-
-  def mark_row(self,nrow,ncol):
-    return {
-        'nrow'  : nrow,
-        'ncol'  : ncol,
-        'fg'    : 'red',
-        'bg'    : 'black',
-      }
 
   def _get_threads_1(self):
     selected_thread = gdb.selected_thread()
@@ -680,8 +678,6 @@ class LocalVarsWindow(BaseWindow):
     nrow=0
     nrow_mark=None
     for thread in threads:
-      if thread==selected_thread:
-        nrow_mark = nrow
       thread.switch()
       frame = gdb.selected_frame()
       global_num    =   str(thread.global_num)
@@ -689,19 +685,26 @@ class LocalVarsWindow(BaseWindow):
       threadname    =   str(thread.name) if thread.name else ''
       funcname      =   self._get_frame_funcname_with_args(frame)
       fileline      =   self._get_frame_fileline(frame)
+      global_num_chunk = {'str':global_num, 'name':'th_global_num'}
+      if thread==selected_thread:
+        global_num_chunk['selected']=True
       throws.append([ #row
-        [{'str':global_num,     'name':'th_global_num'}],
-        [{'str':tid,            'name':'th_tid'}],
-        [{'str':threadname,     'name':'th_threadname'}],
-        [{'str':funcname,       'name':'th_funcname'}],
-        [{'str':fileline,       'name':'th_fileline'}],
+        [ global_num_chunk,
+          {'str':'  '},
+          {'str':tid,        'name':'th_tid'},
+          {'str':'  '},
+          {'str':'"'},
+          {'str':threadname,     'name':'th_threadname'},
+          {'str':'"\n'},
+        ] +  \
+        fileline + \
+        [{'str':'\n'}] + \
+        self._get_frame_funcname_with_args(frame),
       ])
       nrow+=1
     if selected_thread!=None:
       selected_thread.switch()
     table = {'rows':throws}
-    #if nrow_mark!=None:
-    #  table['color'] = [self.mark_row(nrow_mark,0)]
     return table
 
   def get_threads(self):
