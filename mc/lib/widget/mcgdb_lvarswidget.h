@@ -15,6 +15,14 @@
 
 int mcgdb_aux_dlg(void);
 
+typedef struct BlockCoord{
+  int x_start;
+  int y_start;
+  int x1;
+  int x2;
+  int x_stop;
+  int y_stop;
+} BlockCoord;
 
 typedef struct SelbarButton {
   char *text;
@@ -43,12 +51,17 @@ typedef enum table_redraw {
 typedef struct {
   //char **columns;
   json_t **columns;
+  int *offset;
   long ncols;
   long y1;
   long y2;
   int *color; /*color of cells*/
+  int *xl;
+  int *xr;
 } table_row;
 
+
+typedef struct WTable WTable;
 
 typedef struct Table {
   GList *rows;
@@ -65,6 +78,11 @@ typedef struct Table {
   redraw_t redraw;
   gboolean (*row_callback)   (table_row *row, long nrow, long ncol);
   gboolean (**cell_callbacks) (table_row *row, long nrow, long ncol);
+  int mouse_down_x;
+  int mouse_down_y;
+  int        active_col;
+  table_row *active_row;
+  WTable *wtab;
 } Table;
 
 
@@ -75,6 +93,7 @@ typedef struct WTable
     Selbar *selbar;
     GHashTable *tables;
 } WTable;
+
 
 WTable *find_lvars (WDialog *h);
 gboolean is_mcgdb_aux_dialog(WDialog *h);

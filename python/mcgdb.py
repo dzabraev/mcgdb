@@ -359,9 +359,11 @@ class BaseWindow(object):
                 запустить gnome-terminal.
     '''
     debug_wins[self.type]=self #debug
-    #self.gui_window_cmd='''gnome-terminal -e 'bash -c "cd ~/tmp/mcgdb-debug/; touch 1; ulimit -c unlimited; {cmd}"' '''
+    if os.path.exists(os.path.abspath('~/tmp/mcgdb-debug/core')):
+      os.remove(os.path.abspath('~/tmp/mcgdb-debug/core'))
+    self.gui_window_cmd='''gnome-terminal -e 'bash -c "cd ~/tmp/mcgdb-debug/; touch 1; ulimit -c unlimited; {cmd}"' '''
     #self.gui_window_cmd='''gnome-terminal -e 'valgrind --log-file=/tmp/vlg.log {cmd}' '''
-    self.gui_window_cmd='''gnome-terminal -e '{cmd}' '''
+    #self.gui_window_cmd='''gnome-terminal -e '{cmd}' '''
     self.lsock=socket.socket()
     self.lsock.bind( ('',0) )
     self.lsock.listen(1)

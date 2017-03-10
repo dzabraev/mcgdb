@@ -87,10 +87,10 @@ static void         table_add_offset(Table *tab, int off);
 WTable  *           find_wtable (WDialog *h);
 
 static int
-print_chunks (json_t *chunk, int x1, int x2, int start_pos, int right_bound, Table *tab, int * rowcnt);
+print_chunks (json_t *chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table *tab, int * rowcnt);
 
 static int
-print_str_chunk (json_t *chunk, int x1, int x2, int start_pos, int right_bound, Table * tab, int * rowcnt);
+print_str_chunk (json_t *chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table * tab, int * rowcnt);
 
 static int
 get_chunk_horiz_shift(json_t * chunk);
@@ -303,6 +303,7 @@ static void
 wtable_add_table(WTable *wtab, const char *tabname, int ncols) {
   Table *tab;
   tab = table_new(ncols);
+  tab->wtab = wtab;
   table_set_colwidth_formula(tab, formula_adapt_col);
   g_hash_table_insert ( wtab->tables, (gpointer) tabname, (gpointer) tab);
   selbar_add_button   ( wtab->selbar, tabname);
@@ -325,11 +326,17 @@ static table_row *
 table_row_alloc(long ncols) {
   table_row * row = g_new0 (table_row,1);
   row->ncols=ncols;
-  row->columns = (json_t **)g_new0(json_t *, ncols);
-  row->color   = (int *)g_new(int, ncols);
+  row->columns  = (json_t **)g_new0(json_t *, ncols);
+  row->color    = (int *)g_new(int, ncols);
+  row->offset   = (int *)g_new(int, ncols);
+  row->xl       = (int *)g_new(int, ncols);
+  row->xr       = (int *)g_new(int, ncols);
   for (int col=0;col<ncols;col++) {
     row->columns[col] = NULL;
     row->color[col]=EDITOR_NORMAL_COLOR;
+    row->offset[col]=0;
+    row->xl[col]=-1;
+    row->xr[col]=-1;
   }
   return row;
 }
@@ -446,13 +453,13 @@ formula_eq_col(const Table * tab, __attribute__((unused)) int ncol) {
 static size_t
 get_jsonstr_len_utf(json_t * chunks) {
   /*вычисляет максимальную ширину строки (array of chunks)*/
-  json_t * child_chunks;
+  json_t * child_chunks, *ch;
   size_t str_size = 0, max_str_size=0;
   for (size_t nchunk=0;nchunk<json_array_size(chunks); nchunk++) {
+    const char * chunk_str;
     json_t * chunk = json_array_get (chunks,nchunk);
     str_size=0;
-    if (json_object_get (chunk,"str")) {
-      const char * chunk_str = json_string_value (json_object_get (chunk, "str"));
+    if ((ch=json_object_get (chunk,"str")) && (chunk_str=json_string_value (ch))) {
       while (*chunk_str) {
         chunk_str += charlength_utf8 (chunk_str);
         str_size+=1;
@@ -537,15 +544,22 @@ tty_setalloc_color (const char *fg, const char *bg, const char * attr, gboolean 
   tty_setcolor(color);
 }
 
+static gboolean
+in_printable_area (int colcnt, int left_bound, int right_bound) {
+  return colcnt<right_bound && colcnt>=left_bound;
+}
+
 static int
-print_str_chunk(json_t *chunk, int x1, int x2, int start_pos, int right_bound, Table * tab, int * rowcnt) {
+print_str_chunk(json_t *chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table * tab, int * rowcnt) {
   const char * p;
-  int offset;
+  int offset, offset_start;
   int colcnt=start_pos;
+  json_t * coord;
   p = json_string_value (json_object_get (chunk,"str"));
   if (!p)
     p="???";
   offset=ROW_OFFSET(tab,rowcnt[0]);
+  offset_start = offset;
   tty_gotoyx(offset,start_pos);
   for(;;colcnt++) {
     if(colcnt>=x2) {
@@ -557,6 +571,17 @@ print_str_chunk(json_t *chunk, int x1, int x2, int start_pos, int right_bound, T
         tty_gotoyx(offset,x1);
       colcnt=x1;
     }
+    else if (
+      in_printable_area(colcnt,left_bound,right_bound) &&
+      !in_printable_area(colcnt-1,left_bound,right_bound)
+    ) {
+      /* если предыдущая итерация не печатала символ в таблицу,
+       * поскольку не позволял row->offset[i], то теперь надо обновить
+       * текущую позицию печати.
+      */
+      offset=ROW_OFFSET(tab,rowcnt[0]);
+      tty_gotoyx(offset,left_bound);
+    }
     if (!*p)
       break;
     switch(*p) {
@@ -567,18 +592,41 @@ print_str_chunk(json_t *chunk, int x1, int x2, int start_pos, int right_bound, T
       break;
     default:
       offset=ROW_OFFSET(tab,rowcnt[0]);
-      if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab) && colcnt<right_bound) {
+      if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab) && in_printable_area(colcnt,left_bound,right_bound)) {
         set_color_by_chunkname (chunk);
         p+=tty_print_utf8(p);
       }
       else {
-        tty_gotoyx(offset,right_bound);
         tty_setalloc_color ("brown", "blue", NULL, FALSE);
-        tty_print_char('>'); /*print on widget frame*/
+        if (colcnt>=right_bound) {
+          tty_gotoyx(offset,right_bound);
+          tty_print_char('>'); /*print on widget frame*/
+        }
+        else if(colcnt<left_bound) {
+          tty_gotoyx(offset,left_bound-1);
+          tty_print_char('<'); /*print on widget frame*/
+        }
         p+=charlength_utf8(p);
       }
     }
   }
+  /*сохраним в chunk координаты, которые он занимает*/
+  /*
+      AXXXXX|  A имеет кооорд. x_start, y_start
+   |XXXXXXXX|  левая палка x1, правая палка x2
+   |XXXXB      B имеет коорд. x_top, y_stop
+  */
+  coord = json_object_get (chunk,"coord");
+  if (!coord) {
+    coord = json_object();
+    json_object_set (chunk,"coord",coord);
+  }
+  json_object_set (coord,"x_start",json_integer(start_pos));
+  json_object_set (coord,"y_start",json_integer(offset_start));
+  json_object_set (coord,"x_stop",json_integer(colcnt));
+  json_object_set (coord,"y_stop",json_integer(offset));
+  json_object_set (coord,"x1",    json_integer(x1));
+  json_object_set (coord,"x2",    json_integer(x2));
   return colcnt;
 }
 
@@ -596,22 +644,22 @@ get_chunk_horiz_shift(json_t * chunk) {
 }
 
 static int
-print_chunks(json_t * chunks, int x1, int x2, int start_pos, int right_bound, Table *tab, int * rowcnt) {
+print_chunks(json_t * chunks, int x1, int x2, int start_pos, int left_bound, int right_bound, Table *tab, int * rowcnt) {
   json_t * child_chunks, * type;
   for (size_t nchunk=0;nchunk<json_array_size(chunks); nchunk++) {
     json_t * chunk = json_array_get (chunks,nchunk);
     if (json_object_get (chunk,"str")) {
-      start_pos = print_str_chunk (chunk,x1,x2,start_pos,right_bound,tab,rowcnt);
+      start_pos = print_str_chunk (chunk,x1,x2,start_pos,left_bound,right_bound,tab,rowcnt);
     }
     else if ((child_chunks = json_object_get (chunk,"chunks"))) {
       int horiz_shift = get_chunk_horiz_shift (chunk);
       if ((type=json_object_get(chunk,"type")) && !strcmp(json_string_value(type),"struct")) {
         int start_pos_chunks=x1 + horiz_shift;
-        print_chunks (child_chunks,x1+horiz_shift,x2+horiz_shift,start_pos_chunks,right_bound,tab,rowcnt);
+        print_chunks (child_chunks,x1+horiz_shift,x2+horiz_shift,start_pos_chunks,left_bound,right_bound,tab,rowcnt);
         start_pos=x1;
       }
       else {
-        start_pos = print_chunks (child_chunks,x1+horiz_shift,x2+horiz_shift,start_pos,right_bound,tab,rowcnt);
+        start_pos = print_chunks (child_chunks,x1+horiz_shift,x2+horiz_shift,start_pos,left_bound,right_bound,tab,rowcnt);
       }
     }
   }
@@ -649,7 +697,15 @@ table_draw_row (Table * tab, table_row *row) {
     offset=ROW_OFFSET(tab,rowcnt);
     if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
       tty_gotoyx(offset,x1);
-    print_chunks (column, x1, x2, x1, x2, tab, &rowcnt);
+    print_chunks (
+      column,
+      x1 - (row->offset[i]), /*координата самого левого символа ячейки таблицы*/
+      x2 - (row->offset[i]), /*до этой координаты будет печататься столбец*/
+      x1 - (row->offset[i]), /*позиция, с которой будет печататься первый chunk*/
+      x1, /*ограничитель на печать слева*/
+      x2, /*ограничитель на печать справа*/
+      tab,
+      &rowcnt);
     rowcnt++;
     if(rowcnt>max_rowcnt)
       max_rowcnt=rowcnt;
@@ -831,6 +887,96 @@ wtable_draw(WTable *wtab) {
 }
 
 static void
+chunks_find_xlr (json_t * chunks, int *xl, int *xr) {
+  int y_start,y_stop;
+  if (json_is_object (chunks)) {
+    json_t * coord = json_object_get(chunks,"coord");
+    if (!coord) {
+      json_t * child_chunks = json_object_get(chunks,"chunks");
+      if (child_chunks)
+        chunks_find_xlr (child_chunks,xl,xr);
+      return;
+    }
+    y_start = json_integer_value (json_object_get(coord,"y_start"));
+    y_stop  = json_integer_value (json_object_get(coord,"y_stop"));
+    if (y_start==y_stop) {
+      *xl = MIN(*xl, json_integer_value (json_object_get(coord,"x_start")));
+      *xr = MAX(*xr, json_integer_value (json_object_get(coord,"x_stop")));
+    }
+    else {
+      *xl = MIN(*xl, json_integer_value (json_object_get(coord,"x1")));
+      *xr = MAX(*xr, json_integer_value (json_object_get(coord,"x2")));
+    }
+  }
+  else {
+    for (int nchunk=0;nchunk<json_array_size(chunks); nchunk++) {
+      chunks_find_xlr ( json_array_get(chunks,nchunk), xl, xr);
+    }
+  }
+}
+
+static void
+update_cell_width(table_row * tr, int ncol) {
+  /*вычислим самую левую координату по всем chunk'ам ячейки и
+  самую правую координату*/
+  int xl=0xfffff, xr=-0xfffff;
+  chunks_find_xlr(tr->columns[ncol], &xl, &xr);
+  tr->xl[ncol] = xl;
+  tr->xr[ncol] = xr;
+}
+
+static void
+table_process_mouse_down(Table *tab, mouse_event_t * event) {
+  GList * row = tab->rows;
+  tab->mouse_down_x = event->x;
+  tab->mouse_down_y = event->y;
+  table_row *tr;
+  int ncol;
+  while(row) {
+    tr = (table_row *)(row->data);
+    if (tr->y1<=event->y && event->y<tr->y2)
+      break;
+    row=row->next;
+  }
+  if (!row)
+    return;
+  for (ncol=0;ncol<tr->ncols;ncol++) {
+    int x0 = WIDGET(tab->wtab)->x; /* х-координата начала виджета*/
+    if (((tab->colstart[ncol] - x0) <= event->x) && /*транслируем абсолютные коорд. окна в коорд. виджета*/
+          (event->x < (tab->colstart[ncol+1]-x0)))
+      break;
+  }
+  if (ncol==tr->ncols)
+    return;
+  tab->active_row = tr;
+  tab->active_col = ncol;
+  update_cell_width(tr,ncol);
+}
+
+static void
+table_process_mouse_up(Table *tab, mouse_event_t * event) {
+  tab->active_row = NULL;
+}
+
+static void
+table_process_mouse_drag(Table *tab, mouse_event_t * event) {
+  int L,L1,ncol,visible_cell_width;
+  table_row *tr = tab->active_row;
+  if (!tr)
+    return;
+  ncol = tab->active_col;
+  tr->offset[ncol] += tab->mouse_down_x - event->x;
+  tr->offset[ncol] = MAX (tr->offset[ncol],0);
+  L1 = tr->xr[ncol] - tr->xl[ncol];
+  visible_cell_width = tab->colstart[ncol+1] - tab->colstart[ncol];
+  L = MAX(L1 - visible_cell_width,0);
+  tr->offset[ncol] = MIN (tr->offset[ncol],L);
+  tab->mouse_down_x = event->x;
+  tab->redraw |= REDRAW_TAB;
+}
+
+
+static void
 wtable_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
   WTable *wtab = (WTable *)w;
 
@@ -850,6 +996,15 @@ wtable_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
       break;
     case MSG_MOUSE_CLICK:
       table_process_click(wtab->tab, event);
+      break;
+    case MSG_MOUSE_DOWN:
+      table_process_mouse_down(wtab->tab, event);
+      break;
+    case MSG_MOUSE_DRAG:
+      table_process_mouse_drag(wtab->tab, event);
+      break;
+    case MSG_MOUSE_UP:
+      table_process_mouse_up(wtab->tab, event);
       break;
     default:
       break;
