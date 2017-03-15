@@ -359,20 +359,6 @@ table_set_cell_color(Table *tab, int nrow, int ncol, const char *fg, const char 
 }
 
 
-/*
-static table_row *
-table_row_alloc_arr(long ncols, const char ** colval) {
-  table_row * row = g_new0 (table_row,1);
-  row->ncols=ncols;
-  row->columns = (char **)g_new0(char *, ncols);
-  row->color   = (int *)g_new(int, ncols);
-  for (int col=0;col<ncols;col++) {
-    row->columns[col] = strdup(colval[col]);
-    row->color[col]=EDITOR_NORMAL_COLOR;
-  }
-  return row;
-}*/
-
 static void
 table_process_click(Table *tab, mouse_event_t * event) {
   long line = event->y;
@@ -552,24 +538,44 @@ in_printable_area (int colcnt, int left_bound, int right_bound) {
 static int
 print_str_chunk(json_t *chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table * tab, int * rowcnt) {
   const char * p;
-  int offset, offset_start;
+  int offset; //, offset_start;
   int colcnt=start_pos;
-  json_t * coord;
+  gboolean newline = FALSE;
+  /* Массив coord содержит координаты подстрок, на которых напечатан chunk.
+   * Массив coord имеет длину 3N, где N--количество строк, занятых chunk'ом.
+   * Каждой строке соответствует три последовательно идущих целых числа в массиве coord:
+   * y, x_start, x_stop. 
+   * `y` есть y-координата строки с учетом смещения.
+   * `x_start`, `x_stop` есть координаты начала и конца строки.
+   */
+  json_t * coord = json_object_get (chunk,"coord");
+  if (!coord) {
+    coord = json_array();
+    json_object_set (chunk,"coord",coord);
+  }
+  else {
+    json_array_clear (coord);
+  }
   p = json_string_value (json_object_get (chunk,"str"));
   if (!p)
     p="???";
   offset=ROW_OFFSET(tab,rowcnt[0]);
-  offset_start = offset;
+  //offset_start = offset;
+  json_array_append (coord,json_integer (offset));
+  json_array_append (coord,json_integer (start_pos));
   tty_gotoyx(offset,start_pos);
   for(;;colcnt++) {
-    if(colcnt>=x2) {
+    if(colcnt>=x2 || newline) {
       /*допечатали до правой границы столбца таблицы
        *делаем перенос строки.*/
+      json_array_append (coord,json_integer (MIN (colcnt,x2)));
       rowcnt[0]++;
       offset=ROW_OFFSET(tab,rowcnt[0]);
       if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
         tty_gotoyx(offset,x1);
       colcnt=x1;
+      json_array_append (coord,json_integer (offset));
+      json_array_append (coord,json_integer (colcnt));
     }
     else if (
       in_printable_area(colcnt,left_bound,right_bound) &&
@@ -582,13 +588,17 @@ print_str_chunk(json_t *chunk, int x1, int x2, int start_pos, int left_bound, in
       offset=ROW_OFFSET(tab,rowcnt[0]);
       tty_gotoyx(offset,left_bound);
     }
-    if (!*p)
+    newline=FALSE;
+    if (!*p) {
+      json_array_append (coord,json_integer (colcnt));
       break;
+    }
     switch(*p) {
     case '\n':
       p++;
-      if (colcnt!=x1)
-        colcnt=x2;
+      if (colcnt!=x1) {
+        newline=TRUE;
+      }
       break;
     default:
       offset=ROW_OFFSET(tab,rowcnt[0]);
@@ -610,23 +620,7 @@ print_str_chunk(json_t *chunk, int x1, int x2, int start_pos, int left_bound, in
       }
     }
   }
-  /*сохраним в chunk координаты, которые он занимает*/
-  /*
-      AXXXXX|  A имеет кооорд. x_start, y_start
-   |XXXXXXXX|  левая палка x1, правая палка x2
-   |XXXXB      B имеет коорд. x_top, y_stop
-  */
-  coord = json_object_get (chunk,"coord");
-  if (!coord) {
-    coord = json_object();
-    json_object_set (chunk,"coord",coord);
-  }
-  json_object_set (coord,"x_start",json_integer(start_pos));
-  json_object_set (coord,"y_start",json_integer(offset_start));
-  json_object_set (coord,"x_stop",json_integer(colcnt));
-  json_object_set (coord,"y_stop",json_integer(offset));
-  json_object_set (coord,"x1",    json_integer(x1));
-  json_object_set (coord,"x2",    json_integer(x2));
+  assert (json_array_size (coord)%3==0);
   return colcnt;
 }
 
@@ -811,13 +805,6 @@ table_add_row (Table * tab) {
   return rc;
 }
 
-/*
-static int
-table_add_row_arr (Table * tab, const char **cols) {
- table_row *row = table_row_alloc_arr (tab->ncols,cols);
- return _table_insert_row (tab,row);
-}*/
-
 
 static void
 table_add_offset(Table *tab, int off) {
@@ -888,7 +875,6 @@ wtable_draw(WTable *wtab) {
 
 static void
 chunks_find_xlr (json_t * chunks, int *xl, int *xr) {
-  int y_start,y_stop;
   if (json_is_object (chunks)) {
     json_t * coord = json_object_get(chunks,"coord");
     if (!coord) {
@@ -897,15 +883,15 @@ chunks_find_xlr (json_t * chunks, int *xl, int *xr) {
         chunks_find_xlr (child_chunks,xl,xr);
       return;
     }
-    y_start = json_integer_value (json_object_get(coord,"y_start"));
-    y_stop  = json_integer_value (json_object_get(coord,"y_stop"));
-    if (y_start==y_stop) {
-      *xl = MIN(*xl, json_integer_value (json_object_get(coord,"x_start")));
-      *xr = MAX(*xr, json_integer_value (json_object_get(coord,"x_stop")));
-    }
-    else {
-      *xl = MIN(*xl, json_integer_value (json_object_get(coord,"x1")));
-      *xr = MAX(*xr, json_integer_value (json_object_get(coord,"x2")));
+    for (size_t n_substr=0;n_substr<json_array_size(coord);n_substr+=3) {
+      int x_start = json_integer_value (json_array_get (coord, n_substr+1));
+      int x_stop  = json_integer_value (json_array_get (coord, n_substr+2));
+      if (x_stop - x_start >= 1) {
+        *xl = MIN(*xl, x_start);
+        *xr = MAX(*xr, x_stop);
+        assert (*xr >= *xl);
+      }
+
     }
   }
   else {
@@ -967,9 +953,7 @@ table_process_mouse_drag(Table *tab, mouse_event_t * event) {
   ncol = tab->active_col;
   tr->offset[ncol] += tab->mouse_down_x - event->x;
   tr->offset[ncol] = MAX (tr->offset[ncol],0);
-  L1 = tr->xr[ncol] - tr->xl[ncol];
-  visible_cell_width = tab->colstart[ncol+1] - tab->colstart[ncol];
-  L = MAX(L1 - visible_cell_width,0);
+  L = MAX((tr->xr[ncol] - tr->xl[ncol]) - (tab->colstart[ncol+1]-tab->colstart[ncol]),0);
   tr->offset[ncol] = MIN (tr->offset[ncol],L);
   tab->mouse_down_x = event->x;
   tab->redraw |= REDRAW_TAB;

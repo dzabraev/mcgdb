@@ -576,7 +576,7 @@ class LocalVarsWindow(BaseWindow):
     chunks=[
       {'str':'{\n'},
       self.struct_fields_to_chunks(parent_value),
-      {'str':'\n}'},
+      {'str':'}'},
     ]
     parent_chunk={
       'chunks'  : chunks,
