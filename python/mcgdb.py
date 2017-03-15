@@ -571,6 +571,24 @@ class LocalVarsWindow(BaseWindow):
       'chunks':chunks,
     }
 
+  def array_fields_to_chunks(self,parent_value):
+    n1,n2 = parent_value.type.range()
+    chunks=[]
+    for i in range(n1,n2):
+      chunks.append({'str': unicode(parent_value[i])})
+
+  def array_to_chunks(self,parent_value):
+    chunks=[
+      {'str':'[\n'},
+      self.array_fields_to_chunks(parent_value),
+      {'str':']'},
+    ]
+    parent_chunk={
+      'chunks'  : chunks,
+      'type'    : 'parenthesis',
+    }
+    return parent_chunk
+
 
   def struct_to_chunks(self,parent_value):
     chunks=[
@@ -584,24 +602,54 @@ class LocalVarsWindow(BaseWindow):
     }
     return parent_chunk
 
+  def value_to_chunks(self,value,name=None):
+    chunks=[]
+    if Name!=None:
+      chunks.append({'str':name, 'name':'varname'})
+      chunks.append({'str':' = '})
+    if value.type.code==gdb.TYPE_CODE_STRUCT:
+      chunks1=[]
+      data_chunks=[]
+      chunks1.append({'str':'{\n'})
+      for field in parent_value.type.fields():
+        field_name = field.name
+        value = parent_value[field_name]
+        data_chunks+=value_to_chunks(value,field_name)
+        data_chunks.append({'str':'\n'})
+      chunks1.append({'chunks':data_chunks,'type':'struct'})
+      chunks1.append({'str':'}'})
+      parent_chunk={
+        'chunks'  : chunks1,
+        'type'    : 'parenthesis',
+      }
+      chunks.append (parent_chunk)
+    elif value.type.code==gdb.TYPE_CODE_ARRAY:
+      chunks1=[]
+      chunks1.append({'str':'[\n'})
+      array_data_chunks=[]
+      n1,n2 = parent_value.type.range()
+      for i in range(n1,n2):
+        array_data_chunks += value_to_chunks(parent_value[i])
+        array_data_chunks.append({'str':',\n'})
+      chunks1.append({'chunks':array_data_chunks,'type':'array'})
+      chunks1.append({'str':']'})
+      parent_chunk={
+        'chunks'  : chunks1,
+        'type'    : 'parenthesis',
+      }
+      chunks.append (parent_chunk)
+    else:
+        chunks = [
+          {'str':stringify_value(value),'name':'varvalue'}
+        ]
+    return chunks
+
+
   def _get_local_vars_chunks(self):
     variables = self._get_local_vars_1 ()
     lvars=[]
     for name,value in variables.iteritems():
-      if value.type.code==gdb.TYPE_CODE_STRUCT:
-        row = [[
-          {'str':name, 'name':'varname'},
-          {'str':' = '},
-          self.struct_to_chunks(value),
-        ]]
-      else:
-        row = [
-          [
-            {'str':name,'name':'varname'},
-            {'str':'='},
-            {'str':stringify_value(value),'name':'varvalue'}
-          ]
-        ]
+      row=[self.value_to_chunks(name,value)]
       lvars.append(row)
     lvars.sort( cmp = lambda x,y: 1 if x[0][0]['str']>y[0][0]['str'] else -1 )
     return {'rows':lvars}
