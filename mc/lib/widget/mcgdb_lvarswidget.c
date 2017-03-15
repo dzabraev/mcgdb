@@ -123,34 +123,23 @@ TAB_FIRST_ROW(Table * tab) {
 
 
 static void
-insert_pkg_json_into_table(json_t *json_tab, Table *tab) {
+insert_pkg_json_into_table (json_t *json_tab, Table *tab) {
   json_t *json_rows = json_object_get (json_tab, "rows");
-  json_t *colors    = json_object_get (json_tab, "color");
   size_t size_rows = json_array_size (json_rows);
-  size_t size_colors = json_array_size (colors);
+  tab->json_tab = json_tab;
   long nrow;
   for (size_t i=0;i<size_rows;i++) {
     json_t * row = json_array_get (json_rows,i);
-    size_t rowsize = json_array_size (row);
+    json_t * columns = json_object_get (row,"columns");
+    size_t rowsize = json_array_size (columns);
     assert((size_t)tab->ncols==rowsize);
     nrow = table_add_row (tab);
-    for (int col=0;col<tab->ncols;col++) {
+    for (int ncol=0;ncol<tab->ncols;ncol++) {
       table_set_cell_text (
-        tab,nrow,col,
-        json_array_get (row,col)
+        tab,nrow,ncol,
+        json_object_get (json_array_get (columns,ncol),"chunks")
       );
     }
-  }
-  for (size_t i=0; i<size_colors; i++) {
-    json_t *color = json_array_get(colors,i);
-    table_set_cell_color (
-      tab,
-      json_integer_value (json_object_get (color,"nrow")),
-      json_integer_value (json_object_get (color,"ncol")),
-      json_string_value  (json_object_get (color,"fg")),
-      json_string_value  (json_object_get (color,"bg")),
-      json_string_value  (json_object_get (color,"attrib"))
-    );
   }
 }
 
@@ -946,7 +935,7 @@ table_process_mouse_up(Table *tab, mouse_event_t * event) {
 
 static void
 table_process_mouse_drag(Table *tab, mouse_event_t * event) {
-  int L,L1,ncol,visible_cell_width;
+  int L,ncol,visible_cell_width;
   table_row *tr = tab->active_row;
   if (!tr)
     return;

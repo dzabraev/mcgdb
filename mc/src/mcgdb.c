@@ -292,6 +292,9 @@ get_command_num(json_t *pkg) {
     else if (compare_cmd("threads")) {
       return MCGDB_THREADS;
     }
+    else if (compare_cmd("error_message")) {
+      return MCGDB_ERROR_MESSAGE;
+    }
     else {
       return MCGDB_UNKNOWN;
     }
@@ -313,8 +316,15 @@ check_action_from_gdb(struct gdb_action * act) {
     return;
   }
   cmd=get_command_num(pkg);
-  act->command=cmd;
-  act->pkg=pkg;
+  if (cmd==MCGDB_ERROR_MESSAGE) {
+    edit_error_dialog("ERROR",json_string_value (json_object_get (pkg,"message")));
+    act->command=MCGDB_NONE;
+    act->pkg=NULL;
+  }
+  else {
+    act->command=cmd;
+    act->pkg=pkg;
+  }
 }
 
 static void

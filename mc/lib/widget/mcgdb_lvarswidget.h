@@ -83,6 +83,7 @@ typedef struct Table {
   int        active_col;
   table_row *active_row;
   WTable *wtab;
+  json_t *json_tab;
 } Table;
 
 

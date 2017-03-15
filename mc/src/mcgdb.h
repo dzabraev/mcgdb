@@ -11,8 +11,11 @@
 #include <setjmp.h>
 
 enum gdb_cmd {
-  /*editor widget*/
   MCGDB_UNKNOWN=0,
+  MCGDB_ERROR_MESSAGE,
+  MCGDB_NONE,
+
+  /*editor widget*/
   MCGDB_ERROR,
   MCGDB_MARK,
   MCGDB_UNMARK,
@@ -31,6 +34,7 @@ enum gdb_cmd {
   MCGDB_BACKTRACE,
   MCGDB_REGISTERS,
   MCGDB_THREADS,
+
 };
 
 enum window_type {

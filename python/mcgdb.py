@@ -61,7 +61,7 @@ def get_prompt():
   prompt=regex.match(res).groups()[0]
   return prompt
 
-def gdb_stopped():
+def gdb_stopped_1():
   try:
     th=gdb.selected_thread()
     if th==None:
@@ -69,6 +69,9 @@ def gdb_stopped():
     return gdb.selected_thread().is_stopped()
   except:
     return True
+
+def gdb_stopped():
+  return exec_in_main_pythread(gdb_stopped_1)
 
 def exec_cmd_in_gdb(cmd):
   try:
@@ -313,7 +316,7 @@ class BreakpointQueue(GdbBreakpoints):
 breakpoint_queue=BreakpointQueue()
 
 
-def exec_in_main_pythread(func,args):
+def exec_in_main_pythread(func,args=()):
   #Данную функцию нельзя вызывать более чем из одного потока
   if is_main_thread():
     return func(*args)
@@ -358,12 +361,14 @@ class BaseWindow(object):
                 из gdb. Например, если зайти по ssh на удаленную машину, то не всегда есть возможность
                 запустить gnome-terminal.
     '''
+    if not hasattr(self,'window_event_handlers'):
+      self.window_event_handlers={}
     debug_wins[self.type]=self #debug
     if os.path.exists(os.path.abspath('~/tmp/mcgdb-debug/core')):
       os.remove(os.path.abspath('~/tmp/mcgdb-debug/core'))
-    self.gui_window_cmd='''gnome-terminal -e 'bash -c "cd ~/tmp/mcgdb-debug/; touch 1; ulimit -c unlimited; {cmd}"' '''
+    #self.gui_window_cmd='''gnome-terminal -e 'bash -c "cd ~/tmp/mcgdb-debug/; touch 1; ulimit -c unlimited; {cmd}"' '''
     #self.gui_window_cmd='''gnome-terminal -e 'valgrind --log-file=/tmp/vlg.log {cmd}' '''
-    #self.gui_window_cmd='''gnome-terminal -e '{cmd}' '''
+    self.gui_window_cmd='''gnome-terminal -e '{cmd}' '''
     self.lsock=socket.socket()
     self.lsock.bind( ('',0) )
     self.lsock.listen(1)
@@ -427,6 +432,16 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
   def recv(self):
     return pkgrecv(self.fd)
 
+  def process_pkg(self):
+    '''Обработать сообщение из редактора'''
+    pkg=self.recv()
+    cmd=pkg['cmd']
+    cb=self.window_event_handlers.get(cmd)
+    if cb==None:
+      debug("unknown `cmd`: `{}`".format(pkg))
+    else:
+      return cb(pkg)
+
   def terminate(self):
     try:
       self.send({'cmd':'exit'})
@@ -455,14 +470,16 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     '''
     return exec_in_main_pythread(self.__get_current_position_1,())
 
+  def send_error(self,message):
+    try:
+      self.send({'cmd':'error_message','message':message})
+    except:
+      pass
+
+
+
 def stringify_value(value):
   return unicode(value)
-#  try:
-#    value = str(value)
-#  except:
-#    value=value.string('utf-8').encode('utf8')
-#  return value
-
 
 
 class LocalVarsWindow(BaseWindow):
@@ -474,6 +491,11 @@ class LocalVarsWindow(BaseWindow):
 
   def __init__(self, **kwargs):
     super(LocalVarsWindow,self).__init__(**kwargs)
+    self.window_event_handlers={
+      'select_thread'   : self._select_thread,
+      'select_frame'    : self._select_frame,
+      'change_variable' : self._change_variable,
+    }
     self.regex_split = re.compile('\s*([^\s]+)\s+([^\s+]+)\s+(.*)')
     self.regnames=[]
     regtab = gdb.execute('maint print registers',False,True).split('\n')[1:]
@@ -494,6 +516,30 @@ class LocalVarsWindow(BaseWindow):
     return rc
 
 
+  def _select_thread(self,pkg):
+    pass
+
+  def _select_frame_1(self,nframe):
+    if not gdb_stopped():
+      return 'inferior running'
+    n_cur_frame=0
+    frame = gdb.newest_frame ()
+    while frame:
+      if n_cur_frame==nframe:
+        frame.select()
+        return
+      frame = frame.older()
+    return "can't find frame #{}".format(nframe)
+
+  def _select_frame(self,pkg):
+    nframe = pkg['nframe']
+    res=exec_in_main_pythread(self._select_frame_1)
+    if res!=None:
+      self.send_error(res)
+
+  def _change_variable(self,pkg):
+    pass
+
   def gdb_inferior_stop(self):
     pass
   def gdb_inferior_exited(self):
@@ -509,10 +555,6 @@ class LocalVarsWindow(BaseWindow):
   def update_backtrace(self):
     try:
       backtrace = self.get_stack()
-#      for row in backtrace['rows']:
-#        for col in row:
-#          for chunk in col:
-#            assert 'str' in chunk
     except gdb.error:
       return
     pkg={
@@ -542,8 +584,6 @@ class LocalVarsWindow(BaseWindow):
     pass
   def set_color(self,pkg):
     pass
-  def process_pkg(self):
-    pkg=self.recv()
 
   def _get_local_vars(self):
     try:
@@ -553,54 +593,6 @@ class LocalVarsWindow(BaseWindow):
       #traceback.print_exc()
       res=[]
     return res
-
-  def struct_fields_to_chunks(self,parent_value):
-    chunks=[]
-    for field in parent_value.type.fields():
-      field_name = field.name
-      value = parent_value[field_name]
-      chunks.append({'str' : field_name,'name' : 'varname'})
-      chunks.append({'str' : ' = '})
-      if value.type.code==gdb.TYPE_CODE_STRUCT:
-        chunks.append (self.struct_to_chunks(value))
-      else:
-        chunks.append({'str' : stringify_value(value),'name' : 'varvalue'})
-      chunks.append({'str' : '\n'})
-    return {
-      'type':'struct',
-      'chunks':chunks,
-    }
-
-  def array_fields_to_chunks(self,parent_value):
-    n1,n2 = parent_value.type.range()
-    chunks=[]
-    for i in range(n1,n2):
-      chunks.append({'str': unicode(parent_value[i])})
-
-  def array_to_chunks(self,parent_value):
-    chunks=[
-      {'str':'[\n'},
-      self.array_fields_to_chunks(parent_value),
-      {'str':']'},
-    ]
-    parent_chunk={
-      'chunks'  : chunks,
-      'type'    : 'parenthesis',
-    }
-    return parent_chunk
-
-
-  def struct_to_chunks(self,parent_value):
-    chunks=[
-      {'str':'{\n'},
-      self.struct_fields_to_chunks(parent_value),
-      {'str':'}'},
-    ]
-    parent_chunk={
-      'chunks'  : chunks,
-      'type'    : 'parenthesis',
-    }
-    return parent_chunk
 
   def value_to_chunks(self,value,name=None):
     chunks=[]
@@ -649,9 +641,11 @@ class LocalVarsWindow(BaseWindow):
     variables = self._get_local_vars_1 ()
     lvars=[]
     for name,value in variables.iteritems():
-      row=[self.value_to_chunks(value,name)]
+      chunks = self.value_to_chunks(value,name)
+      col = {'chunks':chunks}
+      row = {'columns':[col]}
       lvars.append(row)
-    lvars.sort( cmp = lambda x,y: 1 if x[0][0]['str']>y[0][0]['str'] else -1 )
+    #lvars.sort( cmp = lambda x,y: 1 if x[''][0][0]['str']>y[0][0]['str'] else -1 )
     return {'rows':lvars}
 
   def _get_local_vars_1(self):
@@ -731,14 +725,16 @@ class LocalVarsWindow(BaseWindow):
       framenumber = {'str':'#{}'.format(str(nframe)),'name':'frame_num'}
       if frame == gdb.selected_frame ():
         framenumber['selected']=True
-      framecol = [
+      chunks = [
         framenumber,
         {'str':'  '},
       ] + self._get_frame_fileline(frame) + \
       [
         {'str':'\n'},
       ] + self._get_frame_funcname_with_args(frame)
-      frames.append([framecol])
+      col = {'chunks':chunks}
+      row = {'columns' : [col], 'nframe':nframe}
+      frames.append(row)
       nframe+=1
       frame = frame.older()
     table={
@@ -752,13 +748,14 @@ class LocalVarsWindow(BaseWindow):
   def _get_regs_1(self):
     rows_regs=[]
     for regname in self.regnames:
-      rows_regs.append([ #row
-        [ #col
+      chunks = [
             {'str':regname, 'name':'regname'},
             {'str':'='},
             {'str':str(gdb.parse_and_eval(regname)), 'name':'regvalue'},
-        ]
-      ])
+      ]
+      col  = {'chunks' : chunks}
+      row  = {'columns' : [col]}
+      rows_regs.append(row)
     return {'rows' : rows_regs}
 
   def get_registers(self):
@@ -781,8 +778,7 @@ class LocalVarsWindow(BaseWindow):
       global_num_chunk = {'str':global_num, 'name':'th_global_num'}
       if thread==selected_thread:
         global_num_chunk['selected']=True
-      throws.append([ #row
-        [ global_num_chunk,
+      chunks = [ global_num_chunk,
           {'str':'  '},
           {'str':tid,        'name':'th_tid'},
           {'str':'  '},
@@ -792,8 +788,10 @@ class LocalVarsWindow(BaseWindow):
         ] +  \
         fileline + \
         [{'str':'\n'}] + \
-        self._get_frame_funcname_with_args(frame),
-      ])
+        self._get_frame_funcname_with_args(frame)
+      column={'chunks' : chunks}
+      row={'columns' : [column]}
+      throws.append(row)
       nrow+=1
     if selected_thread!=None:
       selected_thread.switch()
@@ -863,7 +861,7 @@ class MainWindow(BaseWindow):
 
   def __init__(self, **kwargs):
     super(MainWindow,self).__init__(**kwargs)
-    self.editor_cbs = {
+    self.window_event_handlers = {
       'editor_breakpoint'       :  self.__editor_breakpoint,
       'editor_breakpoint_de'    :  self.__editor_breakpoint_de,
       'editor_next'             :  self.__editor_next,
@@ -1029,15 +1027,6 @@ class MainWindow(BaseWindow):
   def set_color(self,pkg):
     self.send(pkg)
 
-  def process_pkg(self):
-    '''Обработать сообщение из редактора'''
-    pkg=self.recv()
-    cmd=pkg['cmd']
-    cb=self.editor_cbs.get(cmd)
-    if cb==None:
-      debug("unknown `cmd`: `{}`".format(pkg))
-    else:
-      return cb(pkg)
 
 
 
