@@ -12,6 +12,10 @@ struct mystruct {
   struct {
     int i;
     char *s;
+    struct {
+      int x;
+      int y;
+    } s3;
   } st;
 };
 
