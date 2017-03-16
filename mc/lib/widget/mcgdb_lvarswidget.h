@@ -134,5 +134,5 @@ gboolean is_mcgdb_aux_dialog(WDialog *h);
 #define WTABLE(x) ((WTable *)x)
 #define TABLE(x)  ((Table *)x)
 #define SELBAR_BUTTON(x) ((SelbarButton *)x)
-
+#define TABROW(x) ((table_row *)(((GList *)x)->data))
 #endif

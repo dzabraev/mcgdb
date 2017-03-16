@@ -74,7 +74,7 @@ static void         table_draw_row (Table * tab, table_row *r);
 static void         table_update_colwidth(Table * tab);
 static void         table_set_colwidth_formula(Table * tab, int (*formula)(const Table * tab, int ncol));
 //static void         table_setcolor(Table *tab, int nrow, int ncol, int color);
-static void         table_process_click(Table *tab, mouse_event_t * event);
+static void         table_process_mouse_click(Table *tab, mouse_event_t * event);
 static void         table_set_cell_text(Table *tab, int nrow, int ncol, json_t *text);
 //static void         table_set_cell_color(Table *tab, int nrow, int ncol, const char *fg, const char *bg, const char *attrib);
 static int          formula_eq_col(const Table * tab, int ncol);
@@ -468,18 +468,16 @@ table_set_cell_text (Table *tab, int nrow, int ncol, json_t *json_data) {
   json_to_celltree (row->columns[ncol], json_data);
 }
 
-/*
-static void
-table_set_cell_color(Table *tab, int nrow, int ncol, const char *fg, const char *bg, const char *attrib) {
-  ((table_row * )g_list_nth_data(tab->rows,nrow))->color[ncol] =
-    tty_try_alloc_color_pair2 (fg, bg, attrib, FALSE);
+static gboolean
+process_cell_tree_mouse_callbacks(GNode *root, int y, int x) {
+  /*x,y являются абсолютными координатами*/
+  GNodeget_child (root,y,x);
 }
-*/
 
 static void
-table_process_click(Table *tab, mouse_event_t * event) {
+table_process_mouse_click(Table *tab, mouse_event_t * event) {
   long line = event->y;
-  GList *grow = tab->rows;
+  GList *g_row = tab->rows;
   long nrow=0,ncol;
   table_row * row;
   gboolean handled=FALSE;
@@ -490,15 +488,15 @@ table_process_click(Table *tab, mouse_event_t * event) {
      ) { /*click out of table*/
      return;
   }
-  while(grow) {
-    row = grow->data;
+  while(g_row) {
+    row = g_row->data;
     if (row->y1<=line && row->y2>=line) {
       break;
     }
     nrow++;
-    grow=grow->next;
+    g_row=g_row->next;
   }
-  if (!grow)
+  if (!g_row)
     return;
   for (ncol=0;ncol<tab->ncols;ncol++) {
     if (tab->colstart[ncol]<=event->x && tab->colstart[ncol+1]>event->x) {
@@ -509,22 +507,26 @@ table_process_click(Table *tab, mouse_event_t * event) {
    *`ncol` есть номер столбца таблицы по которому был сделан клик.
   */
   message_assert (ncol<tab->ncols);
+
+  handled = process_cell_tree_mouse_callbacks(
+    TABROW(g_row)->columns[ncol],
+    WIDGET(tab->wtab)->y+event->y,
+    WIDGET(tab->wtab)->x+event->x
+  );
+  if (handled)
+    return;
+
+  if (tab->cell_callbacks)
+    handled = tab->cell_callbacks[ncol](row,nrow,ncol);
+    if (handled)
+      return;
+
   if (tab->row_callback) {
     handled = tab->row_callback(row,nrow,ncol);
     if (handled)
       return;
   }
-  if (tab->cell_callbacks)
-    handled = tab->cell_callbacks[ncol](row,nrow,ncol);
 }
-
-/*
-static void
-table_row_setcolor(table_row *row, int col, int color) {
-  assert(col<row->ncols);
-  row->color[col]=color;
-}
-*/
 
 static void
 table_row_destroy(table_row *row) {
@@ -554,96 +556,10 @@ formula_eq_col(const Table * tab, __attribute__((unused)) int ncol) {
 }
 
 
-#if 0
-static size_t
-get_jsonstr_len_utf(GNode * chunks) {
-  /*вычисляет максимальную ширину строки*/
-  GNode * child;
-  size_t max_str_size=0;
-  for (size_t nchunk=0;nchunk<json_array_size(chunks); nchunk++) {
-    const char * chunk_str;
-    json_t * chunk = json_array_get (chunks,nchunk);
-    str_size=0;
-    if ((ch=json_object_get (chunk,"str")) && (chunk_str=json_string_value (ch))) {
-      while (*chunk_str) {
-        chunk_str += charlength_utf8 (chunk_str);
-        str_size+=1;
-      }
-    }
-    else if ((child_chunks = json_object_get (chunk,"chunks"))) {
-      str_size = get_jsonstr_len_utf (child_chunks);
-      str_size += get_chunk_horiz_shift (chunk);
-    }
-    if (max_str_size > str_size)
-      max_str_size = str_size;
-  }
-  return max_str_size;
-}
-
-static int
-formula_adapt_col(const Table * tab, int ncol) {
-  int ncols = tab->ncols;
-  int width=0,max_width=0;
-  int max_avail_width = formula_eq_col(tab,ncol);
-  if(ncol<ncols) {
-    GList * row = tab->rows;
-    for(;row;row=g_list_next(row)) {
-      width = get_jsonstr_len_utf (((table_row *)row->data)->columns[ncol]);
-      if (width >= max_avail_width)
-        return max_avail_width;
-      if (width > max_width)
-        max_width=width;
-    }
-    return max_width>0?max_width+1:max_avail_width;
-  }
-  else {
-    if (ncols<=1)
-      return tab->cols;
-    else
-      return tab->cols - tab->colstart[ncol-1];
-  }
-}
-#endif
-
-
-
 static void
 table_set_colwidth_formula(Table * tab, int (*formula)(const Table * tab, int ncol)) {
   tab->formula = formula;
 }
-
-#if 0
-static void
-set_color_by_chunkname (json_t *chunk) {
-  const char *name = json_string_value (json_object_get (chunk,"name"));
-  int color = EDITOR_NORMAL_COLOR;
-  if (name) {
-    if (!strcmp(name,"frame_num") || !strcmp(name,"th_global_num")) {
-      json_t *selected = json_object_get (chunk,"selected");
-      if (selected && json_boolean_value(selected))
-        color = tty_try_alloc_color_pair2 ("red", "black", "bold", FALSE);
-    }
-    else if (!strcmp(name,"varname") || !strcmp(name,"regname")) {
-        color = tty_try_alloc_color_pair2 ("yellow", "blue", NULL, FALSE);
-    }
-    else if (!strcmp(name,"varvalue") || !strcmp(name,"regvalue")) {
-        color = tty_try_alloc_color_pair2 ("green", "blue", NULL, FALSE);
-    }
-    else if (!strcmp(name,"frame_func_name")) {
-        color = tty_try_alloc_color_pair2 ("cyan", "blue", NULL, FALSE);
-    }
-//   else if (
-//        !strcmp(name,"frame_filename") ||
-//        !strcmp(name,"frame_line") ||
-//        !strcmp(name,"frame_fileline_delimiter")
-//       ) {
-//        color = tty_try_alloc_color_pair2 ("brown", "blue", NULL, FALSE);
-//    }
-
-  }
-  tty_setcolor(color);
-}
-#endif
 
 static void
 tty_setalloc_color (const char *fg, const char *bg, const char * attr, gboolean x) {
@@ -745,11 +661,9 @@ static int
 get_chunk_horiz_shift(cell_data_t * chunk_data) {
   int horiz_shift;
   type_code_t type_code = chunk_data->type_code;
-  chunk_name_t name = chunk_data->name;
   if (
     type_code == TYPE_CODE_STRUCT ||
     type_code == TYPE_CODE_ARRAY
-    //name      == CHUNKNAME_PARENTHESIS
   ) {
     horiz_shift=2;
   }
@@ -870,14 +784,6 @@ table_update_colwidth(Table * tab) {
   tab->colstart[ncols] = x + cols;
 }
 
-/*
-static void
-table_setcolor(Table *tab, int nrow, int ncol, int color) {
-  table_row *row = (table_row *) g_list_nth_data (tab->rows, nrow);
-  assert(row!=NULL);
-  table_row_setcolor(row, ncol, color);
-}
-*/
 
 static void
 table_update_bounds(Table * tab, long y, long x, long lines, long cols) {
@@ -1099,7 +1005,7 @@ wtable_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
       table_add_offset(wtab->tab, 2);
       break;
     case MSG_MOUSE_CLICK:
-      table_process_click(wtab->tab, event);
+      table_process_mouse_click(wtab->tab, event);
       break;
     case MSG_MOUSE_DOWN:
       table_process_mouse_down(wtab->tab, event);
