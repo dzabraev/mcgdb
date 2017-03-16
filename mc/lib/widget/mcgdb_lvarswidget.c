@@ -748,8 +748,8 @@ get_chunk_horiz_shift(cell_data_t * chunk_data) {
   chunk_name_t name = chunk_data->name;
   if (
     type_code == TYPE_CODE_STRUCT ||
-    type_code == TYPE_CODE_ARRAY  ||
-    name      == CHUNKNAME_PARENTHESIS
+    type_code == TYPE_CODE_ARRAY
+    //name      == CHUNKNAME_PARENTHESIS
   ) {
     horiz_shift=2;
   }
@@ -771,14 +771,10 @@ print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int r
       type_code_t type_code = CHUNK(child)->type_code;
       chunk_name_t name = CHUNK(child)->name;
       int horiz_shift = get_chunk_horiz_shift (CHUNK(child));
-      start_pos = print_chunks (child,x1+horiz_shift,x2+horiz_shift,start_pos,left_bound,right_bound,tab,rowcnt);
-      if (
-        type_code == TYPE_CODE_STRUCT ||
-        type_code == TYPE_CODE_ARRAY  ||
-        name == CHUNKNAME_PARENTHESIS
-      ) {
-        start_pos=x1;
-      }
+      int start_pos_1;
+      start_pos_1 = (type_code == TYPE_CODE_STRUCT || type_code == TYPE_CODE_ARRAY) ? (x1+horiz_shift) : (start_pos);
+      start_pos = print_chunks (child,x1+horiz_shift,x2+horiz_shift,start_pos_1,left_bound,right_bound,tab,rowcnt);
+      start_pos = (type_code == TYPE_CODE_STRUCT || type_code == TYPE_CODE_ARRAY) ? (x1) : (start_pos);
       child = g_node_next_sibling (child);
     }
   }
