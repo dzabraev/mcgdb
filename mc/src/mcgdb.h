@@ -10,6 +10,11 @@
 #include "lib/widget.h"
 #include <setjmp.h>
 
+void __message_assert (const char *EX, const char *FILE, int LINE);
+
+#define message_assert(EX) (void)((EX) || (__message_assert (#EX, __FILE__, __LINE__),0))
+
+
 enum gdb_cmd {
   MCGDB_UNKNOWN=0,
   MCGDB_ERROR_MESSAGE,

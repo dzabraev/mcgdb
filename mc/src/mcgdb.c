@@ -793,4 +793,10 @@ mcgdb_cmd_print(void) {
 }
 
 
-
+void
+__message_assert (const char *EX, const char *filename, int line) {
+  char *str;
+  asprintf (&str,"'%s' AT %s : %d",EX,filename,line);
+  edit_error_dialog("ASSERT FAILED",str);
+  abort();
+}

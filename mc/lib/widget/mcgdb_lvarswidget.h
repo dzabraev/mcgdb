@@ -7,10 +7,13 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <assert.h>
 
 #include <jansson.h>
 
 #include "lib/global.h"
+#include "src/editor/edit-impl.h"
+
 
 
 int mcgdb_aux_dlg(void);
@@ -50,18 +53,48 @@ typedef enum table_redraw {
 
 typedef struct {
   //char **columns;
-  json_t **columns;
+  GNode **columns;
   int *offset;
   long ncols;
   long y1;
   long y2;
-  int *color; /*color of cells*/
   int *xl;
   int *xr;
 } table_row;
 
 
 typedef struct WTable WTable;
+
+#define CHUNK(node) ((node) ? ((cell_data_t *)(node->data)) : NULL)
+
+typedef enum type_code {
+  TYPE_CODE_NONE = 0,
+  TYPE_CODE_PTR     ,
+  TYPE_CODE_ARRAY   ,
+  TYPE_CODE_STRUCT  ,
+} type_code_t;
+
+
+typedef enum chunk_name {
+  CHUNKNAME_NONE=0,
+  CHUNKNAME_FRAME_NUM,
+  CHUNKNAME_TH_GLOBAL_NUM,
+  CHUNKNAME_VARNAME,
+  CHUNKNAME_REGNAME,
+  CHUNKNAME_VARVALUE,
+  CHUNKNAME_REGVALUE,
+  CHUNKNAME_FRAME_FUNC_NAME,
+  CHUNKNAME_PARENTHESIS,
+} chunk_name_t;
+
+typedef struct celldata {
+  chunk_name_t name;
+  type_code_t type_code;
+  char *str;
+  GArray *coord;
+  int color;
+  gboolean selected;
+} cell_data_t;
 
 typedef struct Table {
   GList *rows;
@@ -83,7 +116,6 @@ typedef struct Table {
   int        active_col;
   table_row *active_row;
   WTable *wtab;
-  json_t *json_tab;
 } Table;
 
 

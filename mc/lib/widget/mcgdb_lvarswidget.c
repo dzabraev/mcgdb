@@ -67,19 +67,18 @@ static void         table_row_destroy(table_row *row);
 static void         table_update_bounds(Table * tab, long y, long x, long lines, long cols);
 static Table *      table_new (long ncols);
 static int          table_add_row (Table * tab);
-//static int          table_add_row_arr (Table * tab, const char **cols);
 static void         table_destroy(Table *tab);
 static void         table_clear_rows(Table * tab);
 static void         table_draw(Table * tab);
 static void         table_draw_row (Table * tab, table_row *r);
 static void         table_update_colwidth(Table * tab);
 static void         table_set_colwidth_formula(Table * tab, int (*formula)(const Table * tab, int ncol));
-static void         table_setcolor(Table *tab, int nrow, int ncol, int color);
+//static void         table_setcolor(Table *tab, int nrow, int ncol, int color);
 static void         table_process_click(Table *tab, mouse_event_t * event);
 static void         table_set_cell_text(Table *tab, int nrow, int ncol, json_t *text);
-static void         table_set_cell_color(Table *tab, int nrow, int ncol, const char *fg, const char *bg, const char *attrib);
+//static void         table_set_cell_color(Table *tab, int nrow, int ncol, const char *fg, const char *bg, const char *attrib);
 static int          formula_eq_col(const Table * tab, int ncol);
-static int          formula_adapt_col(const Table * tab, int ncol);
+//static int          formula_adapt_col(const Table * tab, int ncol);
 static void         wtable_update_bound(WTable *wtab);
 static void         wtable_draw(WTable *wtab);
 
@@ -87,13 +86,13 @@ static void         table_add_offset(Table *tab, int off);
 WTable  *           find_wtable (WDialog *h);
 
 static int
-print_chunks (json_t *chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table *tab, int * rowcnt);
+print_chunks (GNode *chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table *tab, int * rowcnt);
 
 static int
-print_str_chunk (json_t *chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table * tab, int * rowcnt);
+print_str_chunk (cell_data_t *chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table * tab, int * rowcnt);
 
 static int
-get_chunk_horiz_shift(json_t * chunk);
+get_chunk_horiz_shift(cell_data_t * chunk);
 
 
 gint    find_button_in_list(gconstpointer a, gconstpointer b);
@@ -122,24 +121,29 @@ TAB_FIRST_ROW(Table * tab) {
 }
 
 
-static void
-insert_pkg_json_into_table (json_t *json_tab, Table *tab) {
-  json_t *json_rows = json_object_get (json_tab, "rows");
-  size_t size_rows = json_array_size (json_rows);
-  tab->json_tab = json_tab;
-  long nrow;
-  for (size_t i=0;i<size_rows;i++) {
-    json_t * row = json_array_get (json_rows,i);
+static int
+insert_json_row (json_t *row, Table *tab) {
+    int nrow;
     json_t * columns = json_object_get (row,"columns");
     size_t rowsize = json_array_size (columns);
-    assert((size_t)tab->ncols==rowsize);
+    message_assert((size_t)tab->ncols==rowsize);
     nrow = table_add_row (tab);
     for (int ncol=0;ncol<tab->ncols;ncol++) {
       table_set_cell_text (
         tab,nrow,ncol,
-        json_object_get (json_array_get (columns,ncol),"chunks")
+        json_array_get (columns,ncol)
       );
     }
+    return nrow;
+}
+
+static void
+insert_pkg_json_into_table (json_t *json_tab, Table *tab) {
+  json_t *json_rows = json_object_get (json_tab, "rows");
+  size_t size_rows = json_array_size (json_rows);
+  for (size_t i=0;i<size_rows;i++) {
+    json_t * row = json_array_get (json_rows,i);
+    insert_json_row (row,tab);
   }
 }
 
@@ -293,7 +297,7 @@ wtable_add_table(WTable *wtab, const char *tabname, int ncols) {
   Table *tab;
   tab = table_new(ncols);
   tab->wtab = wtab;
-  table_set_colwidth_formula(tab, formula_adapt_col);
+  table_set_colwidth_formula(tab, formula_eq_col);
   g_hash_table_insert ( wtab->tables, (gpointer) tabname, (gpointer) tab);
   selbar_add_button   ( wtab->selbar, tabname);
 }
@@ -301,7 +305,7 @@ wtable_add_table(WTable *wtab, const char *tabname, int ncols) {
 static void
 wtable_set_current_table(WTable *wtab, const char *tabname) {
   wtab->tab = g_hash_table_lookup (wtab->tables, tabname);
-  assert(wtab->tab!=NULL);
+  message_assert(wtab->tab!=NULL);
   selbar_set_current_button(wtab->selbar,tabname);
 }
 
@@ -315,14 +319,12 @@ static table_row *
 table_row_alloc(long ncols) {
   table_row * row = g_new0 (table_row,1);
   row->ncols=ncols;
-  row->columns  = (json_t **)g_new0(json_t *, ncols);
-  row->color    = (int *)g_new(int, ncols);
+  row->columns  = (GNode **)g_new0(GNode *, ncols);
   row->offset   = (int *)g_new(int, ncols);
   row->xl       = (int *)g_new(int, ncols);
   row->xr       = (int *)g_new(int, ncols);
   for (int col=0;col<ncols;col++) {
     row->columns[col] = NULL;
-    row->color[col]=EDITOR_NORMAL_COLOR;
     row->offset[col]=0;
     row->xl[col]=-1;
     row->xr[col]=-1;
@@ -330,23 +332,149 @@ table_row_alloc(long ncols) {
   return row;
 }
 
-static void
-table_set_cell_text (Table *tab, int nrow, int ncol, json_t *text) {
-  table_row *row = g_list_nth_data(tab->rows,nrow);
-  json_incref (text);
-  assert(row);
-  assert(row->ncols > ncol);
-  if (row->columns[ncol])
-    json_decref (row->columns[ncol]);
-  row->columns[ncol] = text;
+static type_code_t
+json_get_chunk_type_code (json_t * chunk) {
+  json_t *type_code_json;
+  const char *type_code;
+  if (!chunk)
+    return TYPE_CODE_NONE;
+  if ( !(type_code_json= json_object_get (chunk,"type_code")) )
+    return TYPE_CODE_NONE;
+
+  type_code = json_string_value (type_code_json);
+  if      (!strcmp (type_code,"TYPE_CODE_STRUCT")) {
+    return TYPE_CODE_STRUCT;
+  }
+  else if (!strcmp (type_code,"TYPE_CODE_ARRAY")) {
+    return TYPE_CODE_ARRAY;
+  }
+  else {
+    return TYPE_CODE_NONE;
+  }
 }
 
+static chunk_name_t
+json_get_chunk_name (json_t * chunk) {
+    const char *name;
+    json_t *name_json;
+    if (!chunk)
+      return CHUNKNAME_NONE;
+    name_json = json_object_get (chunk,"name");
+    if (!name_json)
+      return CHUNKNAME_NONE;
+    name = json_string_value (name_json);
+    if (!strcmp(name,"frame_num")) {
+      return CHUNKNAME_FRAME_NUM;
+    }
+    else if (!strcmp(name,"th_global_num")) {
+      return CHUNKNAME_TH_GLOBAL_NUM;
+    }
+    else if (!strcmp(name,"varname")) {
+      return CHUNKNAME_VARNAME;
+    }
+    else if (!strcmp(name,"regname")) {
+      return CHUNKNAME_REGNAME;
+    }
+    else if (!strcmp(name,"varvalue")) {
+      return CHUNKNAME_VARVALUE;
+    }
+    else if (!strcmp(name,"regvalue")) {
+      return CHUNKNAME_REGVALUE;
+    }
+    else if (!strcmp(name,"frame_func_name")) {
+      return CHUNKNAME_FRAME_FUNC_NAME;
+    }
+    else if (!strcmp(name,"parenthesis")) {
+      return CHUNKNAME_PARENTHESIS;
+    }
+    else {
+      return CHUNKNAME_NONE;
+    }
+}
+
+static cell_data_t *
+cell_data_new (void) {
+  cell_data_t * data = g_new0 (cell_data_t, 1);
+  data->coord = g_array_new (FALSE,FALSE,sizeof(int));
+  return data;
+}
+
+static cell_data_t *
+cell_data_new_from_json (json_t * json_chunk) {
+  cell_data_t * data = cell_data_new ();
+  const char * str;
+  json_t *selected;
+  if ( (str = json_string_value (json_object_get (json_chunk, "str"))) ) {
+    data->str=strdup(str);
+  }
+  data->type_code = json_get_chunk_type_code (json_chunk);
+  if ((selected = json_object_get (json_chunk,"selected"))) {
+    if (selected && json_boolean_value(selected))
+      data->selected = TRUE;
+  }
+  data->name = json_get_chunk_name (json_chunk);
+  data->color = EDITOR_NORMAL_COLOR;
+  switch (data->name) {
+    case CHUNKNAME_FRAME_NUM:
+    case CHUNKNAME_TH_GLOBAL_NUM:
+      if (data->selected)
+        data->color = tty_try_alloc_color_pair2 ("red", "black", "bold", FALSE);
+      break;
+    case CHUNKNAME_VARNAME:
+    case CHUNKNAME_REGNAME:
+      data->color = tty_try_alloc_color_pair2 ("yellow", "blue", NULL, FALSE);
+      break;
+    case CHUNKNAME_VARVALUE:
+    case CHUNKNAME_REGVALUE:
+      data->color = tty_try_alloc_color_pair2 ("green", "blue", NULL, FALSE);
+      break;
+    case CHUNKNAME_FRAME_FUNC_NAME:
+      data->color = tty_try_alloc_color_pair2 ("cyan", "blue", NULL, FALSE);
+      break;
+    default:
+      break;
+  }
+  return data;
+}
+
+static void
+cell_data_setcolor (cell_data_t *data) {
+  tty_setcolor(data->color);
+}
+
+static void
+json_to_celltree (GNode *parent, json_t *json_chunk) {
+  json_t *json_child_chunks;
+  if (json_object_get (json_chunk, "str")) {
+    cell_data_t * data = cell_data_new_from_json (json_chunk);
+    g_node_append_data (parent,data);
+  }
+  else if ((json_child_chunks = json_object_get (json_chunk, "chunks"))) {
+    GNode * node = g_node_append_data (parent,cell_data_new_from_json (json_chunk));
+    for (size_t nc=0; nc<json_array_size (json_child_chunks); nc++) {
+      json_to_celltree(node,json_array_get (json_child_chunks,nc));
+    }
+  }
+}
+
+static void
+table_set_cell_text (Table *tab, int nrow, int ncol, json_t *json_data) {
+  table_row *row = g_list_nth_data(tab->rows,nrow);
+  message_assert(row);
+  message_assert(row->ncols > ncol);
+  if (row->columns[ncol])
+    g_node_destroy (row->columns[ncol]);
+  row->columns[ncol] = g_node_new ( cell_data_new ());
+  json_to_celltree (row->columns[ncol], json_data);
+}
+
+/*
 static void
 table_set_cell_color(Table *tab, int nrow, int ncol, const char *fg, const char *bg, const char *attrib) {
   ((table_row * )g_list_nth_data(tab->rows,nrow))->color[ncol] =
     tty_try_alloc_color_pair2 (fg, bg, attrib, FALSE);
 }
-
+*/
 
 static void
 table_process_click(Table *tab, mouse_event_t * event) {
@@ -380,7 +508,7 @@ table_process_click(Table *tab, mouse_event_t * event) {
   /*`nrow` есть номер строки таблицы, по которой был сделан клик.
    *`ncol` есть номер столбца таблицы по которому был сделан клик.
   */
-  assert (ncol<tab->ncols);
+  message_assert (ncol<tab->ncols);
   if (tab->row_callback) {
     handled = tab->row_callback(row,nrow,ncol);
     if (handled)
@@ -390,17 +518,18 @@ table_process_click(Table *tab, mouse_event_t * event) {
     handled = tab->cell_callbacks[ncol](row,nrow,ncol);
 }
 
-
+/*
 static void
 table_row_setcolor(table_row *row, int col, int color) {
   assert(col<row->ncols);
   row->color[col]=color;
 }
+*/
 
 static void
 table_row_destroy(table_row *row) {
   for (int col=0;col<row->ncols;col++) {
-    free(row->columns[col]);
+    g_node_destroy (row->columns[col]);
   }
   g_free(row);
 }
@@ -425,11 +554,12 @@ formula_eq_col(const Table * tab, __attribute__((unused)) int ncol) {
 }
 
 
+#if 0
 static size_t
-get_jsonstr_len_utf(json_t * chunks) {
-  /*вычисляет максимальную ширину строки (array of chunks)*/
-  json_t * child_chunks, *ch;
-  size_t str_size = 0, max_str_size=0;
+get_jsonstr_len_utf(GNode * chunks) {
+  /*вычисляет максимальную ширину строки*/
+  GNode * child;
+  size_t max_str_size=0;
   for (size_t nchunk=0;nchunk<json_array_size(chunks); nchunk++) {
     const char * chunk_str;
     json_t * chunk = json_array_get (chunks,nchunk);
@@ -473,7 +603,7 @@ formula_adapt_col(const Table * tab, int ncol) {
       return tab->cols - tab->colstart[ncol-1];
   }
 }
-
+#endif
 
 
 
@@ -482,6 +612,7 @@ table_set_colwidth_formula(Table * tab, int (*formula)(const Table * tab, int nc
   tab->formula = formula;
 }
 
+#if 0
 static void
 set_color_by_chunkname (json_t *chunk) {
   const char *name = json_string_value (json_object_get (chunk,"name"));
@@ -512,6 +643,7 @@ set_color_by_chunkname (json_t *chunk) {
   }
   tty_setcolor(color);
 }
+#endif
 
 static void
 tty_setalloc_color (const char *fg, const char *bg, const char * attr, gboolean x) {
@@ -525,7 +657,7 @@ in_printable_area (int colcnt, int left_bound, int right_bound) {
 }
 
 static int
-print_str_chunk(json_t *chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table * tab, int * rowcnt) {
+print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int left_bound, int right_bound, Table * tab, int * rowcnt) {
   const char * p;
   int offset; //, offset_start;
   int colcnt=start_pos;
@@ -537,34 +669,30 @@ print_str_chunk(json_t *chunk, int x1, int x2, int start_pos, int left_bound, in
    * `y` есть y-координата строки с учетом смещения.
    * `x_start`, `x_stop` есть координаты начала и конца строки.
    */
-  json_t * coord = json_object_get (chunk,"coord");
-  if (!coord) {
-    coord = json_array();
-    json_object_set (chunk,"coord",coord);
-  }
-  else {
-    json_array_clear (coord);
-  }
-  p = json_string_value (json_object_get (chunk,"str"));
+  GArray * coord = chunk_data->coord;
+  if (coord->len)
+    g_array_remove_range (coord, 0, coord->len);
+  p = chunk_data->str;
   if (!p)
     p="???";
   offset=ROW_OFFSET(tab,rowcnt[0]);
   //offset_start = offset;
-  json_array_append (coord,json_integer (offset));
-  json_array_append (coord,json_integer (start_pos));
+  g_array_append_val (coord, offset);
+  g_array_append_val (coord, start_pos);
   tty_gotoyx(offset,start_pos);
   for(;;colcnt++) {
     if(colcnt>=x2 || newline) {
       /*допечатали до правой границы столбца таблицы
        *делаем перенос строки.*/
-      json_array_append (coord,json_integer (MIN (colcnt,x2)));
+      int colcnt1 = MIN (colcnt,x2);
+      g_array_append_val (coord, colcnt1);
       rowcnt[0]++;
       offset=ROW_OFFSET(tab,rowcnt[0]);
       if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
         tty_gotoyx(offset,x1);
       colcnt=x1;
-      json_array_append (coord,json_integer (offset));
-      json_array_append (coord,json_integer (colcnt));
+      g_array_append_val (coord, offset);
+      g_array_append_val (coord, colcnt);
     }
     else if (
       in_printable_area(colcnt,left_bound,right_bound) &&
@@ -579,7 +707,7 @@ print_str_chunk(json_t *chunk, int x1, int x2, int start_pos, int left_bound, in
     }
     newline=FALSE;
     if (!*p) {
-      json_array_append (coord,json_integer (colcnt));
+      g_array_append_val (coord, colcnt);
       break;
     }
     switch(*p) {
@@ -592,7 +720,7 @@ print_str_chunk(json_t *chunk, int x1, int x2, int start_pos, int left_bound, in
     default:
       offset=ROW_OFFSET(tab,rowcnt[0]);
       if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab) && in_printable_area(colcnt,left_bound,right_bound)) {
-        set_color_by_chunkname (chunk);
+        cell_data_setcolor (chunk_data);
         p+=tty_print_utf8(p);
       }
       else {
@@ -609,41 +737,49 @@ print_str_chunk(json_t *chunk, int x1, int x2, int start_pos, int left_bound, in
       }
     }
   }
-  assert (json_array_size (coord)%3==0);
+  message_assert (coord->len%3==0);
   return colcnt;
 }
 
 static int
-get_chunk_horiz_shift(json_t * chunk) {
-  int horiz_shift=0;
-  json_t * type = json_object_get (chunk,"type");
-  if (type) {
-    const char * strval = json_string_value (type);
-    if (!strcmp(strval,"struct")) {
-      horiz_shift=2;
-    }
+get_chunk_horiz_shift(cell_data_t * chunk_data) {
+  int horiz_shift;
+  type_code_t type_code = chunk_data->type_code;
+  chunk_name_t name = chunk_data->name;
+  if (
+    type_code == TYPE_CODE_STRUCT ||
+    type_code == TYPE_CODE_ARRAY  ||
+    name      == CHUNKNAME_PARENTHESIS
+  ) {
+    horiz_shift=2;
+  }
+  else {
+    horiz_shift=0;
   }
   return horiz_shift;
 }
 
 static int
-print_chunks(json_t * chunks, int x1, int x2, int start_pos, int left_bound, int right_bound, Table *tab, int * rowcnt) {
-  json_t * child_chunks, * type;
-  for (size_t nchunk=0;nchunk<json_array_size(chunks); nchunk++) {
-    json_t * chunk = json_array_get (chunks,nchunk);
-    if (json_object_get (chunk,"str")) {
-      start_pos = print_str_chunk (chunk,x1,x2,start_pos,left_bound,right_bound,tab,rowcnt);
-    }
-    else if ((child_chunks = json_object_get (chunk,"chunks"))) {
-      int horiz_shift = get_chunk_horiz_shift (chunk);
-      if ((type=json_object_get(chunk,"type")) && !strcmp(json_string_value(type),"struct")) {
-        int start_pos_chunks=x1 + horiz_shift;
-        print_chunks (child_chunks,x1+horiz_shift,x2+horiz_shift,start_pos_chunks,left_bound,right_bound,tab,rowcnt);
+print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table *tab, int * rowcnt) {
+  message_assert (CHUNK(chunk)!=NULL);
+  if (CHUNK(chunk)->str) {
+    return print_str_chunk (CHUNK(chunk),x1,x2,start_pos,left_bound,right_bound,tab,rowcnt);
+  }
+  else {
+    GNode *child = g_node_first_child (chunk);
+    while (child) {
+      type_code_t type_code = CHUNK(child)->type_code;
+      chunk_name_t name = CHUNK(child)->name;
+      int horiz_shift = get_chunk_horiz_shift (CHUNK(child));
+      start_pos = print_chunks (child,x1+horiz_shift,x2+horiz_shift,start_pos,left_bound,right_bound,tab,rowcnt);
+      if (
+        type_code == TYPE_CODE_STRUCT ||
+        type_code == TYPE_CODE_ARRAY  ||
+        name == CHUNKNAME_PARENTHESIS
+      ) {
         start_pos=x1;
       }
-      else {
-        start_pos = print_chunks (child_chunks,x1+horiz_shift,x2+horiz_shift,start_pos,left_bound,right_bound,tab,rowcnt);
-      }
+      child = g_node_next_sibling (child);
     }
   }
   return start_pos;
@@ -665,14 +801,13 @@ table_draw_row (Table * tab, table_row *row) {
    * TAB_TOP(tab) и TAB_BOTTOM(tab) являются реальными координатами на экране.
    */
   long * colstart = tab->colstart;
-  json_t ** columns = row->columns;
-  json_t * column;
+  GNode ** columns = row->columns;
+  GNode  * column;
   int rowcnt;
   long max_rowcnt=1, x1, x2;
   long offset;
   row->y1 = ROW_OFFSET(tab,0);
   for(int i=0;i<tab->ncols;i++) {
-    tty_setcolor(row->color[i]); /*цвет ячейки*/
     column = columns[i];
     x1 = i==0?colstart[i]:colstart[i]+1;
     x2 = colstart[i+1];
@@ -739,12 +874,14 @@ table_update_colwidth(Table * tab) {
   tab->colstart[ncols] = x + cols;
 }
 
+/*
 static void
 table_setcolor(Table *tab, int nrow, int ncol, int color) {
   table_row *row = (table_row *) g_list_nth_data (tab->rows, nrow);
   assert(row!=NULL);
   table_row_setcolor(row, ncol, color);
 }
+*/
 
 static void
 table_update_bounds(Table * tab, long y, long x, long lines, long cols) {
@@ -765,7 +902,7 @@ table_new (long ncols) {
   tab->nrows=0;
   tab->colstart = (long *)g_new0(long,ncols+1);
   tab->row_offset=0;
-  table_set_colwidth_formula(tab,formula_adapt_col);
+  table_set_colwidth_formula(tab,formula_eq_col);
   return tab;
 }
 
@@ -863,29 +1000,25 @@ wtable_draw(WTable *wtab) {
 }
 
 static void
-chunks_find_xlr (json_t * chunks, int *xl, int *xr) {
-  if (json_is_object (chunks)) {
-    json_t * coord = json_object_get(chunks,"coord");
-    if (!coord) {
-      json_t * child_chunks = json_object_get(chunks,"chunks");
-      if (child_chunks)
-        chunks_find_xlr (child_chunks,xl,xr);
-      return;
-    }
-    for (size_t n_substr=0;n_substr<json_array_size(coord);n_substr+=3) {
-      int x_start = json_integer_value (json_array_get (coord, n_substr+1));
-      int x_stop  = json_integer_value (json_array_get (coord, n_substr+2));
+chunks_find_xlr (GNode * chunk, int *xl, int *xr) {
+  if (CHUNK(chunk)->str) {
+    GArray * coord = CHUNK(chunk)->coord;
+    message_assert (CHUNK(chunk)->coord->len>0);
+    for (size_t i=0; i<coord->len;i+=3) {
+      int x_start = g_array_index (coord,int,i+1);
+      int x_stop  = g_array_index (coord,int,i+2);
       if (x_stop - x_start >= 1) {
         *xl = MIN(*xl, x_start);
         *xr = MAX(*xr, x_stop);
-        assert (*xr >= *xl);
+        message_assert (*xr >= *xl);
       }
-
     }
   }
   else {
-    for (int nchunk=0;nchunk<json_array_size(chunks); nchunk++) {
-      chunks_find_xlr ( json_array_get(chunks,nchunk), xl, xr);
+    GNode * child = g_node_first_child (chunk);
+    while (child) {
+      chunks_find_xlr (child, xl, xr);
+      child = g_node_next_sibling (child);
     }
   }
 }
@@ -896,6 +1029,8 @@ update_cell_width(table_row * tr, int ncol) {
   самую правую координату*/
   int xl=0xfffff, xr=-0xfffff;
   chunks_find_xlr(tr->columns[ncol], &xl, &xr);
+  message_assert (xl!=0xfffff);
+  message_assert (xr!=-0xfffff);
   tr->xl[ncol] = xl;
   tr->xr[ncol] = xr;
 }
@@ -903,9 +1038,9 @@ update_cell_width(table_row * tr, int ncol) {
 static void
 table_process_mouse_down(Table *tab, mouse_event_t * event) {
   GList * row = tab->rows;
+  table_row *tr;
   tab->mouse_down_x = event->x;
   tab->mouse_down_y = event->y;
-  table_row *tr;
   int ncol;
   while(row) {
     tr = (table_row *)(row->data);
@@ -935,7 +1070,7 @@ table_process_mouse_up(Table *tab, mouse_event_t * event) {
 
 static void
 table_process_mouse_drag(Table *tab, mouse_event_t * event) {
-  int L,ncol,visible_cell_width;
+  int L,ncol;
   table_row *tr = tab->active_row;
   if (!tr)
     return;

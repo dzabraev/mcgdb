@@ -608,11 +608,11 @@ class LocalVarsWindow(BaseWindow):
         field_value = value[field_name]
         data_chunks+=self.value_to_chunks(field_value,field_name)
         data_chunks.append({'str':'\n'})
-      chunks1.append({'chunks':data_chunks,'type':'struct'})
+      chunks1.append({'chunks':data_chunks,'type_code':'TYPE_CODE_STRUCT'})
       chunks1.append({'str':'}'})
       parent_chunk={
         'chunks'  : chunks1,
-        'type'    : 'parenthesis',
+        'name'    : 'parenthesis',
       }
       chunks.append (parent_chunk)
     elif value.type.strip_typedefs().code==gdb.TYPE_CODE_ARRAY:
@@ -623,11 +623,11 @@ class LocalVarsWindow(BaseWindow):
       for i in range(n1,n2):
         array_data_chunks += self.value_to_chunks(value[i])
         array_data_chunks.append({'str':',\n'})
-      chunks1.append({'chunks':array_data_chunks,'type':'array'})
+      chunks1.append({'chunks':array_data_chunks,'type_code':'TYPE_CODE_ARRAY'})
       chunks1.append({'str':']'})
       parent_chunk={
         'chunks'  : chunks1,
-        'type'    : 'parenthesis',
+        'name'    : 'parenthesis',
       }
       chunks.append (parent_chunk)
     else:
