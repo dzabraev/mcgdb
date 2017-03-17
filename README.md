@@ -45,12 +45,13 @@
 ## INSTALL from sources
 
 ```
-git clone https://github.com/dzabraev/mcgdb  
-mkdir obj-mcgdb  
-cd obj-mcgdb  
-../mcgdb/configure  
+wget https://github.com/dzabraev/mcgdb/releases/download/1.1/mcgdb-1.1.tar.gz
+tar xzvf mcgdb-1.1.tar.gz
+mkdir obj-mcgdb-1.1  
+cd obj-mcgdb-1.1  
+../mcgdb-1.1/configure  
 make -j4  
-checkinstall  
+checkinstall (or make install)  
 ```
 
 #getting started
