@@ -378,9 +378,9 @@ class BaseWindow(object):
     debug_wins[self.type]=self #debug
     if os.path.exists(os.path.abspath('~/tmp/mcgdb-debug/core')):
       os.remove(os.path.abspath('~/tmp/mcgdb-debug/core'))
-    self.gui_window_cmd='''gnome-terminal -e 'bash -c "cd ~/tmp/mcgdb-debug/; touch 1; ulimit -c unlimited; {cmd}"' '''
+    #self.gui_window_cmd='''gnome-terminal -e 'bash -c "cd ~/tmp/mcgdb-debug/; touch 1; ulimit -c unlimited; {cmd}"' '''
     #self.gui_window_cmd='''gnome-terminal -e 'valgrind --log-file=/tmp/vlg.log {cmd}' '''
-    #self.gui_window_cmd='''gnome-terminal -e '{cmd}' '''
+    self.gui_window_cmd='''gnome-terminal -e '{cmd}' '''
     self.lsock=socket.socket()
     self.lsock.bind( ('',0) )
     self.lsock.listen(1)
@@ -465,15 +465,20 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
   def recv(self):
     return pkgrecv(self.fd)
 
-  def process_pkg(self):
-    '''Обработать сообщение из графического окна'''
-    pkg=self.recv()
+  def process_pkg(self,pkg=None):
+    '''Обработать сообщение из графического окна или от другой сущности'''
+    if pkg==None:
+      pkg=self.recv()
     cmd=pkg['cmd']
-    cb=self.window_event_handlers.get(cmd)
-    if cb==None:
-      debug("unknown `cmd`: `{}`".format(pkg))
+    if cmd=='shellcmd':
+      cmdname=pkg['cmdname']
+      self.process_shellcmd(cmdname)
     else:
-      return cb(pkg)
+      cb=self.window_event_handlers.get(cmd)
+      if cb==None:
+        debug("unknown `cmd`: `{}`".format(pkg))
+      else:
+        return cb(pkg)
 
   def terminate(self):
     try:
@@ -571,7 +576,10 @@ class LocalVarsWindow(BaseWindow):
     res=exec_in_main_pythread(self._select_thread_1, (nthread,))
     if res!=None:
       self.send_error(res)
-
+    else:
+      # эмитируем, что пользователь вызвал в шелле команду, и оповещаем
+      # об этом остальные сущности
+      return [{'cmd':'shellcmd','cmdname':'thread'}]
 
   def _select_frame_1(self,nframe):
     if not gdb_stopped():
@@ -594,6 +602,8 @@ class LocalVarsWindow(BaseWindow):
     res=exec_in_main_pythread(self._select_frame_1, (nframe,))
     if res!=None:
       self.send_error(res)
+    else:
+      return [{'cmd':'shellcmd','cmdname':'frame'}]
 
   def _change_variable(self,pkg):
     pass
@@ -1149,12 +1159,16 @@ class GEThread(object):
 
   def __process_pkg_from_entity (self):
     pkg=self.entities_evt_queue.pop(0)
+    gdb_print (pkg)
     cmd=pkg['cmd']
     if cmd=='check_breakpoint':
       breakpoint_queue.process()
     else:
-      debug('unrecognized package: `{}`'.format(pkg))
-      return
+      for fd in self.fte:
+        entity=self.fte[fd]
+        res = entity.process_pkg (pkg)
+        if res:
+          self.entities_evt_queue+=res
 
 
   def __call__(self):

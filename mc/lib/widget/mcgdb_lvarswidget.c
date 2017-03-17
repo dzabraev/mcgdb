@@ -1069,8 +1069,8 @@ static void
 wtable_draw(WTable *wtab) {
   Table *tab = wtab->tab;
   tty_draw_box (WIDGET(wtab)->y+1, WIDGET(wtab)->x, WIDGET(wtab)->lines-1, WIDGET(wtab)->cols, FALSE);
-  table_draw (tab);
   if (tab->rows && tab->selected_row>=0) {
+    table_draw (tab);
     /* При первичной отрисовке таблицы, помимо прочего, будут посчитаны координаты
      * строк. На основе посчитанных координат вычисляется смещение.
      * Будем изменять смещение если и только если selected_row не видна.
@@ -1102,6 +1102,10 @@ wtable_draw(WTable *wtab) {
       tab->selected_row=-1;
       table_draw (tab);
     }
+  }
+  else {
+    table_add_offset (tab,0); /*make offset valid*/
+    table_draw (tab);
   }
   tty_setcolor(EDITOR_NORMAL_COLOR);
   selbar_draw (wtab->selbar);
