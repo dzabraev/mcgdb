@@ -27,7 +27,11 @@ int f3(int x) {
   return x+1;
 }
 
-
+int fac(int n) {
+  if (n==1)
+    return 1;
+  return n*fac(n-1);
+}
 
 int main(void) {
   struct {
@@ -44,5 +48,6 @@ int main(void) {
   x=f2(x);
   x=f3(x);
   x=f5(x);
+  x=fac(50);
   return x;
 }

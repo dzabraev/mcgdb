@@ -117,6 +117,7 @@ typedef struct Table {
   int        active_col;
   table_row *active_row;
   WTable *wtab;
+  int selected_row;
 } Table;
 
 

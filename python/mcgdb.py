@@ -315,6 +315,8 @@ class BreakpointQueue(GdbBreakpoints):
 
 breakpoint_queue=BreakpointQueue()
 
+def inferior_alive ():
+  return not gdb.selected_thread()==None
 
 def exec_in_main_pythread(func,args=()):
   #Данную функцию нельзя вызывать более чем из одного потока
@@ -363,12 +365,22 @@ class BaseWindow(object):
     '''
     if not hasattr(self,'window_event_handlers'):
       self.window_event_handlers={}
+    self.window_event_handlers.update({
+      'editor_next'             :  self._editor_next,
+      'editor_step'             :  self._editor_step,
+      'editor_until'            :  self._editor_until,
+      'editor_continue'         :  self._editor_continue,
+      'editor_frame_up'         :  self._editor_frame_up,
+      'editor_frame_down'       :  self._editor_frame_down,
+      'editor_finish'           :  self._editor_finish,
+    })
+
     debug_wins[self.type]=self #debug
     if os.path.exists(os.path.abspath('~/tmp/mcgdb-debug/core')):
       os.remove(os.path.abspath('~/tmp/mcgdb-debug/core'))
-    #self.gui_window_cmd='''gnome-terminal -e 'bash -c "cd ~/tmp/mcgdb-debug/; touch 1; ulimit -c unlimited; {cmd}"' '''
+    self.gui_window_cmd='''gnome-terminal -e 'bash -c "cd ~/tmp/mcgdb-debug/; touch 1; ulimit -c unlimited; {cmd}"' '''
     #self.gui_window_cmd='''gnome-terminal -e 'valgrind --log-file=/tmp/vlg.log {cmd}' '''
-    self.gui_window_cmd='''gnome-terminal -e '{cmd}' '''
+    #self.gui_window_cmd='''gnome-terminal -e '{cmd}' '''
     self.lsock=socket.socket()
     self.lsock.bind( ('',0) )
     self.lsock.listen(1)
@@ -391,6 +403,27 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
   complete_cmd=complete_cmd,rc=rc,stdout=out,stderr=err))
         gdb_print('''Can't open gui window. execute manually: `{cmd}`'''.format(cmd=cmd))
 
+  def _editor_next(self,pkg):
+    if gdb_stopped():
+      exec_cmd_in_gdb("next")
+  def _editor_step(self,pkg):
+    if gdb_stopped():
+      exec_cmd_in_gdb("step")
+  def _editor_until(self,pkg):
+    if gdb_stopped():
+      exec_cmd_in_gdb("until")
+  def _editor_continue(self,pkg):
+    if gdb_stopped():
+      exec_cmd_in_gdb("continue")
+  def _editor_frame_up(self,pkg):
+    if gdb_stopped():
+      exec_cmd_in_gdb("up")
+  def _editor_frame_down(self,pkg):
+    if gdb_stopped():
+      exec_cmd_in_gdb("down")
+  def _editor_finish(self,pkg):
+    if gdb_stopped():
+      exec_cmd_in_gdb("finish")
 
   def make_runwin_cmd(self):
     ''' Данный метод формирует shell-команду для запуска окна с editor.
@@ -491,10 +524,9 @@ class LocalVarsWindow(BaseWindow):
 
   def __init__(self, **kwargs):
     super(LocalVarsWindow,self).__init__(**kwargs)
-    self.window_event_handlers={
-      #'change_variable' : self._change_variable,
+    self.window_event_handlers.update({
       'onclick_data'    : self._onclick_data,
-    }
+    })
     self.click_cmd_cbs={
       'select_frame'    : self._select_frame,
       'select_thread'   : self._select_thread,
@@ -544,6 +576,8 @@ class LocalVarsWindow(BaseWindow):
   def _select_frame_1(self,nframe):
     if not gdb_stopped():
       return 'inferior running'
+    if not inferior_alive ():
+      return 'inferior not alive'
     n_cur_frame=0
     frame = gdb.newest_frame ()
     while frame:
@@ -744,14 +778,14 @@ class LocalVarsWindow(BaseWindow):
     frame = gdb.newest_frame ()
     nframe=0
     frames=[]
-    nrow_mark=None
+    selected_row=None
     while frame:
       col={}
       framenumber = {'str':'#{}'.format(str(nframe)),'name':'frame_num'}
       if frame == gdb.selected_frame ():
         framenumber['selected']=True
-      else:
-        col['onclick_data']={
+        selected_row=nframe
+      col['onclick_data']={
           'click_cmd':'select_frame',
           'nframe' : nframe,
         }
@@ -770,6 +804,8 @@ class LocalVarsWindow(BaseWindow):
     table={
       'rows':frames,
     }
+    if selected_row!=None:
+      table['selected_row'] = selected_row
     return table
 
   def get_stack(self):
@@ -796,7 +832,7 @@ class LocalVarsWindow(BaseWindow):
     throws=[]
     threads=gdb.selected_inferior().threads()
     nrow=0
-    nrow_mark=None
+    selected_row=None
     for thread in threads:
       column={}
       thread.switch()
@@ -809,8 +845,8 @@ class LocalVarsWindow(BaseWindow):
       global_num_chunk = {'str':global_num, 'name':'th_global_num'}
       if thread==selected_thread:
         global_num_chunk['selected']=True
-      else:
-        column['onclick_data'] = {
+        selected_row=nrow
+      column['onclick_data'] = {
           'click_cmd':'select_thread',
           'nthread' : nrow,
         }
@@ -831,7 +867,11 @@ class LocalVarsWindow(BaseWindow):
       nrow+=1
     if selected_thread!=None:
       selected_thread.switch()
-    table = {'rows':throws}
+    table = {
+      'rows':throws,
+    }
+    if selected_row!=None:
+      table['selected_row'] = selected_row
     return table
 
   def get_threads(self):
@@ -897,17 +937,10 @@ class MainWindow(BaseWindow):
 
   def __init__(self, **kwargs):
     super(MainWindow,self).__init__(**kwargs)
-    self.window_event_handlers = {
+    self.window_event_handlers.update({
       'editor_breakpoint'       :  self.__editor_breakpoint,
       'editor_breakpoint_de'    :  self.__editor_breakpoint_de,
-      'editor_next'             :  self.__editor_next,
-      'editor_step'             :  self.__editor_step,
-      'editor_until'            :  self.__editor_until,
-      'editor_continue'         :  self.__editor_continue,
-      'editor_frame_up'         :  self.__editor_frame_up,
-      'editor_frame_down'       :  self.__editor_frame_down,
-      'editor_finish'           :  self.__editor_finish,
-    }
+    })
     self.exec_filename=None #текущему фрейму соответствует это имя файла с исходным кодом
     self.exec_line=None     #номер строки текущей позиции исполнения программы
     self.edit_filename=None #Файл, который открыт в редакторе. Отличие от self.exec_filename в
@@ -1038,27 +1071,6 @@ class MainWindow(BaseWindow):
     ''' Disable/enable breakpoint'''
     raise NotImplementedError
     breakpoint_queue.process()
-  def __editor_next(self,pkg):
-    if gdb_stopped():
-      exec_cmd_in_gdb("next")
-  def __editor_step(self,pkg):
-    if gdb_stopped():
-      exec_cmd_in_gdb("step")
-  def __editor_until(self,pkg):
-    if gdb_stopped():
-      exec_cmd_in_gdb("until")
-  def __editor_continue(self,pkg):
-    if gdb_stopped():
-      exec_cmd_in_gdb("continue")
-  def __editor_frame_up(self,pkg):
-    if gdb_stopped():
-      exec_cmd_in_gdb("up")
-  def __editor_frame_down(self,pkg):
-    if gdb_stopped():
-      exec_cmd_in_gdb("down")
-  def __editor_finish(self,pkg):
-    if gdb_stopped():
-      exec_cmd_in_gdb("finish")
 
   def set_color(self,pkg):
     self.send(pkg)

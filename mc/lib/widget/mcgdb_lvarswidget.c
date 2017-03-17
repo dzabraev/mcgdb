@@ -82,6 +82,7 @@ static int          formula_eq_col(const Table * tab, int ncol);
 static void         wtable_update_bound(WTable *wtab);
 static void         wtable_draw(WTable *wtab);
 
+static void         table_set_offset(Table *tab, int off);
 static void         table_add_offset(Table *tab, int off);
 WTable  *           find_wtable (WDialog *h);
 
@@ -141,11 +142,15 @@ static void
 insert_pkg_json_into_table (json_t *json_tab, Table *tab) {
   json_t *json_rows = json_object_get (json_tab, "rows");
   size_t size_rows = json_array_size (json_rows);
+  json_t *json_selected_row = json_object_get (json_tab,"selected_row");
+  int selected_row =  json_selected_row ? json_integer_value (json_selected_row) : -1;
+  tab->selected_row = selected_row;
   for (size_t i=0;i<size_rows;i++) {
     json_t * row = json_array_get (json_rows,i);
     insert_json_row (row,tab);
   }
-  tab->row_offset = 0;
+  message_assert (tab->selected_row<tab->nrows);
+  //table_add_offset (tab,0);
 }
 
 static void
@@ -461,21 +466,14 @@ cell_data_setcolor (cell_data_t *data) {
 
 static void
 json_to_celltree (GNode *parent, json_t *json_chunk) {
-  json_t *json_child_chunks;
-//  if (json_object_get (json_chunk, "str")) {
-//    cell_data_t * data = cell_data_new_from_json (json_chunk);
-//    g_node_append_data (parent,data);
-//  }
-//  else if ((json_child_chunks = json_object_get (json_chunk, "chunks"))) {
-    json_child_chunks = json_object_get (json_chunk, "chunks");
-    if (!json_child_chunks)
-      return;
-    for (size_t nc=0; nc<json_array_size (json_child_chunks); nc++) {
-      json_t * json_node_data = json_array_get (json_child_chunks,nc);
-      GNode * node = g_node_append_data (parent,cell_data_new_from_json (json_node_data));
-      json_to_celltree(node,json_node_data);
-    }
-//  }
+  json_t *json_child_chunks = json_object_get (json_chunk, "chunks");
+  if (!json_child_chunks)
+    return;
+  for (size_t nc=0; nc<json_array_size (json_child_chunks); nc++) {
+    json_t * json_node_data = json_array_get (json_child_chunks,nc);
+    GNode * node = g_node_append_data (parent,cell_data_new_from_json (json_node_data));
+    json_to_celltree(node,json_node_data);
+  }
 }
 
 static void
@@ -573,7 +571,6 @@ process_cell_tree_mouse_callbacks (GNode *root, int y, int x) {
       char *msg;
       asprintf (&msg, "{\"cmd\":\"onclick_data\", \"data\":%s}",json_dumps (onclick_data,0));
       send_pkg_to_gdb (msg);
-      //edit_error_dialog("",msg);
       free (msg);
       handled=TRUE;
       return handled;
@@ -1002,6 +999,13 @@ table_add_offset(Table *tab, int off) {
     tab->redraw |= REDRAW_TAB;
 }
 
+static void
+table_set_offset(Table *tab, int off) {
+  tab->row_offset = off;
+  table_add_offset (tab,0); /*Если offset вышел за допустимые пределы, то эта
+  функция вернет его в пределы.*/
+}
+
 static cb_ret_t
 wtable_callback (Widget * w, __attribute__((unused)) Widget * sender, widget_msg_t msg, int parm, __attribute__((unused)) void *data) {
   cb_ret_t handled = MSG_HANDLED;
@@ -1030,6 +1034,23 @@ wtable_callback (Widget * w, __attribute__((unused)) Widget * sender, widget_msg
           /*Page Down*/
           table_add_offset(wtab->tab,wtab->tab->lines/3);
           break;
+        case 'u':
+          mcgdb_cmd_frame_up ();
+          break;
+        case 'd':
+          mcgdb_cmd_frame_down ();
+          break;
+        case 's':
+          mcgdb_cmd_step ();
+          break;
+        case 'n':
+          mcgdb_cmd_next ();
+          break;
+        case 'f':
+          mcgdb_cmd_finish ();
+        case 'c':
+          mcgdb_cmd_continue ();
+          break;
         default:
           break;
       }
@@ -1046,8 +1067,42 @@ wtable_callback (Widget * w, __attribute__((unused)) Widget * sender, widget_msg
 
 static void
 wtable_draw(WTable *wtab) {
+  Table *tab = wtab->tab;
   tty_draw_box (WIDGET(wtab)->y+1, WIDGET(wtab)->x, WIDGET(wtab)->lines-1, WIDGET(wtab)->cols, FALSE);
-  table_draw (wtab->tab);
+  table_draw (tab);
+  if (tab->rows && tab->selected_row>=0) {
+    /* При первичной отрисовке таблицы, помимо прочего, будут посчитаны координаты
+     * строк. На основе посчитанных координат вычисляется смещение.
+     * Будем изменять смещение если и только если selected_row не видна.
+    */
+    table_row * selrow;
+    int off;
+    gboolean changed_off=FALSE;
+    message_assert (tab->selected_row < tab->nrows);
+    selrow = TABROW(g_list_nth (tab->rows, tab->selected_row));
+    if (selrow->y1 <= TAB_TOP(tab) &&  selrow->y2 >= TAB_TOP(tab)) {
+      /* верхняя строка ячейки не видна, нижняя видна
+       * Делаем, что бы верхняя была видна
+       */
+      off = selrow->y1 - (TAB_TOP(tab) + 1);
+      changed_off = TRUE;
+    }
+    else if (selrow->y1 <= TAB_BOTTOM(tab) &&  selrow->y2 >= TAB_BOTTOM(tab)) {
+      /*нижняя не видна, верхняя видна*/
+      off = selrow->y2 - (TAB_BOTTOM(tab) - 1);
+      changed_off = TRUE;
+    }
+    else if (TAB_BOTTOM(tab)<=selrow->y1 || TAB_TOP(tab)>=selrow->y2) {
+     /*ничего не видно, перемещаем ячейку в центр*/
+     off = (selrow->y2 + selrow->y1)/2 - (TAB_BOTTOM(tab)+TAB_TOP(tab))/2;
+     changed_off = TRUE;
+    }
+    if (changed_off) {
+      table_add_offset (tab,off);
+      tab->selected_row=-1;
+      table_draw (tab);
+    }
+  }
   tty_setcolor(EDITOR_NORMAL_COLOR);
   selbar_draw (wtab->selbar);
   wtab->tab->redraw = REDRAW_NONE;
