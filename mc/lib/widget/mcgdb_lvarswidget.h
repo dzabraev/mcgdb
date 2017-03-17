@@ -94,6 +94,7 @@ typedef struct celldata {
   GArray *coord;
   int color;
   gboolean selected;
+  json_t *onclick_data;
 } cell_data_t;
 
 typedef struct Table {

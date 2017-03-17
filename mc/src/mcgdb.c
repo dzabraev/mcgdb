@@ -27,7 +27,6 @@
 #include "src/mcgdb-bp.h"
 #include "lib/widget/mcgdb_lvarswidget.h"
 
-#include <jansson.h>
 
 #define STREQ(s1,s2) (!strncmp(s1,s2,strlen(s2)))
 
@@ -45,11 +44,6 @@ struct gdb_action * event_from_gdb=NULL;
 
 jmp_buf mcgdb_jump_buf;
 
-static json_t *
-read_pkg_from_gdb (void);
-
-static void
-send_pkg_to_gdb (const char *msg);
 
 static void
 check_action_from_gdb(struct gdb_action * act);
@@ -166,7 +160,7 @@ open_gdb_input_fd (void) {
   return sockfd;
 }
 
-static void
+void
 send_pkg_to_gdb (const char *msg) {
   size_t len=strlen(msg);
   char *s;
@@ -176,7 +170,7 @@ send_pkg_to_gdb (const char *msg) {
   free(s);
 }
 
-static json_t *
+json_t *
 read_pkg_from_gdb (void) {
   int rc;
   size_t bufsize=1024, N, n=0;

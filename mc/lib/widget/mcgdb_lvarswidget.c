@@ -145,6 +145,7 @@ insert_pkg_json_into_table (json_t *json_tab, Table *tab) {
     json_t * row = json_array_get (json_rows,i);
     insert_json_row (row,tab);
   }
+  tab->row_offset = 0;
 }
 
 static void
@@ -396,12 +397,24 @@ static cell_data_t *
 cell_data_new (void) {
   cell_data_t * data = g_new0 (cell_data_t, 1);
   data->coord = g_array_new (FALSE,FALSE,sizeof(int));
+  data->color = EDITOR_NORMAL_COLOR;
   return data;
+}
+
+static void
+cell_data_free (cell_data_t * cell_data) {
+  g_array_free (cell_data->coord, TRUE);
+  if (cell_data->str)
+    free (cell_data->str);
+  if (cell_data->onclick_data)
+    json_decref (cell_data->onclick_data);
+  g_free (cell_data);
 }
 
 static cell_data_t *
 cell_data_new_from_json (json_t * json_chunk) {
   cell_data_t * data = cell_data_new ();
+  json_t * onclick_data;
   const char * str;
   json_t *selected;
   if ( (str = json_string_value (json_object_get (json_chunk, "str"))) ) {
@@ -411,6 +424,10 @@ cell_data_new_from_json (json_t * json_chunk) {
   if ((selected = json_object_get (json_chunk,"selected"))) {
     if (selected && json_boolean_value(selected))
       data->selected = TRUE;
+  }
+  if ((onclick_data=json_object_get (json_chunk,"onclick_data"))) {
+    json_incref (onclick_data);
+    data->onclick_data = onclick_data;
   }
   data->name = json_get_chunk_name (json_chunk);
   data->color = EDITOR_NORMAL_COLOR;
@@ -445,52 +462,145 @@ cell_data_setcolor (cell_data_t *data) {
 static void
 json_to_celltree (GNode *parent, json_t *json_chunk) {
   json_t *json_child_chunks;
-  if (json_object_get (json_chunk, "str")) {
-    cell_data_t * data = cell_data_new_from_json (json_chunk);
-    g_node_append_data (parent,data);
-  }
-  else if ((json_child_chunks = json_object_get (json_chunk, "chunks"))) {
-    GNode * node = g_node_append_data (parent,cell_data_new_from_json (json_chunk));
+//  if (json_object_get (json_chunk, "str")) {
+//    cell_data_t * data = cell_data_new_from_json (json_chunk);
+//    g_node_append_data (parent,data);
+//  }
+//  else if ((json_child_chunks = json_object_get (json_chunk, "chunks"))) {
+    json_child_chunks = json_object_get (json_chunk, "chunks");
+    if (!json_child_chunks)
+      return;
     for (size_t nc=0; nc<json_array_size (json_child_chunks); nc++) {
-      json_to_celltree(node,json_array_get (json_child_chunks,nc));
+      json_t * json_node_data = json_array_get (json_child_chunks,nc);
+      GNode * node = g_node_append_data (parent,cell_data_new_from_json (json_node_data));
+      json_to_celltree(node,json_node_data);
     }
-  }
+//  }
 }
 
 static void
 table_set_cell_text (Table *tab, int nrow, int ncol, json_t *json_data) {
   table_row *row = g_list_nth_data(tab->rows,nrow);
+  cell_data_t * cell_data;
   message_assert(row);
   message_assert(row->ncols > ncol);
   if (row->columns[ncol])
     g_node_destroy (row->columns[ncol]);
-  row->columns[ncol] = g_node_new ( cell_data_new ());
+  cell_data = cell_data_new_from_json (json_data);
+  row->columns[ncol] = g_node_new (cell_data);
   json_to_celltree (row->columns[ncol], json_data);
 }
 
 static gboolean
-process_cell_tree_mouse_callbacks(GNode *root, int y, int x) {
+is_node_match_yx (GNode *node, int y, int x) {
+  cell_data_t * data = CHUNK(node);
+  GArray *coord = data->coord;
+  if (data->str) {
+    message_assert (coord->len%3 == 0);
+    for (int i=0;i<coord->len;i+=3) {
+      int y1  = g_array_index (coord,int,0);
+      int x1 = g_array_index (coord,int,1);
+      int x2 = g_array_index (coord,int,2);
+      if (y1==y && x>=x1 && x<x2) {
+        return TRUE;
+      }
+    }
+    return FALSE;
+  }
+  else {
+    message_assert (coord->len==4);
+    int y1 = g_array_index (coord,int,0);
+    int x1 = g_array_index (coord,int,1);
+    int y2 = g_array_index (coord,int,2);
+    int x2 = g_array_index (coord,int,3);
+    if (y==y1) {
+      if (x>=x1)
+        return TRUE;
+      else
+        return FALSE;
+    }
+    else if (y==y2) {
+      if (x<=x2) {
+        return TRUE;
+      }
+      else {
+        return FALSE;
+      }
+    }
+    else if ( y>y1 && y<y2) {
+      return TRUE;
+    }
+    else {
+      return FALSE;
+    }
+  }
+}
+
+
+static GNode *
+get_moset_depth_node_with_xy (GNode *node, int y, int x) {
+  cell_data_t * data = CHUNK(node);
+  if (is_node_match_yx (node,y,x)) {
+    if (data->str) {
+      return node;
+    }
+    else {
+      GNode *child = g_node_first_child (node);
+      while (child) {
+        GNode *node1 = get_moset_depth_node_with_xy (child,y,x);
+        if (node1)
+          return node1;
+        child = g_node_next_sibling (child);
+      }
+      return node;
+    }
+  }
+  else {
+    return NULL;
+  }
+}
+
+static gboolean
+process_cell_tree_mouse_callbacks (GNode *root, int y, int x) {
   /*x,y являются абсолютными координатами*/
-  GNodeget_child (root,y,x);
+  gboolean handled = FALSE;
+  GNode * node = get_moset_depth_node_with_xy (root,y,x);
+  if (node==NULL)
+    node=root;
+  while (node) {
+    json_t * onclick_data = CHUNK(node)->onclick_data;
+    if (onclick_data) {
+      char *msg;
+      asprintf (&msg, "{\"cmd\":\"onclick_data\", \"data\":%s}",json_dumps (onclick_data,0));
+      send_pkg_to_gdb (msg);
+      //edit_error_dialog("",msg);
+      free (msg);
+      handled=TRUE;
+      return handled;
+    }
+    node=node->parent;
+  }
+  return handled;
 }
 
 static void
 table_process_mouse_click(Table *tab, mouse_event_t * event) {
-  long line = event->y;
+  long click_y = WIDGET(tab->wtab)->y+event->y;
+  long click_x  = WIDGET(tab->wtab)->x+event->x;
   GList *g_row = tab->rows;
   long nrow=0,ncol;
   table_row * row;
   gboolean handled=FALSE;
-  if (  (event->y < tab->y) ||
-        (event->y >= tab->y+tab->lines) ||
-        (event->x < tab->x) ||
-        (event->x >= tab->x+tab->cols)
+  if (  (click_y <  tab->y) ||
+        (click_y >= tab->y+tab->lines) ||
+        (click_x <  tab->x) ||
+        (click_x >= tab->x+tab->cols)
      ) { /*click out of table*/
      return;
   }
   while(g_row) {
     row = g_row->data;
-    if (row->y1<=line && row->y2>=line) {
+    if (row->y1<=click_y && row->y2>=click_y) {
       break;
     }
     nrow++;
@@ -499,7 +609,7 @@ table_process_mouse_click(Table *tab, mouse_event_t * event) {
   if (!g_row)
     return;
   for (ncol=0;ncol<tab->ncols;ncol++) {
-    if (tab->colstart[ncol]<=event->x && tab->colstart[ncol+1]>event->x) {
+    if (tab->colstart[ncol]<=click_x && tab->colstart[ncol+1]>click_x) {
       break;
     }
   }
@@ -510,8 +620,8 @@ table_process_mouse_click(Table *tab, mouse_event_t * event) {
 
   handled = process_cell_tree_mouse_callbacks(
     TABROW(g_row)->columns[ncol],
-    WIDGET(tab->wtab)->y+event->y,
-    WIDGET(tab->wtab)->x+event->x
+    click_y,
+    click_x
   );
   if (handled)
     return;
@@ -657,6 +767,19 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
   return colcnt;
 }
 
+
+static int
+print_str(const char * str, int x1, int x2, int start_pos, int left_bound, int right_bound, Table * tab, int * rowcnt) {
+  int ret_start_pos;
+  cell_data_t * cell_data = cell_data_new ();
+  cell_data->str = str;
+  ret_start_pos = print_str_chunk(cell_data, x1, x2, start_pos, left_bound, right_bound, tab, rowcnt);
+  cell_data->str = NULL;
+  cell_data_free (cell_data);
+  return ret_start_pos;
+}
+
+
 static int
 get_chunk_horiz_shift(cell_data_t * chunk_data) {
   int horiz_shift;
@@ -680,18 +803,47 @@ print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int r
     return print_str_chunk (CHUNK(chunk),x1,x2,start_pos,left_bound,right_bound,tab,rowcnt);
   }
   else {
+    type_code_t type_code = CHUNK(chunk)->type_code;
+    GArray * coord = CHUNK(chunk)->coord;
+    const char *str_begin=0, *str_end=0;
+    int horiz_shift = get_chunk_horiz_shift (CHUNK(chunk));
+    int start_pos_1;
+    int offset;
     GNode *child = g_node_first_child (chunk);
+
+    if (type_code == TYPE_CODE_STRUCT) {
+      str_begin="{\n";
+      str_end="}\n";
+    }
+    else if (type_code == TYPE_CODE_ARRAY) {
+      str_begin="[\n";
+      str_end="]\n";
+    }
+    if (coord->len>0)
+      g_array_remove_range (coord, 0, coord->len);
+    offset=ROW_OFFSET(tab,rowcnt[0]);
+    g_array_append_val (coord, offset);
+    g_array_append_val (coord, start_pos);
+    if (str_begin) {
+      start_pos = print_str(str_begin,x1,x2,start_pos,left_bound,right_bound,tab,rowcnt);
+    }
+    /*если chunk есть структура или массив, то начала печатается открывающая скобка с ПЕРЕНОСОМ строки
+     *затем печатается тело структуры или массива, после чего печатается закрыающая скобка. Причем
+     *тело печатается со сдвигом вправо.
+    */
+    start_pos_1 = (type_code == TYPE_CODE_STRUCT || type_code == TYPE_CODE_ARRAY) ? (x1+horiz_shift) : (start_pos);
     while (child) {
-      type_code_t type_code = CHUNK(child)->type_code;
-      chunk_name_t name = CHUNK(child)->name;
-      int horiz_shift = get_chunk_horiz_shift (CHUNK(child));
-      int start_pos_1;
-      start_pos_1 = (type_code == TYPE_CODE_STRUCT || type_code == TYPE_CODE_ARRAY) ? (x1+horiz_shift) : (start_pos);
-      start_pos = print_chunks (child,x1+horiz_shift,x2+horiz_shift,start_pos_1,left_bound,right_bound,tab,rowcnt);
-      start_pos = (type_code == TYPE_CODE_STRUCT || type_code == TYPE_CODE_ARRAY) ? (x1) : (start_pos);
+      start_pos_1 = print_chunks (child,x1+horiz_shift,x2+horiz_shift,start_pos_1,left_bound,right_bound,tab,rowcnt);
       child = g_node_next_sibling (child);
     }
+    if (str_end)
+      start_pos = print_str(str_end,x1,x2,x1,left_bound,right_bound,tab,rowcnt);
+    offset=ROW_OFFSET(tab,rowcnt[0]);
+    g_array_append_val (coord, offset);
+    g_array_append_val (coord, x1);
+    start_pos = (type_code == TYPE_CODE_STRUCT || type_code == TYPE_CODE_ARRAY) ? (x1) : (start_pos_1);
   }
+
   return start_pos;
 }
 

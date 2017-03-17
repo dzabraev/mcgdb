@@ -433,7 +433,7 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     return pkgrecv(self.fd)
 
   def process_pkg(self):
-    '''Обработать сообщение из редактора'''
+    '''Обработать сообщение из графического окна'''
     pkg=self.recv()
     cmd=pkg['cmd']
     cb=self.window_event_handlers.get(cmd)
@@ -492,9 +492,12 @@ class LocalVarsWindow(BaseWindow):
   def __init__(self, **kwargs):
     super(LocalVarsWindow,self).__init__(**kwargs)
     self.window_event_handlers={
-      'select_thread'   : self._select_thread,
+      #'change_variable' : self._change_variable,
+      'onclick_data'    : self._onclick_data,
+    }
+    self.click_cmd_cbs={
       'select_frame'    : self._select_frame,
-      'change_variable' : self._change_variable,
+      'select_thread'   : self._select_thread,
     }
     self.regex_split = re.compile('\s*([^\s]+)\s+([^\s+]+)\s+(.*)')
     self.regnames=[]
@@ -516,8 +519,27 @@ class LocalVarsWindow(BaseWindow):
     return rc
 
 
+  def _onclick_data(self,pkg):
+    data=pkg['data']
+    click_cmd = data['click_cmd']
+    cb=self.click_cmd_cbs.get(click_cmd)
+    if cb==None:
+      return
+    return cb(data)
+
+  def _select_thread_1(self,nthread):
+    threads=gdb.selected_inferior().threads()
+    if len(threads)<nthread+1:
+      return 'thread #{} not exists'.format(nthread)
+    threads[nthread].switch()
+    self.update_all()
+
   def _select_thread(self,pkg):
-    pass
+    nthread = pkg['nthread']
+    res=exec_in_main_pythread(self._select_thread_1, (nthread,))
+    if res!=None:
+      self.send_error(res)
+
 
   def _select_frame_1(self,nframe):
     if not gdb_stopped():
@@ -527,13 +549,15 @@ class LocalVarsWindow(BaseWindow):
     while frame:
       if n_cur_frame==nframe:
         frame.select()
+        self.update_all()
         return
+      n_cur_frame+=1
       frame = frame.older()
     return "can't find frame #{}".format(nframe)
 
   def _select_frame(self,pkg):
     nframe = pkg['nframe']
-    res=exec_in_main_pythread(self._select_frame_1)
+    res=exec_in_main_pythread(self._select_frame_1, (nframe,))
     if res!=None:
       self.send_error(res)
 
@@ -602,14 +626,14 @@ class LocalVarsWindow(BaseWindow):
     if value.type.strip_typedefs().code==gdb.TYPE_CODE_STRUCT:
       chunks1=[]
       data_chunks=[]
-      chunks1.append({'str':'{\n'})
+      #chunks1.append({'str':'{\n'})
       for field in value.type.fields():
         field_name = field.name
         field_value = value[field_name]
         data_chunks+=self.value_to_chunks(field_value,field_name)
         data_chunks.append({'str':'\n'})
       chunks1.append({'chunks':data_chunks,'type_code':'TYPE_CODE_STRUCT'})
-      chunks1.append({'str':'}\n'})
+      #chunks1.append({'str':'}\n'})
       parent_chunk={
         'chunks'  : chunks1,
         #'name'    : 'parenthesis',
@@ -617,14 +641,14 @@ class LocalVarsWindow(BaseWindow):
       chunks.append (parent_chunk)
     elif value.type.strip_typedefs().code==gdb.TYPE_CODE_ARRAY:
       chunks1=[]
-      chunks1.append({'str':'[\n'})
+      #chunks1.append({'str':'[\n'})
       array_data_chunks=[]
       n1,n2 = value.type.range()
       for i in range(n1,n2):
         array_data_chunks += self.value_to_chunks(value[i])
         #array_data_chunks.append({'str':',\n'})
       chunks1.append({'chunks':array_data_chunks,'type_code':'TYPE_CODE_ARRAY'})
-      chunks1.append({'str':']'})
+      #chunks1.append({'str':']'})
       parent_chunk={
         'chunks'  : chunks1,
         'name'    : 'parenthesis',
@@ -722,9 +746,15 @@ class LocalVarsWindow(BaseWindow):
     frames=[]
     nrow_mark=None
     while frame:
+      col={}
       framenumber = {'str':'#{}'.format(str(nframe)),'name':'frame_num'}
       if frame == gdb.selected_frame ():
         framenumber['selected']=True
+      else:
+        col['onclick_data']={
+          'click_cmd':'select_frame',
+          'nframe' : nframe,
+        }
       chunks = [
         framenumber,
         {'str':'  '},
@@ -732,7 +762,7 @@ class LocalVarsWindow(BaseWindow):
       [
         {'str':'\n'},
       ] + self._get_frame_funcname_with_args(frame)
-      col = {'chunks':chunks}
+      col['chunks']=chunks
       row = {'columns' : [col], 'nframe':nframe}
       frames.append(row)
       nframe+=1
@@ -768,6 +798,7 @@ class LocalVarsWindow(BaseWindow):
     nrow=0
     nrow_mark=None
     for thread in threads:
+      column={}
       thread.switch()
       frame = gdb.selected_frame()
       global_num    =   str(thread.global_num)
@@ -778,6 +809,11 @@ class LocalVarsWindow(BaseWindow):
       global_num_chunk = {'str':global_num, 'name':'th_global_num'}
       if thread==selected_thread:
         global_num_chunk['selected']=True
+      else:
+        column['onclick_data'] = {
+          'click_cmd':'select_thread',
+          'nthread' : nrow,
+        }
       chunks = [ global_num_chunk,
           {'str':'  '},
           {'str':tid,        'name':'th_tid'},
@@ -789,7 +825,7 @@ class LocalVarsWindow(BaseWindow):
         fileline + \
         [{'str':'\n'}] + \
         self._get_frame_funcname_with_args(frame)
-      column={'chunks' : chunks}
+      column['chunks'] = chunks
       row={'columns' : [column]}
       throws.append(row)
       nrow+=1

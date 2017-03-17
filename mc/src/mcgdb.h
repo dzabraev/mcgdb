@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include "lib/widget.h"
 #include <setjmp.h>
+#include <jansson.h>
 
 void __message_assert (const char *EX, const char *FILE, int LINE);
 
@@ -136,6 +137,9 @@ int         mcgdb_gdbevt_process_edit (WEdit * edit);
 extern jmp_buf mcgdb_jump_buf; /*for error processing*/
 
 void free_gdb_evt (struct gdb_action * gdb_evt);
+
+json_t *read_pkg_from_gdb (void);
+void send_pkg_to_gdb (const char *msg);
 
 
 #endif /*__mcgdb_h_*/
