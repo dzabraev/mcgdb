@@ -690,7 +690,9 @@ class LocalVarsWindow(BaseWindow):
       n1,n2 = value.type.range()
       for i in range(n1,n2):
         array_data_chunks += self.value_to_chunks(value[i])
-        #array_data_chunks.append({'str':',\n'})
+        if i!=n2-1:
+          array_data_chunks.append({'str':', '})
+      array_data_chunks.append({'str':'\n'})
       chunks1.append({'chunks':array_data_chunks,'type_code':'TYPE_CODE_ARRAY'})
       #chunks1.append({'str':']'})
       parent_chunk={
