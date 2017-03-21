@@ -322,6 +322,7 @@ SUBDIRS = mc
 bin_SCRIPTS = mcgdb
 pkgdata_DATA = defines-mcgdb.gdb  startup.gdb
 pkgdatapython_DATA = python/mcgdb.py python/mcgdb_const.py
+EXTRA_DIST = mcgdb.in
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-recursive
 

@@ -10,6 +10,8 @@ bin_SCRIPTS = mcgdb
 pkgdata_DATA = defines-mcgdb.gdb  startup.gdb
 pkgdatapython_DATA = python/mcgdb.py python/mcgdb_const.py
 
+EXTRA_DIST = mcgdb.in
+
 python/mcgdb_const.py:
 	echo -n ''                                                          > python/mcgdb_const.py
 	echo "PATH_TO_MC = '$(abs_builddir)/mc/src/mcgdb_mc'"              >> python/mcgdb_const.py
