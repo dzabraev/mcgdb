@@ -1,7 +1,10 @@
+#include <stdlib.h>
+
 #include "head.h"
 #include "file.h"
 #include "myclass.h"
 #include "testdir/file.h"
+
 
 int globalvar = 1;
 
@@ -43,7 +46,9 @@ int main(void) {
     double y;
   } uni;
   int x=1;
-  struct mystruct d;
+  struct mystruct *d = (struct mystruct *) malloc (sizeof(struct mystruct));
+  d->my1=5;
+  d->my2=1.2;
   struct mystruct darr[5];
   const char * longstr = "123456789abcdef123456789abcdef";
   int x1=1,x2=2,x3=3,x4=4,x5=5,x6=6,x7=7,x888888888888888=8888;

@@ -711,6 +711,22 @@ class LocalVarsWindow(BaseWindow):
       chunks.append (parent_chunk)
     else:
         chunks += [{'str':stringify_value(value,**kwargs),'name':'varvalue'}]
+        if name and type_code==gdb.TYPE_CODE_PTR and not kwargs.get('disable_dereference'):
+          try:
+            value_deref = value.dereference()
+            if value_deref.type.strip_typedefs().code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION):
+              chunks+=[{'str':'\n'}]
+              try:
+                chunks_value_deref=self.value_to_chunks(value_deref,**kwargs)
+              except gdb.MemoryError:
+                #исполнение попадает сюда, если нельзя сделать dereference
+                chunks_value_deref=[{'str':'Cannot access memory'}]
+              chunks+=[{'str':'{name}[0]'.format(name=name), 'name':'varname'}]
+              chunks+=[{'str':' = '}]
+              chunks+=chunks_value_deref
+          except gdb.error:
+            #maybe dereference generic pointer
+            pass
     return chunks
 
 
@@ -834,7 +850,7 @@ class LocalVarsWindow(BaseWindow):
     rows_regs=[]
     for regname in self.regnames:
       regvalue = gdb.parse_and_eval(regname)
-      chunks = self.value_to_chunks(regvalue,regname, integer_as_hex=True)
+      chunks = self.value_to_chunks(regvalue,regname, integer_as_hex=True, disable_dereference=True)
       col  = {'chunks' : chunks}
       row  = {'columns' : [col]}
       rows_regs.append(row)
