@@ -563,23 +563,40 @@ class LocalVarsWindow(BaseWindow):
 
 
   def _onclick_data(self,pkg):
-    data=pkg['data']
-    click_cmd = data['click_cmd']
+    click_cmd = pkg['data']['click_cmd']
     cb=self.click_cmd_cbs.get(click_cmd)
     if cb==None:
       return
-    return cb(data)
+    return cb(pkg)
+
+  def _change_variable_1(self,pkg):
+    if not gdb_stopped():
+      self.send_error('inferior running')
+      return None
+    if not inferior_alive ():
+      self.send_error('inferior not alive')
+      return None
+    path=pkg['data']['path']
+    user_input = pkg['user_input']
+    value=gdb.parse_and_eval(path)
+    if value.type.strip_typedefs().code in (gdb.TYPE_CODE_INT,gdb.TYPE_CODE_PTR):
+      try:
+        new_value=long(gdb.parse_and_eval(user_input))
+      except Exception as e:
+        self.send_error(str(e))
+        return None
+    else:
+      new_value = user_input
+    gdb_cmd='set variable {path}={new_value}'.format(path=path,new_value=new_value)
+    try:
+      exec_in_main_pythread(gdb.execute, (gdb_cmd,))
+    except Exception as e:
+      self.send_error(str(e))
+      return None
+    self.update_all()
 
   def _change_variable(self,pkg):
-    path=pkg['path']
-    #new_value = data['value']
-    new_value = 0
-    gdb_cmd='set variable {path}={new_value}'.format(path=path,new_value=new_value)
-    #try
-    #exec_in_main_pythread(gdb.execute, (gdb_cmd,))
-    #self.update_all()
-    self.send_error(gdb_cmd)
-    #except
+    return exec_in_main_pythread(self._change_variable_1, (pkg,))
 
 
   def _select_thread_1(self,nthread):
@@ -590,7 +607,7 @@ class LocalVarsWindow(BaseWindow):
     self.update_all()
 
   def _select_thread(self,pkg):
-    nthread = pkg['nthread']
+    nthread = pkg['data']['nthread']
     res=exec_in_main_pythread(self._select_thread_1, (nthread,))
     if res!=None:
       self.send_error(res)
@@ -616,7 +633,7 @@ class LocalVarsWindow(BaseWindow):
     return "can't find frame #{}".format(nframe)
 
   def _select_frame(self,pkg):
-    nframe = pkg['nframe']
+    nframe = pkg['data']['nframe']
     res=exec_in_main_pythread(self._select_frame_1, (nframe,))
     if res!=None:
       self.send_error(res)
@@ -741,11 +758,13 @@ class LocalVarsWindow(BaseWindow):
       }
       chunks.append (parent_chunk)
     else:
+        str_type=str(value.type)
         onclick_data={
           'click_cmd':'change_variable',
-          'path':path
+          'path':path,
+          'input_text': '{type} {path}'.format(path=path,type=str_type),
         }
-        chunks += [{'str':stringify_value(value,**kwargs),'name':'varvalue', 'onclick_data':onclick_data}]
+        chunks += [{'str':stringify_value(value,**kwargs),'name':'varvalue', 'onclick_data':onclick_data, 'onclick_user_input':True}]
         if name and type_code==gdb.TYPE_CODE_PTR and not kwargs.get('disable_dereference'):
           #try to dereference struct pointer
           #gdb_print ('name={}'.format(name))

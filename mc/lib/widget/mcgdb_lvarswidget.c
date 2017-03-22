@@ -437,6 +437,10 @@ cell_data_new_from_json (json_t * json_chunk) {
     json_incref (onclick_data);
     data->onclick_data = onclick_data;
   }
+  if (json_object_get (json_chunk,"onclick_user_input"))
+    data->onclick_user_input=TRUE;
+  else
+    data->onclick_user_input=FALSE;
   data->name = json_get_chunk_name (json_chunk);
   data->color = EDITOR_NORMAL_COLOR;
   switch (data->name) {
@@ -571,8 +575,24 @@ process_cell_tree_mouse_callbacks (GNode *root, int y, int x) {
   while (node) {
     json_t * onclick_data = CHUNK(node)->onclick_data;
     if (onclick_data) {
+      char *f=NULL;
       char *msg;
-      asprintf (&msg, "{\"cmd\":\"onclick_data\", \"data\":%s}",json_dumps (onclick_data,0));
+      if (CHUNK(node)->onclick_user_input) {
+        f = input_dialog (
+          _("Change variable"),
+          json_string_value (json_object_get (onclick_data, "input_text")),
+          "mc.edit.change-variable",
+          CHUNK(node)->str,
+          INPUT_COMPLETE_NONE);
+        if (f == NULL || *f == '\0') {
+          /*user cancel*/
+          g_free (f);
+          handled=TRUE;
+          return handled;
+        }
+      }
+      asprintf (&msg, "{\"cmd\":\"onclick_data\", \"data\":%s, \"user_input\":\"%s\"}",json_dumps (onclick_data,0),f);
+      g_free (f);
       send_pkg_to_gdb (msg);
       free (msg);
       handled=TRUE;

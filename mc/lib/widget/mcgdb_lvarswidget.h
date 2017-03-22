@@ -96,6 +96,7 @@ typedef struct celldata {
   int color;
   gboolean selected;
   json_t *onclick_data;
+  gboolean onclick_user_input;
 } cell_data_t;
 
 typedef struct Table {
