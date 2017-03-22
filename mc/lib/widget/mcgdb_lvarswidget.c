@@ -354,6 +354,9 @@ json_get_chunk_type_code (json_t * chunk) {
   else if (!strcmp (type_code,"TYPE_CODE_ARRAY")) {
     return TYPE_CODE_ARRAY;
   }
+  else if (!strcmp (type_code,"TYPE_CODE_UNION")) {
+    return TYPE_CODE_UNION;
+  }
   else {
     return TYPE_CODE_NONE;
   }
@@ -783,7 +786,8 @@ get_chunk_horiz_shift(cell_data_t * chunk_data) {
   type_code_t type_code = chunk_data->type_code;
   if (
     type_code == TYPE_CODE_STRUCT ||
-    type_code == TYPE_CODE_ARRAY
+    type_code == TYPE_CODE_ARRAY  ||
+    type_code == TYPE_CODE_UNION
   ) {
     horiz_shift=2;
   }
@@ -808,7 +812,7 @@ print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int r
     int offset;
     GNode *child = g_node_first_child (chunk);
 
-    if (type_code == TYPE_CODE_STRUCT) {
+    if (type_code == TYPE_CODE_STRUCT || type_code == TYPE_CODE_UNION) {
       str_begin="{\n";
       str_end="}\n";
     }
@@ -828,7 +832,7 @@ print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int r
      *затем печатается тело структуры или массива, после чего печатается закрыающая скобка. Причем
      *тело печатается со сдвигом вправо.
     */
-    start_pos_1 = (type_code == TYPE_CODE_STRUCT || type_code == TYPE_CODE_ARRAY) ? (x1+horiz_shift) : (start_pos);
+    start_pos_1 = (type_code == TYPE_CODE_STRUCT || type_code == TYPE_CODE_ARRAY || type_code == TYPE_CODE_UNION) ? (x1+horiz_shift) : (start_pos);
     while (child) {
       start_pos_1 = print_chunks (child,x1+horiz_shift,x2+horiz_shift,start_pos_1,left_bound,right_bound,tab,rowcnt);
       child = g_node_next_sibling (child);
@@ -838,7 +842,7 @@ print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int r
     offset=ROW_OFFSET(tab,rowcnt[0]);
     g_array_append_val (coord, offset);
     g_array_append_val (coord, x1);
-    start_pos = (type_code == TYPE_CODE_STRUCT || type_code == TYPE_CODE_ARRAY) ? (x1) : (start_pos_1);
+    start_pos = (type_code == TYPE_CODE_STRUCT || type_code == TYPE_CODE_ARRAY || type_code == TYPE_CODE_UNION) ? (x1) : (start_pos_1);
   }
 
   return start_pos;

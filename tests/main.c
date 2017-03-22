@@ -38,6 +38,10 @@ int main(void) {
     const char *s;
   } test_utf8;
   test_utf8.s = "тест кодировки abdc";
+  union {
+    int x;
+    double y;
+  } uni;
   int x=1;
   struct mystruct d;
   struct mystruct darr[5];

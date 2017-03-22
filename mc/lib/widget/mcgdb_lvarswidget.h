@@ -72,6 +72,7 @@ typedef enum type_code {
   TYPE_CODE_PTR     ,
   TYPE_CODE_ARRAY   ,
   TYPE_CODE_STRUCT  ,
+  TYPE_CODE_UNION   ,
 } type_code_t;
 
 

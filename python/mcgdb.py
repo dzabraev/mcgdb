@@ -516,8 +516,13 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
 
 
 
-def stringify_value(value):
-  return unicode(value)
+def stringify_value(value,**kwargs):
+  type_code = value.type.strip_typedefs().code
+  strvalue = unicode(value)
+  if type_code==gdb.TYPE_CODE_INT and kwargs.get('integer_as_hex'):
+    return hex(int(strvalue,0))
+  else:
+    return strvalue
 
 
 class LocalVarsWindow(BaseWindow):
@@ -662,34 +667,38 @@ class LocalVarsWindow(BaseWindow):
       res=[]
     return res
 
-  def value_to_chunks(self,value,name=None):
+  def value_to_chunks(self,value,name=None,**kwargs):
     chunks=[]
     if name!=None:
       chunks.append({'str':name, 'name':'varname'})
       chunks.append({'str':' = '})
-    if value.type.strip_typedefs().code==gdb.TYPE_CODE_STRUCT:
+    type_code = value.type.strip_typedefs().code
+    if type_code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION):
       chunks1=[]
       data_chunks=[]
       #chunks1.append({'str':'{\n'})
       for field in value.type.fields():
         field_name = field.name
         field_value = value[field_name]
-        data_chunks+=self.value_to_chunks(field_value,field_name)
+        data_chunks+=self.value_to_chunks(field_value,field_name,**kwargs)
         data_chunks.append({'str':'\n'})
-      chunks1.append({'chunks':data_chunks,'type_code':'TYPE_CODE_STRUCT'})
+      if type_code==gdb.TYPE_CODE_STRUCT:
+        chunks1.append({'chunks':data_chunks,'type_code':'TYPE_CODE_STRUCT'})
+      elif type_code==gdb.TYPE_CODE_UNION:
+        chunks1.append({'chunks':data_chunks,'type_code':'TYPE_CODE_UNION'})
       #chunks1.append({'str':'}\n'})
       parent_chunk={
         'chunks'  : chunks1,
         #'name'    : 'parenthesis',
       }
       chunks.append (parent_chunk)
-    elif value.type.strip_typedefs().code==gdb.TYPE_CODE_ARRAY:
+    elif type_code==gdb.TYPE_CODE_ARRAY:
       chunks1=[]
       #chunks1.append({'str':'[\n'})
       array_data_chunks=[]
       n1,n2 = value.type.range()
       for i in range(n1,n2):
-        array_data_chunks += self.value_to_chunks(value[i])
+        array_data_chunks += self.value_to_chunks(value[i],**kwargs)
         if i!=n2-1:
           array_data_chunks.append({'str':', '})
       array_data_chunks.append({'str':'\n'})
@@ -701,9 +710,7 @@ class LocalVarsWindow(BaseWindow):
       }
       chunks.append (parent_chunk)
     else:
-        chunks += [
-          {'str':stringify_value(value),'name':'varvalue'}
-        ]
+        chunks += [{'str':stringify_value(value,**kwargs),'name':'varvalue'}]
     return chunks
 
 
@@ -826,11 +833,8 @@ class LocalVarsWindow(BaseWindow):
   def _get_regs_1(self):
     rows_regs=[]
     for regname in self.regnames:
-      chunks = [
-            {'str':regname, 'name':'regname'},
-            {'str':'='},
-            {'str':str(gdb.parse_and_eval(regname)), 'name':'regvalue'},
-      ]
+      regvalue = gdb.parse_and_eval(regname)
+      chunks = self.value_to_chunks(regvalue,regname, integer_as_hex=True)
       col  = {'chunks' : chunks}
       row  = {'columns' : [col]}
       rows_regs.append(row)
