@@ -55,6 +55,7 @@ checkinstall (or make install)
 ```
 
 #getting started
+
 Just use `$ mcgdb` instead `$ gdb`. When you invoke mcgdb additional windows will be
 open automatically. 
 
