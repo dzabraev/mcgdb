@@ -54,7 +54,7 @@ make -j4
 checkinstall (or make install)  
 ```
 
-#getting started
+# getting started
 
 Just use `$ mcgdb` instead `$ gdb`. When you invoke mcgdb additional windows will be
 open automatically. 
@@ -67,7 +67,7 @@ $ gdb
 (gdb) mcgdb open main  
 ```
 
-##gdb commands
+## gdb commands
 mcgdb add several commands in gdb. Type
 `(gdb) help mcgdb` to get command documentation.
 
