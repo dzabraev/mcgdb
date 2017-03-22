@@ -691,12 +691,19 @@ class LocalVarsWindow(BaseWindow):
     path_parent = kwargs.pop('path_parent','')
     path_name   = kwargs.pop('path_name',name)
     path = self.append_path(path_parent,path_name)
+    if 'already_dereferenced' not in kwargs:
+      kwargs['already_dereferenced'] = set()
+    if 'deref_depth' not in kwargs:
+      kwargs['deref_depth']=0
+    already_deref = kwargs['already_dereferenced']
     chunks=[]
     if name!=None:
       chunks.append({'str':name, 'name':'varname'})
       chunks.append({'str':' = '})
     type_code = value.type.strip_typedefs().code
     if type_code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION):
+      if value.address:
+        already_deref.add(long(value.address))
       chunks1=[]
       data_chunks=[]
       for field in value.type.fields():
@@ -713,8 +720,9 @@ class LocalVarsWindow(BaseWindow):
       }
       chunks.append (parent_chunk)
     elif type_code==gdb.TYPE_CODE_ARRAY:
+      if value.address:
+        already_deref.add(long(value.address))
       chunks1=[]
-      #chunks1.append({'str':'[\n'})
       array_data_chunks=[]
       n1,n2 = value.type.range()
       for i in range(n1,n2):
@@ -727,7 +735,6 @@ class LocalVarsWindow(BaseWindow):
           array_data_chunks.append({'str':', '})
       array_data_chunks.append({'str':'\n'})
       chunks1.append({'chunks':array_data_chunks,'type_code':'TYPE_CODE_ARRAY'})
-      #chunks1.append({'str':']'})
       parent_chunk={
         'chunks'  : chunks1,
         'name'    : 'parenthesis',
@@ -741,9 +748,17 @@ class LocalVarsWindow(BaseWindow):
         chunks += [{'str':stringify_value(value,**kwargs),'name':'varvalue', 'onclick_data':onclick_data}]
         if name and type_code==gdb.TYPE_CODE_PTR and not kwargs.get('disable_dereference'):
           #try to dereference struct pointer
+          #gdb_print ('name={}'.format(name))
           try:
             value_deref = value.dereference()
-            if value_deref.type.strip_typedefs().code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION):
+            # Рассмотрим двусвязный список. что бы dereference для next и pref
+            # не зациклился вводим the set already_deref
+            addr=long(value_deref.address)
+            if  (kwargs['deref_depth'] < kwargs.get('max_deref_depth',3)) and \
+                (value_deref.type.strip_typedefs().code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION)) and \
+                (addr not in already_deref):
+              kwargs['deref_depth']+=1
+              already_deref.add(addr)
               chunks+=[{'str':'\n'}]
               deref_varname = '{name}[0]'.format(name=name)
               try:
@@ -765,6 +780,7 @@ class LocalVarsWindow(BaseWindow):
     variables = self._get_local_vars_1 ()
     lvars=[]
     for name,value in variables.iteritems():
+      #kwargs={}
       chunks = self.value_to_chunks(value,name)
       col = {'chunks':chunks}
       row = {'columns':[col]}
