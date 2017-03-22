@@ -540,6 +540,7 @@ class LocalVarsWindow(BaseWindow):
     self.click_cmd_cbs={
       'select_frame'    : self._select_frame,
       'select_thread'   : self._select_thread,
+      'change_variable' : self._change_variable,
     }
     self.regex_split = re.compile('\s*([^\s]+)\s+([^\s+]+)\s+(.*)')
     self.regnames=[]
@@ -568,6 +569,18 @@ class LocalVarsWindow(BaseWindow):
     if cb==None:
       return
     return cb(data)
+
+  def _change_variable(self,pkg):
+    path=pkg['path']
+    #new_value = data['value']
+    new_value = 0
+    gdb_cmd='set variable {path}={new_value}'.format(path=path,new_value=new_value)
+    #try
+    #exec_in_main_pythread(gdb.execute, (gdb_cmd,))
+    #self.update_all()
+    self.send_error(gdb_cmd)
+    #except
+
 
   def _select_thread_1(self,nthread):
     threads=gdb.selected_inferior().threads()
@@ -610,8 +623,6 @@ class LocalVarsWindow(BaseWindow):
     else:
       return [{'cmd':'shellcmd','cmdname':'frame'}]
 
-  def _change_variable(self,pkg):
-    pass
 
   def gdb_inferior_stop(self):
     pass
@@ -667,7 +678,19 @@ class LocalVarsWindow(BaseWindow):
       res=[]
     return res
 
+  def append_path(self,parent_path,name):
+    path=parent_path if parent_path else ''
+    if name:
+      if parent_path:
+        path='{parent_path}.{name}'.format(parent_path=parent_path,name=name)
+      else:
+        path=name
+    return path
+
   def value_to_chunks(self,value,name=None,**kwargs):
+    path_parent = kwargs.pop('path_parent','')
+    path_name   = kwargs.pop('path_name',name)
+    path = self.append_path(path_parent,path_name)
     chunks=[]
     if name!=None:
       chunks.append({'str':name, 'name':'varname'})
@@ -676,20 +699,17 @@ class LocalVarsWindow(BaseWindow):
     if type_code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION):
       chunks1=[]
       data_chunks=[]
-      #chunks1.append({'str':'{\n'})
       for field in value.type.fields():
         field_name = field.name
         field_value = value[field_name]
-        data_chunks+=self.value_to_chunks(field_value,field_name,**kwargs)
+        data_chunks+=self.value_to_chunks(field_value,field_name,path_parent=path,**kwargs)
         data_chunks.append({'str':'\n'})
       if type_code==gdb.TYPE_CODE_STRUCT:
         chunks1.append({'chunks':data_chunks,'type_code':'TYPE_CODE_STRUCT'})
       elif type_code==gdb.TYPE_CODE_UNION:
         chunks1.append({'chunks':data_chunks,'type_code':'TYPE_CODE_UNION'})
-      #chunks1.append({'str':'}\n'})
       parent_chunk={
         'chunks'  : chunks1,
-        #'name'    : 'parenthesis',
       }
       chunks.append (parent_chunk)
     elif type_code==gdb.TYPE_CODE_ARRAY:
@@ -698,7 +718,11 @@ class LocalVarsWindow(BaseWindow):
       array_data_chunks=[]
       n1,n2 = value.type.range()
       for i in range(n1,n2):
-        array_data_chunks += self.value_to_chunks(value[i],**kwargs)
+        if name:
+          new_name = '{name}[{idx}]'.format(name=name,idx=i)
+        else:
+          new_name=name
+        array_data_chunks += self.value_to_chunks(value[i],path_name=new_name,path_parent=path_parent, **kwargs)
         if i!=n2-1:
           array_data_chunks.append({'str':', '})
       array_data_chunks.append({'str':'\n'})
@@ -710,19 +734,26 @@ class LocalVarsWindow(BaseWindow):
       }
       chunks.append (parent_chunk)
     else:
-        chunks += [{'str':stringify_value(value,**kwargs),'name':'varvalue'}]
+        onclick_data={
+          'click_cmd':'change_variable',
+          'path':path
+        }
+        chunks += [{'str':stringify_value(value,**kwargs),'name':'varvalue', 'onclick_data':onclick_data}]
         if name and type_code==gdb.TYPE_CODE_PTR and not kwargs.get('disable_dereference'):
+          #try to dereference struct pointer
           try:
             value_deref = value.dereference()
             if value_deref.type.strip_typedefs().code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION):
               chunks+=[{'str':'\n'}]
+              deref_varname = '{name}[0]'.format(name=name)
               try:
-                chunks_value_deref=self.value_to_chunks(value_deref,**kwargs)
+                chunks_value_deref=self.value_to_chunks(value_deref,deref_varname,path_parent=path_parent,**kwargs)
               except gdb.MemoryError:
                 #исполнение попадает сюда, если нельзя сделать dereference
-                chunks_value_deref=[{'str':'Cannot access memory'}]
-              chunks+=[{'str':'{name}[0]'.format(name=name), 'name':'varname'}]
-              chunks+=[{'str':' = '}]
+                chunks_value_deref=[
+                  {'str':deref_varname, 'name':'varname'},
+                  {'str':' = '},
+                  {'str':'Cannot access memory'}]
               chunks+=chunks_value_deref
           except gdb.error:
             #maybe dereference generic pointer
