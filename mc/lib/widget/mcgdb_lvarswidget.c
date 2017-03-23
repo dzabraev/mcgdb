@@ -861,10 +861,10 @@ print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int r
       child = g_node_next_sibling (child);
     }
     if (str_end)
-      start_pos = print_str(str_end,x1,x2,x1,left_bound,right_bound,tab,rowcnt);
+      start_pos_1 = print_str(str_end,x1,x2,x1,left_bound,right_bound,tab,rowcnt);
     offset=ROW_OFFSET(tab,rowcnt[0]);
     g_array_append_val (coord, offset);
-    g_array_append_val (coord, x1);
+    g_array_append_val (coord, start_pos_1);
     start_pos = (type_code == TYPE_CODE_STRUCT || type_code == TYPE_CODE_ARRAY || type_code == TYPE_CODE_UNION) ? (x1) : (start_pos_1);
   }
 
@@ -1506,4 +1506,9 @@ charlength_utf8(const char *str) {
   if (c == (gunichar) (-2) || c == (gunichar) (-1))
     return 1;
   return g_utf8_next_char (str) - str;
+}
+
+size_t
+printed_charlength_utf8(const char *str) {
+
 }
