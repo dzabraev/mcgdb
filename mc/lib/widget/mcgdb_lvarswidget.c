@@ -503,9 +503,9 @@ is_node_match_yx (GNode *node, int y, int x) {
   if (data->str) {
     message_assert (coord->len%3 == 0);
     for (int i=0;i<coord->len;i+=3) {
-      int y1  = g_array_index (coord,int,0);
-      int x1 = g_array_index (coord,int,1);
-      int x2 = g_array_index (coord,int,2);
+      int y1 = g_array_index (coord,int,i+0);
+      int x1 = g_array_index (coord,int,i+1);
+      int x2 = g_array_index (coord,int,i+2);
       if (y1==y && x>=x1 && x<x2) {
         return TRUE;
       }
@@ -543,7 +543,7 @@ is_node_match_yx (GNode *node, int y, int x) {
 
 
 static GNode *
-get_moset_depth_node_with_xy (GNode *node, int y, int x) {
+get_moset_depth_node_with_yx (GNode *node, int y, int x) {
   cell_data_t * data = CHUNK(node);
   if (is_node_match_yx (node,y,x)) {
     if (data->str) {
@@ -552,7 +552,7 @@ get_moset_depth_node_with_xy (GNode *node, int y, int x) {
     else {
       GNode *child = g_node_first_child (node);
       while (child) {
-        GNode *node1 = get_moset_depth_node_with_xy (child,y,x);
+        GNode *node1 = get_moset_depth_node_with_yx (child,y,x);
         if (node1)
           return node1;
         child = g_node_next_sibling (child);
@@ -569,14 +569,14 @@ static gboolean
 process_cell_tree_mouse_callbacks (GNode *root, int y, int x) {
   /*x,y являются абсолютными координатами*/
   gboolean handled = FALSE;
-  GNode * node = get_moset_depth_node_with_xy (root,y,x);
+  GNode * node = get_moset_depth_node_with_yx (root,y,x);
   if (node==NULL)
     node=root;
   while (node) {
     json_t * onclick_data = CHUNK(node)->onclick_data;
     if (onclick_data) {
       char *f=NULL;
-      char *msg;
+      json_t * msg_obj;
       if (CHUNK(node)->onclick_user_input) {
         f = input_dialog (
           _("Change variable"),
@@ -591,10 +591,13 @@ process_cell_tree_mouse_callbacks (GNode *root, int y, int x) {
           return handled;
         }
       }
-      asprintf (&msg, "{\"cmd\":\"onclick_data\", \"data\":%s, \"user_input\":\"%s\"}",json_dumps (onclick_data,0),f);
+      msg_obj = json_object();
+      json_object_set_new (msg_obj, "cmd", json_string ("onclick_data"));
+      json_object_set (msg_obj, "data", onclick_data);
+      json_object_set_new (msg_obj, "user_input", json_string (f));
       g_free (f);
-      send_pkg_to_gdb (msg);
-      free (msg);
+      send_pkg_to_gdb (json_dumps (msg_obj,0));
+      json_decref (msg_obj);
       handled=TRUE;
       return handled;
     }
@@ -1097,7 +1100,7 @@ wtable_draw(WTable *wtab) {
     table_draw (tab);
     /* При первичной отрисовке таблицы, помимо прочего, будут посчитаны координаты
      * строк. На основе посчитанных координат вычисляется смещение.
-     * Будем изменять смещение если и только если selected_row не видна.
+     * Будем изменять смещение если и только если selected_row не видна
     */
     table_row * selrow;
     int off;
@@ -1123,13 +1126,16 @@ wtable_draw(WTable *wtab) {
     }
     if (changed_off) {
       table_add_offset (tab,off);
-      tab->selected_row=-1;
       table_draw (tab);
     }
+    tab->selected_row=-1;
   }
   else {
-    table_add_offset (tab,0); /*make offset valid*/
+    int old_offset = tab->row_offset;
     table_draw (tab);
+    table_add_offset (tab,0); /*make offset valid*/
+    if (old_offset!=tab->row_offset)
+      table_draw (tab);
   }
   tty_setcolor(EDITOR_NORMAL_COLOR);
   selbar_draw (wtab->selbar);
@@ -1416,9 +1422,6 @@ void selbar_add_button(Selbar *selbar, const char * text) {
   btn->selected = FALSE;
   selbar->buttons = g_list_append (selbar->buttons, (gpointer)btn);
 }
-
-static void
-stub (__attribute__((unused)) WDialog *h) {}
 
 
 int
