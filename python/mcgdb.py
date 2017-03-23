@@ -827,9 +827,11 @@ class LocalVarsWindow(BaseWindow):
 
 
   def _get_frame_func_args(self,frame):
-    args=[]
-    try:
-      block=frame.block()
+      args=[]
+      try:
+        block=frame.block()
+      except RuntimeError:
+        return []
       while block:
         for sym in block:
           if sym.is_argument:
@@ -837,12 +839,14 @@ class LocalVarsWindow(BaseWindow):
             args.append(
               (sym.name,stringify_value(value))
             )
+        if block.function:
+          break
         block=block.superblock
-        if (not block) or block.function:
+        if (not block):
           break
       return args
-    except RuntimeError:
-      return []
+#    except RuntimeError:
+#      return []
 
   def _get_frame_funcname(self,frame):
     frame_func_name = frame.name()
