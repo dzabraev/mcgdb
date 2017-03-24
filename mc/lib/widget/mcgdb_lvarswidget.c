@@ -518,7 +518,7 @@ is_node_match_yx (GNode *node, int y, int x) {
     int x1 = g_array_index (coord,int,1);
     int y2 = g_array_index (coord,int,2);
     int x2 = g_array_index (coord,int,3);
-    if (y1==y2) {
+    if (y1==y2 && y==y1) {
       return (x>=x1) && (x<x2);
     }
     else {

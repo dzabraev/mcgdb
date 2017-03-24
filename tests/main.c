@@ -41,6 +41,8 @@ int main(void) {
     const char *s;
   } test_utf8;
   test_utf8.s = "тест кодировки abdc";
+  int *intarr;
+  double *dblarr = (double *) malloc(5*sizeof(double));
   union {
     int x;
     double y;
