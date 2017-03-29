@@ -92,6 +92,7 @@ typedef struct celldata {
   chunk_name_t name;
   type_code_t type_code;
   char *str;
+  char *proposed_text;
   GArray *coord;
   int color;
   gboolean selected;

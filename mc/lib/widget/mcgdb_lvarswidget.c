@@ -423,10 +423,13 @@ static cell_data_t *
 cell_data_new_from_json (json_t * json_chunk) {
   cell_data_t * data = cell_data_new ();
   json_t * onclick_data;
-  const char * str;
+  const char *str, *proposed_text;
   json_t *selected;
   if ( (str = json_string_value (json_object_get (json_chunk, "str"))) ) {
     data->str=strdup(str);
+  }
+  if ( (proposed_text = json_string_value (json_object_get (json_chunk, "proposed_text"))) ) {
+    data->proposed_text=strdup(proposed_text);
   }
   data->type_code = json_get_chunk_type_code (json_chunk);
   if ((selected = json_object_get (json_chunk,"selected"))) {
@@ -587,7 +590,7 @@ process_cell_tree_mouse_callbacks (GNode *root, int y, int x) {
           _("Change variable"),
           json_string_value (json_object_get (onclick_data, "input_text")),
           "mc.edit.change-variable",
-          CHUNK(node)->str,
+           CHUNK(node)->proposed_text ? CHUNK(node)->proposed_text  : CHUNK(node)->str,
           INPUT_COMPLETE_NONE);
         if (f == NULL || *f == '\0') {
           /*user cancel*/
@@ -1513,7 +1516,3 @@ charlength_utf8(const char *str) {
   return g_utf8_next_char (str) - str;
 }
 
-size_t
-printed_charlength_utf8(const char *str) {
-
-}
