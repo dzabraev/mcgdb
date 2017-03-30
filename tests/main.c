@@ -18,6 +18,7 @@ struct mystruct {
   long my2;
   double my3;
   struct {
+    int *arr;
     int i;
     char *s;
     struct {
@@ -72,6 +73,7 @@ int main(void) {
   struct mystruct *d = (struct mystruct *) malloc (sizeof(struct mystruct));
   d->my1=5;
   d->my2=1.2;
+  d->st.arr = (int *)malloc (10*sizeof(int));
   struct mystruct darr[2];
   const char * longstr = "123456789abcdef123456789abcdef";
   int x1=1,x2=2,x3=3,x4=4,x5=5,x6=6,x7=7,x888888888888888=8888;
