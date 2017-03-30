@@ -5,7 +5,7 @@ import sys,os,select,errno,socket,stat
 import json
 import logging
 import threading, subprocess
-import re
+import re,copy
 
 import gdb
 
@@ -843,10 +843,13 @@ class LocalVarsWindow(BaseWindow):
       memory_error_idx=0
 
     if memory_error_idx==None:
-      if deref_type_code in (gdb.TYPE_CODE_INT,gdb.TYPE_CODE_FLT):
-        delimiter={'str':', '}
+      if 'delimiter' in kwargs:
+        delimiter=kwargs['delimiter']
       else:
-        delimiter={'str':',\n'}
+        if deref_type_code in (gdb.TYPE_CODE_INT,gdb.TYPE_CODE_FLT):
+          delimiter={'str':', '}
+        else:
+          delimiter={'str':',\n'}
       for i in range(n1,n22):
         path_idx = '{path}[{idx}]'.format(path=path,idx=i)
         try:
@@ -866,7 +869,7 @@ class LocalVarsWindow(BaseWindow):
             #array_data_chunks += self.pointer_to_chunks (value_idx, value_idx_name, path_idx, deref_depth, **kwargs)
         else:
           array_data_chunks+=self.value_to_chunks_1(value_idx,value_idx_name,path_idx,deref_depth,**kwargs)
-        if i!=n22-1:
+        if delimiter and i!=n22-1:
           array_data_chunks.append(delimiter)
 
     if memory_error_idx!=None:
@@ -1050,6 +1053,14 @@ class LocalVarsWindow(BaseWindow):
       kwargs['already_deref'] = set()
     return self.value_to_chunks_1(value,name,path,deref_depth,**kwargs)
 
+  def value_withstr_to_chunks(self,value,name,path,deref_depth,**kwargs):
+    chunks=[]
+    chunks+=self.name_to_chunks(name)
+    chunks.append({'str':stringify_value_safe(value,enable_additional_text=True), 'name':'varvalue'})
+    #chunks+=self.value_to_str_chunks(value,path,enable_additional_text=True,**kwargs)
+    return chunks
+
+
   def value_to_chunks_1(self,value,name,path,deref_depth,**kwargs):
     ''' Конвертирование gdb.Value в json-дерево. Рекурсия.
         Дополнительное описание см. в функции `value_to_chunks`
@@ -1080,23 +1091,26 @@ class LocalVarsWindow(BaseWindow):
     if type_code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION):
       chunks+=self.struct_to_chunks(value,name,path,deref_depth,**kwargs)
     elif type_code==gdb.TYPE_CODE_ARRAY:
-      n1_orig,n2_orig = value.type.range()
-      funcname=kwargs['funcname']
-      user_slice = self.user_slice.get((funcname,path))
-      if user_slice:
-        n1,n2 = user_slice
-        n1 = max(n1,n1_orig)
-        if n2!=None:
-          n2 = min(n2,n2_orig)
-      else:
-        n1,n2 = n1_orig,n2_orig
       array_addr = value.address
       if array_addr!=None:
         pointer_chunks = self.pointer_to_chunks (array_addr, name, path, deref_depth, **kwargs)
         if len(pointer_chunks)!=0:
           chunks+=pointer_chunks
           chunks.append({'str':'\n'})
-      chunks += self.array_to_chunks (value, name, n1, n2, path, deref_depth, **kwargs)
+      if re.match('.*char \[.*\]$',type_str):
+        chunks+=self.value_withstr_to_chunks(value,name,path,deref_depth,**kwargs)
+      else:
+        n1_orig,n2_orig = value.type.range()
+        funcname=kwargs['funcname']
+        user_slice = self.user_slice.get((funcname,path))
+        if user_slice:
+          n1,n2 = user_slice
+          n1 = max(n1,n1_orig)
+          if n2!=None:
+            n2 = min(n2,n2_orig)
+        else:
+          n1,n2 = n1_orig,n2_orig
+        chunks += self.array_to_chunks (value, name, n1, n2, path, deref_depth, **kwargs)
     elif type_code==gdb.TYPE_CODE_PTR:
       if re.match('.*char \*$',type_str):
         chunks+=self.name_to_chunks(name)
