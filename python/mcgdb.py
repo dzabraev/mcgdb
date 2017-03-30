@@ -349,7 +349,7 @@ def exec_in_main_pythread(func,args=()):
 
 def check_chunks(chunks):
   if type(chunks) not in (dict,list):
-    gdb_print ('bad chunks: {}'.format(chunks))
+    gdb_print ('bad chunks: `{}`\n'.format(chunks))
     return
   if type(chunks) is dict:
     if 'str' in chunks:
@@ -791,7 +791,7 @@ class LocalVarsWindow(BaseWindow):
     chunks = [{'str':'*(','name':'varname'}]+\
     self.changable_value_to_chunks(value,valuepath,**kwargs)+\
     [{'str':')','name':'varname'}]+\
-    [self.make_slice_chunks(n1,n2,valuepath,funcname)]
+    [self.make_slice_chunk(n1,n2,valuepath,funcname)]
     return chunks
 
   def array_to_chunks (self, value, name, n1, n2, path, deref_depth, **kwargs):
@@ -821,7 +821,7 @@ class LocalVarsWindow(BaseWindow):
 
     type_code=value.type.strip_typedefs().code
     if type(name) is str:
-      slice_chunk = self.make_slice_chunks(n1,n2,path,funcname)
+      slice_chunk = self.make_slice_chunk(n1,n2,path,funcname)
       varname=[
         {'str':name,'name':'varname'},
         slice_chunk,
@@ -831,13 +831,13 @@ class LocalVarsWindow(BaseWindow):
       chunks+=name
     chunks+=[{'str':' = '}]
     valueloc=(funcname,path)
-    try:
-      if type_code==gdb.TYPE_CODE_PTR:
-        value_addr = long(value)
-      else:
+    if type_code==gdb.TYPE_CODE_PTR:
+      value_addr = long(value)
+    else:
+      try:
         value_addr = value.address
-    except gdb.MemoryError:
-      value_addr=None
+      except gdb.MemoryError:
+        value_addr=None
     is_already_deref = value_addr!=None and value_addr in already_deref
     if ((deref_depth>=kwargs.get('max_deref_depth',3) or is_already_deref) and not self.expand_variable.get((funcname,path))) or \
         (valueloc in self.expand_variable and not self.expand_variable[(funcname,path)] ):
@@ -849,23 +849,20 @@ class LocalVarsWindow(BaseWindow):
 
     chunks1=[]
     array_data_chunks=[]
-    memory_error_idx=None
     n22 = n2+1 if n2!=None else n1+1
-    memory_error_idx=None
-    try:
-      deref_value = value[n1]
-      deref_type_code = deref_value.type.strip_typedefs().code
-      deref_type_str  = str(deref_value.type.strip_typedefs())
-      if deref_type_code==gdb.TYPE_CODE_PTR and not re.match('.*((char \*)|(void \*))$',deref_type_str) and not is_incomplete_type_ptr(deref_value):
-        name_lambda = lambda value,valuepath,**kwargs : self.make_subarray_name(value,valuepath,**kwargs)
-        elem_as_array=True
-      else:
-        name_lambda = lambda value,valuepath,**kwargs : None
-        elem_as_array=False
-    except gdb.MemoryError:
-      memory_error_idx=0
+    deref_value = value[n1]
+    deref_type_code = deref_value.type.strip_typedefs().code
+    deref_type_str  = str(deref_value.type.strip_typedefs())
+    if deref_type_code==gdb.TYPE_CODE_PTR and not re.match('.*((char \*)|(void \*))$',deref_type_str) and not is_incomplete_type_ptr(deref_value):
+      name_lambda = lambda value,valuepath,**kwargs : self.make_subarray_name(value,valuepath,**kwargs)
+      elem_as_array=True
+    else:
+      name_lambda = lambda value,valuepath,**kwargs : None
+      elem_as_array=False
 
-    if memory_error_idx==None:
+    arr_elem_size=deref_value.type.sizeof
+    arr_size=n2-n1+1 if n2!=None else 1
+    if value_addr==None or self.possible_read_memory(value_addr,arr_elem_size*arr_size):
       if 'delimiter' in kwargs:
         delimiter=kwargs['delimiter']
       else:
@@ -887,31 +884,22 @@ class LocalVarsWindow(BaseWindow):
           array_data_chunks+=self.value_to_chunks_1(value_idx,value_idx_name,path_idx,deref_depth,**kwargs)
         if delimiter and i!=n22-1:
           array_data_chunks.append(delimiter)
-
-    if memory_error_idx!=None:
-      if n22-memory_error_idx>1:
-        diapason='[{}:{}]'.format(memory_error_idx,n22-1)
-      else:
-        diapason='[{}]'.format(memory_error_idx)
-      msg=''
-      if memory_error_idx!=n1:
-        msg+=',\n'
-      msg+='Cannot access memory: {name}{diapason}'.format(name=path.split('.')[-1],diapason=diapason)
-      array_data_chunks.append({'str':msg})
-    array_data_chunks.append({'str':'\n'})
-    chunks1.append({'chunks':array_data_chunks,'type_code':'TYPE_CODE_ARRAY'})
-    chunks.append({
-      'str':'[\n',
-      'onclick_data':self.base_onclick_data('collapse_variable',funcname=funcname,path=path)
-    })
-    chunks.append ({
-      'chunks'  : chunks1,
-      'name'    : 'parenthesis',
-    })
-    chunks.append({
-      'str':'\n]\n',
-      'onclick_data':self.base_onclick_data('collapse_variable',funcname=funcname,path=path)
-    })
+      array_data_chunks.append({'str':'\n'})
+      chunks1.append({'chunks':array_data_chunks,'type_code':'TYPE_CODE_ARRAY'})
+      chunks.append({
+        'str':'[\n',
+        'onclick_data':self.base_onclick_data('collapse_variable',funcname=funcname,path=path)
+      })
+      chunks.append ({
+        'chunks'  : chunks1,
+        'name'    : 'parenthesis',
+      })
+      chunks.append({
+        'str':'\n]\n',
+        'onclick_data':self.base_onclick_data('collapse_variable',funcname=funcname,path=path)
+      })
+    else:
+      array_data_chunks.append({'str':'[CantAccsMem]\n'})
     return chunks
 
   def base_onclick_data(self,cmdname,**kwargs):
@@ -921,17 +909,11 @@ class LocalVarsWindow(BaseWindow):
     onclick_data.update(kwargs)
     return onclick_data
 
-  def cant_access_memory_chunks (self,name,path, **kwargs):
-    chunks=[]
-    chunks+=self.name_to_chunks(name)
-    chunks.append({'str':'Cannot access memory'})
-    return chunks
-
   def collapsed_struct_to_chunks(self,path, **kwargs):
-    return self.collapsed_item_to_chunks(path,'{}', **kwargs)
+    return self.collapsed_item_to_chunks(path,'{<Expand>}', **kwargs)
 
   def collapsed_array_to_chunks(self,path, **kwargs):
-    return self.collapsed_item_to_chunks(path,'[]', **kwargs)
+    return self.collapsed_item_to_chunks(path,'[<Expand>]', **kwargs)
 
 
   def collapsed_item_to_chunks(self,path,collapsed_str,**kwargs):
@@ -949,25 +931,16 @@ class LocalVarsWindow(BaseWindow):
       return []
     if value.is_optimized_out:
       return self.name_to_chunks(name)+[{'str':'<OptimizedOut>'}]
-    #try:
-    #  value_addr = long(value)
-    #except gdb.MemoryError:
-    #  return self.name_to_chunks(name)+[{'str':'<CantMemAccs>'}]
-    #already_deref = kwargs['already_deref']
     funcname=kwargs.get('funcname')
     chunks=[]
     if funcname and self.user_slice.get((funcname,path)):
       n1,n2 = self.user_slice.get((funcname,path))
     else:
-      target_type_code = value.type.target().strip_typedefs().code
-      if target_type_code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION):
+      deref_type_code = value.dereference().type.strip_typedefs().code
+      if deref_type_code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION,gdb.TYPE_CODE_FUNC):
         n1,n2=(0,None)
       else:
         n1,n2=(0,2)
-    #if (deref_depth>=kwargs.get('max_deref_depth',3) or value_addr in already_deref) and not self.expand_variable.get((funcname,path)):
-    #  return self.collapsed_array_to_chunks(value,name,path,deref_depth, **kwargs)
-    #if value_addr!=None:
-    #  already_deref.add(value_addr)
     chunks+=self.array_to_chunks(value,name,n1,n2,path,deref_depth+1, **kwargs)
     return chunks
 
@@ -975,21 +948,20 @@ class LocalVarsWindow(BaseWindow):
   def pointer_to_chunks (self, value, name, path, deref_depth, **kwargs):
     chunks=[]
     chunks+=self.name_to_chunks(name)
-    #path = self.append_path(path_parent,path_name)
     chunks += self.changable_value_to_chunks(value,path,**kwargs)
     return chunks
 
-  def name_to_chunks(self,name):
+  def name_to_chunks(self,name,**kwargs):
+    with_equal=kwargs.get('with_equal',True)
+    chunks=[]
     if name!=None:
       if type(name) is str:
-        return [
-          {'str':name, 'name':'varname'},
-          {'str':' = '}
-        ]
+        chunks+=[{'str':name, 'name':'varname'},]
       else:
-        return name+[{'str':' = '}]
-    else:
-      return []
+        chunks+=name
+      if with_equal:
+        chunks+=[{'str':' = '}]
+    return chunks
 
   def changable_value_to_chunks(self,value,path,**kwargs):
     valuestr  = stringify_value_safe(value,**kwargs)
@@ -1096,6 +1068,31 @@ class LocalVarsWindow(BaseWindow):
     #chunks+=self.value_to_str_chunks(value,path,enable_additional_text=True,**kwargs)
     return chunks
 
+  def possible_read_memory_ptr(self,value,**kwargs):
+    assert value.type.strip_typedefs().code==gdb.TYPE_CODE_PTR
+    n1=kwargs.get('n1',0)
+    infer = gdb.selected_inferior ()
+    if infer==None:
+      return False
+    addr=long(value)
+    size=value.dereference().type.sizeof
+    try:
+      infer.read_memory (addr+n1*size,size)
+      return True
+    except gdb.MemoryError:
+      return False
+
+  def possible_read_memory(self,addr,size):
+    infer = gdb.selected_inferior ()
+    if infer==None:
+      return False
+    try:
+      infer.read_memory (addr,size)
+      return True
+    except gdb.MemoryError:
+      return False
+
+
 
   def value_to_chunks_1(self,value,name,path,deref_depth,**kwargs):
     ''' Конвертирование gdb.Value в json-дерево. Рекурсия.
@@ -1124,6 +1121,7 @@ class LocalVarsWindow(BaseWindow):
     chunks=[]
     type_code = value.type.strip_typedefs().code
     type_str = str(value.type.strip_typedefs())
+    funcname=kwargs.get('funcname')
     if type_code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION):
       chunks+=self.struct_to_chunks(value,name,path,deref_depth,**kwargs)
     elif type_code==gdb.TYPE_CODE_ARRAY:
@@ -1155,7 +1153,23 @@ class LocalVarsWindow(BaseWindow):
         chunks+=self.changable_value_to_chunks(value,path,enable_additional_text=True,**kwargs)
       else:
         chunks += self.pointer_to_chunks (value, name, path, deref_depth, **kwargs)
-        if not value.is_optimized_out and not re.match('.*void \*$',type_str) and not is_incomplete_type_ptr(value):
+        #помимо прочего, попробуем прочитать память по указателю. Если читается успешно, то печатаем
+        #если не удается прочитать, то пишем ошибку
+        if value.is_optimized_out:
+          pass
+        elif re.match('.*void \*$',type_str):
+          pass
+        elif is_incomplete_type_ptr(value):
+          pass
+        elif not self.possible_read_memory_ptr(value, n1=self.user_slice.get((funcname,path),(0,None))[0]):
+          #gdb_print('{}\n'.format(path))
+          chunks.append({'str':'\n'})
+          chunks+=self.name_to_chunks(name,with_equal=False)
+          chunks.append(self.make_slice_chunk_auto(path,funcname))
+          chunks.append({'str':' = '})
+          chunks.append({'str':'[CantAccsMem]'})
+        else:
+          #все OK
           pointer_data_chunks = self.pointer_data_to_chunks (value, name, path, deref_depth, **kwargs)
           if pointer_data_chunks != []:
             chunks+=[{'str':'\n'}]
@@ -1166,7 +1180,11 @@ class LocalVarsWindow(BaseWindow):
       chunks+=self.changable_value_to_chunks(value,path,**kwargs)
     return chunks
 
-  def make_slice_chunks(self,n1,n2,path,funcname):
+  def make_slice_chunk_auto(self,path,funcname):
+    n1,n2 = self.user_slice.get((funcname,path),(0,None))
+    return self.make_slice_chunk(n1,n2,path,funcname)
+
+  def make_slice_chunk(self,n1,n2,path,funcname):
     chunks=[]
     chunks.append({'str':'[','name':'slice'})
     if n2==None:
