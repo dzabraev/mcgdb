@@ -548,8 +548,9 @@ def stringify_value(value,**kwargs):
     return '<OptimizedOut>'
   type_code = value.type.strip_typedefs().code
   enable_additional_text=kwargs.get('enable_additional_text',False)
-  if type_code==gdb.TYPE_CODE_INT and kwargs.get('integer_as_hex'):
-    return hex(long(value))
+  if type_code==gdb.TYPE_CODE_INT and kwargs.get('integer_as_hex') and value.type.sizeof<=8:
+    #gdb can't conver value to python-long if sizeof(value) > 8
+    return hex(long(value))[:-1]
   if type_code in (gdb.TYPE_CODE_PTR,) and not enable_additional_text:
     return hex(long(value))[:-1]
   else:
@@ -736,8 +737,12 @@ class LocalVarsWindow(BaseWindow):
   def update_registers(self):
     try:
       regs = self.get_registers()
-    except gdb.error:
-      return
+    except gdb.error as e:
+      if e.message=="No registers.":
+        return
+      else:
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        raise exc_type, exc_value, exc_traceback
     pkg={
       'cmd':'registers',
       'table':regs,
@@ -1267,6 +1272,8 @@ class LocalVarsWindow(BaseWindow):
     return {'rows' : rows_regs}
 
   def get_registers(self):
+    if not gdb_stopped() or not inferior_alive ():
+      return
     return exec_in_main_pythread (self._get_regs_1,())
 
   def _get_threads_1(self):
