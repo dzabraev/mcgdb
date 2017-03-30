@@ -48,6 +48,7 @@ int main(void) {
   } test_utf8;
   test_utf8.s = "тест кодировки abdc";
   char charbuf[4]="abc";
+  const char const_charbuf[4]="def";
   incompl_struct *is;
   incompl_union *iu;
   incompl_union **is2;

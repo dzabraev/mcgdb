@@ -1090,6 +1090,12 @@ class LocalVarsWindow(BaseWindow):
           n2 = min(n2,n2_orig)
       else:
         n1,n2 = n1_orig,n2_orig
+      array_addr = value.address
+      if array_addr!=None:
+        pointer_chunks = self.pointer_to_chunks (array_addr, name, path, deref_depth, **kwargs)
+        if len(pointer_chunks)!=0:
+          chunks+=pointer_chunks
+          chunks.append({'str':'\n'})
       chunks += self.array_to_chunks (value, name, n1, n2, path, deref_depth, **kwargs)
     elif type_code==gdb.TYPE_CODE_PTR:
       if re.match('.*char \*$',type_str):
