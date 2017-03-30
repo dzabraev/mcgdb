@@ -69,6 +69,7 @@ int main(void) {
   intarr[1] = (int *)malloc(10*sizeof(int *));
   intarr[2] = (int *)malloc(10*sizeof(int *));
   double *dblarr = (double *) malloc(5*sizeof(double));
+  double *dblarr2 = dblarr;
   union {
     int x;
     double y;

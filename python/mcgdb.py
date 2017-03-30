@@ -580,6 +580,8 @@ class LocalVarsWindow(BaseWindow):
       'select_thread'   : self._select_thread,
       'change_variable' : self._change_variable,
       'change_slice'    : self._change_slice,
+      'expand_variable' : self._expand_variable,
+      'collapse_variable':self._collapse_variable,
     }
     self.regex_split = re.compile('\s*([^\s]+)\s+([^\s+]+)\s+(.*)')
     #self.slice_type_1=re.compile('^\s*(\d+)\s*$')
@@ -588,6 +590,7 @@ class LocalVarsWindow(BaseWindow):
 
     self.regnames=[]
     self.user_slice={}
+    self.expand_variable={}
     regtab = gdb.execute('maint print registers',False,True).split('\n')[1:]
     for reg in regtab:
       if reg=="*1: Register type's name NULL.":
@@ -599,19 +602,31 @@ class LocalVarsWindow(BaseWindow):
   def process_connection(self):
     rc=super(LocalVarsWindow,self).process_connection()
     if rc:
-      self.update_localvars()
-      self.update_backtrace()
-      self.update_registers()
-      self.update_threads()
+      self.update_all()
     return rc
 
 
   def _onclick_data(self,pkg):
+    #gdb_print(str(pkg)+'\n')
     click_cmd = pkg['data']['click_cmd']
     cb=self.click_cmd_cbs.get(click_cmd)
     if cb==None:
       return
     return cb(pkg)
+
+  def _expand_variable(self,pkg):
+    path=pkg['data']['path']
+    funcname=pkg['data']['funcname']
+    self.expand_variable[(funcname,path)]=True
+    self.update_all()
+
+  def _collapse_variable(self,pkg):
+    path=pkg['data']['path']
+    funcname=pkg['data']['funcname']
+    self.expand_variable[(funcname,path)]=False
+    self.update_all()
+
+
 
   def _change_slice_1(self,pkg):
     path=pkg['data']['path']
@@ -770,15 +785,6 @@ class LocalVarsWindow(BaseWindow):
     #  res=[]
     return res
 
-#  def append_path(self,path_parent,name):
-#    path=path_parent if path_parent else ''
-#    if name:
-#      if path_parent:
-#        path='{path_parent}.{name}'.format(path_parent=path_parent,name=name)
-#      else:
-#        path=name
-#    return path
-
   def make_subarray_name(self,value,valuepath,**kwargs):
     funcname = kwargs.get('funcname')
     n1,n2=self.user_slice.get((funcname,valuepath),(0,2))
@@ -787,7 +793,6 @@ class LocalVarsWindow(BaseWindow):
     [{'str':')','name':'varname'}]+\
     [self.make_slice_chunks(n1,n2,valuepath,funcname)]
     return chunks
-
 
   def array_to_chunks (self, value, name, n1, n2, path, deref_depth, **kwargs):
     ''' Конвертация массива или указателя, который указывает на массив в json-дерево.
@@ -810,9 +815,13 @@ class LocalVarsWindow(BaseWindow):
     chunks=[]
     assert name!=None
     assert path
+    funcname=kwargs.get('funcname')
+    already_deref=kwargs.get('already_deref')
+    arrloc=(funcname,path)
+
     type_code=value.type.strip_typedefs().code
     if type(name) is str:
-      slice_chunk = self.make_slice_chunks(n1,n2,path,kwargs.get('funcname'))
+      slice_chunk = self.make_slice_chunks(n1,n2,path,funcname)
       varname=[
         {'str':name,'name':'varname'},
         slice_chunk,
@@ -821,9 +830,23 @@ class LocalVarsWindow(BaseWindow):
     else:
       chunks+=name
     chunks+=[{'str':' = '}]
-    already_deref = kwargs['already_deref']
-    if value.address:
-      already_deref.add(long(value.address))
+    valueloc=(funcname,path)
+    try:
+      if type_code==gdb.TYPE_CODE_PTR:
+        value_addr = long(value)
+      else:
+        value_addr = value.address
+    except gdb.MemoryError:
+      value_addr=None
+    is_already_deref = value_addr!=None and value_addr in already_deref
+    if ((deref_depth>=kwargs.get('max_deref_depth',3) or is_already_deref) and not self.expand_variable.get((funcname,path))) or \
+        (valueloc in self.expand_variable and not self.expand_variable[(funcname,path)] ):
+      chunks += self.collapsed_array_to_chunks(path,**kwargs)
+      return chunks
+
+    if value_addr!=None:
+      already_deref.add(value_addr)
+
     chunks1=[]
     array_data_chunks=[]
     memory_error_idx=None
@@ -860,13 +883,6 @@ class LocalVarsWindow(BaseWindow):
           break
         if elem_as_array:
           array_data_chunks+=self.pointer_data_to_chunks(value_idx,value_idx_name,path_idx,deref_depth,**kwargs)
-          #if len(array_data_chunks_1)!=0:
-          #  array_data_chunks += array_data_chunks_1
-          #else:
-            #gdb_print ('{}\n'.format(path_idx))
-          #  array_data_chunks+=self.already_deref_error(value_idx_name,path_idx)
-            #array_data_chunks.append({'str':'[AlreadyDeref]'})
-            #array_data_chunks += self.pointer_to_chunks (value_idx, value_idx_name, path_idx, deref_depth, **kwargs)
         else:
           array_data_chunks+=self.value_to_chunks_1(value_idx,value_idx_name,path_idx,deref_depth,**kwargs)
         if delimiter and i!=n22-1:
@@ -884,12 +900,26 @@ class LocalVarsWindow(BaseWindow):
       array_data_chunks.append({'str':msg})
     array_data_chunks.append({'str':'\n'})
     chunks1.append({'chunks':array_data_chunks,'type_code':'TYPE_CODE_ARRAY'})
-    parent_chunk={
+    chunks.append({
+      'str':'[\n',
+      'onclick_data':self.base_onclick_data('collapse_variable',funcname=funcname,path=path)
+    })
+    chunks.append ({
       'chunks'  : chunks1,
       'name'    : 'parenthesis',
-    }
-    chunks.append (parent_chunk)
+    })
+    chunks.append({
+      'str':'\n]\n',
+      'onclick_data':self.base_onclick_data('collapse_variable',funcname=funcname,path=path)
+    })
     return chunks
+
+  def base_onclick_data(self,cmdname,**kwargs):
+    onclick_data = {
+      'click_cmd':cmdname,
+    }
+    onclick_data.update(kwargs)
+    return onclick_data
 
   def cant_access_memory_chunks (self,name,path, **kwargs):
     chunks=[]
@@ -897,62 +927,48 @@ class LocalVarsWindow(BaseWindow):
     chunks.append({'str':'Cannot access memory'})
     return chunks
 
+  def collapsed_struct_to_chunks(self,path, **kwargs):
+    return self.collapsed_item_to_chunks(path,'{}', **kwargs)
+
+  def collapsed_array_to_chunks(self,path, **kwargs):
+    return self.collapsed_item_to_chunks(path,'[]', **kwargs)
+
+
+  def collapsed_item_to_chunks(self,path,collapsed_str,**kwargs):
+    return [{
+        'str':collapsed_str,
+        'onclick_data':self.base_onclick_data('expand_variable',path=path,funcname=kwargs.get('funcname')),
+      }]
+
+
   def pointer_data_to_chunks (self,value,name,path,deref_depth, **kwargs):
     str_type = str(value.type.strip_typedefs())
     assert not re.match('.*void \*$',str_type)
     assert not is_incomplete_type_ptr(value)
+    if  kwargs.get('disable_dereference') :
+      return []
     if value.is_optimized_out:
       return self.name_to_chunks(name)+[{'str':'<OptimizedOut>'}]
-    try:
-      value_addr = long(value)
-    except gdb.MemoryError:
-      return self.name_to_chunks(name)+[{'str':'<CantMemAccs>'}]
-    if deref_depth>=kwargs.get('max_deref_depth',3):
-      return self.name_to_chunks(name)+[{'str':'<Dereference>'}]
-    already_deref = kwargs['already_deref']
-    if  kwargs.get('disable_dereference') :
-        #str_type in ('void *', 'char *'):
-      return []
-    chunks=[]
-    #Если пользователь задал границы печати(slice), то печатаем с ними.
-    #Если нет, то:
-    #  Если value.dereference() есть union или struct, то печатаем только первый элемент
-    #  иначе печатаем первые три элемента.
+    #try:
+    #  value_addr = long(value)
+    #except gdb.MemoryError:
+    #  return self.name_to_chunks(name)+[{'str':'<CantMemAccs>'}]
+    #already_deref = kwargs['already_deref']
     funcname=kwargs.get('funcname')
-    #type_code = value.type.strip_typedefs().code
-    # Если dereference уже был сделан для указателя, однако,
-    # пользователь вручную задал slice, то игнорируем, что это повторный
-    # dereference и всеравно делаем dereference
+    chunks=[]
     if funcname and self.user_slice.get((funcname,path)):
       n1,n2 = self.user_slice.get((funcname,path))
     else:
-      if value_addr!=None and value_addr in already_deref:
-        return self.name_to_chunks(name)+[{'str':'<AlreadyDeref>'}]
       target_type_code = value.type.target().strip_typedefs().code
       if target_type_code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION):
         n1,n2=(0,None)
       else:
         n1,n2=(0,2)
-    if value_addr!=None:
-      already_deref.add(value_addr)
-    #gdb_print('{}\n'.format(path))
+    #if (deref_depth>=kwargs.get('max_deref_depth',3) or value_addr in already_deref) and not self.expand_variable.get((funcname,path)):
+    #  return self.collapsed_array_to_chunks(value,name,path,deref_depth, **kwargs)
+    #if value_addr!=None:
+    #  already_deref.add(value_addr)
     chunks+=self.array_to_chunks(value,name,n1,n2,path,deref_depth+1, **kwargs)
-    '''
-    deref_type_code = deref_value.type.strip_typedefs().code
-    if n2!=None or deref_type_code==gdb.TYPE_CODE_PTR:
-      chunks+=self.array_to_chunks(value,name,n1,n2,path,deref_depth+1, **kwargs)
-    else:
-      value_name=[]
-      value_name.append({'str':name,'name':'varname'})
-      value_name+=self.make_slice_chunks(n1,n2,path,funcname)
-      value_name.append({'str':' = '})
-      value_path='{path}[{idx}]'.format(path=path,idx=n1)
-      if deref_type_code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION):
-        chunks+=self.struct_to_chunks(deref_value,value_name,value_path,deref_depth+1, **kwargs)
-      else:
-        #TODO здесь должен передаваться name со slice
-        chunks+=self.value_to_chunks_1(deref_value,value_name,value_path,deref_depth+1, **kwargs)
-    '''
     return chunks
 
 
@@ -1007,8 +1023,21 @@ class LocalVarsWindow(BaseWindow):
     type_code = value.type.strip_typedefs().code
     chunks=[]
     chunks+=self.name_to_chunks(name)
-    if value.address:
-      already_deref.add(long(value.address))
+    funcname=kwargs.get('funcname')
+    valueloc=(funcname,path)
+    try:
+      value_addr = value.address
+    except gdb.MemoryError:
+      value_addr=None
+    is_already_deref = value_addr!=None and value_addr in already_deref
+    if ((deref_depth>=kwargs.get('max_deref_depth',3) or is_already_deref) and not self.expand_variable.get((funcname,path))) or \
+        (valueloc in self.expand_variable and not self.expand_variable[(funcname,path)] ):
+      chunks += self.collapsed_struct_to_chunks(path, **kwargs)
+      return chunks
+
+    if value_addr!=None:
+      already_deref.add(value_addr)
+
     chunks1=[]
     data_chunks=[]
     for field in value.type.fields():
@@ -1021,10 +1050,17 @@ class LocalVarsWindow(BaseWindow):
       chunks1.append({'chunks':data_chunks,'type_code':'TYPE_CODE_STRUCT'})
     elif type_code==gdb.TYPE_CODE_UNION:
       chunks1.append({'chunks':data_chunks,'type_code':'TYPE_CODE_UNION'})
-    parent_chunk={
+    chunks.append({
+      'str':'{\n',
+      'onclick_data':self.base_onclick_data('collapse_variable',funcname=funcname,path=path),
+    })
+    chunks.append ({
       'chunks'  : chunks1,
-    }
-    chunks.append (parent_chunk)
+    })
+    chunks.append({
+      'str':'\n}\n',
+      'onclick_data':self.base_onclick_data('collapse_variable',funcname=funcname,path=path),
+    })
     return chunks
 
 

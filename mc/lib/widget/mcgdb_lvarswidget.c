@@ -532,7 +532,7 @@ is_node_match_yx (GNode *node, int y, int x) {
           return FALSE;
       }
       else if (y==y2) {
-        if (x<=x2) {
+        if (x<x2) {
           return TRUE;
         }
         else {
@@ -838,28 +838,28 @@ print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int r
   else {
     type_code_t type_code = CHUNK(chunk)->type_code;
     GArray * coord = CHUNK(chunk)->coord;
-    const char *str_begin=0, *str_end=0;
+//    const char *str_begin=0, *str_end=0;
     int horiz_shift = get_chunk_horiz_shift (CHUNK(chunk));
     int start_pos_1;
     int offset;
     GNode *child = g_node_first_child (chunk);
 
-    if (type_code == TYPE_CODE_STRUCT || type_code == TYPE_CODE_UNION) {
-      str_begin="{\n";
-      str_end="}\n";
-    }
-    else if (type_code == TYPE_CODE_ARRAY) {
-      str_begin="[\n";
-      str_end="]\n";
-    }
+//    if (type_code == TYPE_CODE_STRUCT || type_code == TYPE_CODE_UNION) {
+//      str_begin="{\n";
+//      str_end="}\n";
+//    }
+//    else if (type_code == TYPE_CODE_ARRAY) {
+//      str_begin="[\n";
+//      str_end="]\n";
+//    }
     if (coord->len>0)
       g_array_remove_range (coord, 0, coord->len);
     offset=ROW_OFFSET(tab,rowcnt[0]);
     g_array_append_val (coord, offset);
     g_array_append_val (coord, start_pos);
-    if (str_begin) {
-      start_pos = print_str(str_begin,x1,x2,start_pos,left_bound,right_bound,tab,rowcnt);
-    }
+//    if (str_begin) {
+//      start_pos = print_str(str_begin,x1,x2,start_pos,left_bound,right_bound,tab,rowcnt);
+//    }
     /*если chunk есть структура или массив, то начала печатается открывающая скобка с ПЕРЕНОСОМ строки
      *затем печатается тело структуры или массива, после чего печатается закрыающая скобка. Причем
      *тело печатается со сдвигом вправо.
@@ -869,12 +869,13 @@ print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int r
       start_pos_1 = print_chunks (child,x1+horiz_shift,x2+horiz_shift,start_pos_1,left_bound,right_bound,tab,rowcnt);
       child = g_node_next_sibling (child);
     }
-    if (str_end)
-      start_pos_1 = print_str(str_end,x1,x2,x1,left_bound,right_bound,tab,rowcnt);
+  //  if (str_end)
+  //    start_pos_1 = print_str(str_end,x1,x2,x1,left_bound,right_bound,tab,rowcnt);
     offset=ROW_OFFSET(tab,rowcnt[0]);
-    g_array_append_val (coord, offset);
-    g_array_append_val (coord, start_pos_1);
     start_pos = (type_code == TYPE_CODE_STRUCT || type_code == TYPE_CODE_ARRAY || type_code == TYPE_CODE_UNION) ? (x1) : (start_pos_1);
+    g_array_append_val (coord, offset);
+    g_array_append_val (coord, start_pos);
+
   }
 
   return start_pos;
