@@ -737,7 +737,7 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
   g_array_append_val (coord, offset);
   g_array_append_val (coord, start_pos);
   tty_gotoyx(offset,start_pos);
-  for(;;colcnt++) {
+  for(;;) {
     if(colcnt>=x2 || newline) {
       /*допечатали до правой границы столбца таблицы
        *делаем перенос строки.*/
@@ -792,6 +792,7 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
         }
         p+=charlength_utf8(p);
       }
+      colcnt++;
     }
   }
   message_assert (coord->len%3==0);
