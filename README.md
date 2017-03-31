@@ -25,7 +25,7 @@
 ### install dependencies
 
 ```
-  wget https://ftp.gnu.org/gnu/gdb/gdb-7.12.tar.xz  
+  wget https://ftp.gnu.org/gnu/gdb/gdb-7.12.1.tar.xz  
   tar xvJf gdb-7.12.tar.xz  
   cd gdb-7.12  
   ./configure --with-python=python2  
@@ -45,11 +45,11 @@
 ## INSTALL from sources
 
 ```
-wget https://github.com/dzabraev/mcgdb/releases/download/1.1/mcgdb-1.1.tar.gz
-tar xzvf mcgdb-1.1.tar.gz
-mkdir obj-mcgdb-1.1  
-cd obj-mcgdb-1.1  
-../mcgdb-1.1/configure  
+wget https://github.com/dzabraev/mcgdb/releases/download/1.2/mcgdb-1.2.tar.gz
+tar xzvf mcgdb-1.2.tar.gz
+mkdir obj-mcgdb-1.2  
+cd obj-mcgdb-1.2  
+../mcgdb-1.2/configure  
 make -j4  
 checkinstall (or make install)  
 ```
