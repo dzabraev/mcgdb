@@ -846,7 +846,9 @@ class LocalVarsWindow(BaseWindow):
       except gdb.MemoryError:
         value_addr=None
     is_already_deref = value_addr!=None and value_addr in already_deref
-    if ((deref_depth>=kwargs.get('max_deref_depth',3) or is_already_deref) and not self.expand_variable.get((funcname,path))) or \
+    max_deref_depth = kwargs.get('max_deref_depth',3)
+    if  max_deref_depth!=None and \
+        ((deref_depth>=kwargs.get('max_deref_depth',3) or is_already_deref) and not self.expand_variable.get((funcname,path))) or \
         (valueloc in self.expand_variable and not self.expand_variable[(funcname,path)] ):
       chunks += self.collapsed_array_to_chunks(path,**kwargs)
       return chunks
@@ -1015,7 +1017,9 @@ class LocalVarsWindow(BaseWindow):
     except gdb.MemoryError:
       value_addr=None
     is_already_deref = value_addr!=None and value_addr in already_deref
-    if ((deref_depth>=kwargs.get('max_deref_depth',3) or is_already_deref) and not self.expand_variable.get((funcname,path))) or \
+    max_deref_depth = kwargs.get('max_deref_depth',3)
+    if  max_deref_depth!=None and \
+        ((deref_depth>=max_deref_depth or is_already_deref) and not self.expand_variable.get((funcname,path))) or \
         (valueloc in self.expand_variable and not self.expand_variable[(funcname,path)] ):
       chunks += self.collapsed_struct_to_chunks(path, **kwargs)
       return chunks
@@ -1072,7 +1076,8 @@ class LocalVarsWindow(BaseWindow):
       kwargs['funcname'] = self._get_frame_funcname(gdb.selected_frame())
     if 'already_deref' not in kwargs:
       kwargs['already_deref'] = set()
-    kwargs['max_deref_depth']=0
+    if 'max_deref_depth' not in kwargs:
+      kwargs['max_deref_depth']=0
     return self.value_to_chunks_1(value,name,path,deref_depth,**kwargs)
 
   def value_withstr_to_chunks(self,value,name,path,deref_depth,**kwargs):
@@ -1422,7 +1427,7 @@ class LocalVarsWindow(BaseWindow):
     for regname in self.regnames:
       regvalue = gdb.parse_and_eval(regname)
       try:
-        chunks = self.value_to_chunks(regvalue,regname, integer_as_hex=True, disable_dereference=True)
+        chunks = self.value_to_chunks(regvalue,regname, integer_as_hex=True, disable_dereference=True, max_deref_depth=None)
       except:
         gdb_print(regname+'\n')
         raise
