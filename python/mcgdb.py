@@ -5,7 +5,7 @@ import sys,os,select,errno,socket,stat
 import json
 import logging
 import threading, subprocess
-import re,copy
+import re,copy,ctypes
 
 import gdb
 
@@ -552,7 +552,7 @@ def stringify_value(value,**kwargs):
     #gdb can't conver value to python-long if sizeof(value) > 8
     return hex(long(value))[:-1]
   if type_code in (gdb.TYPE_CODE_PTR,) and not enable_additional_text:
-    return hex(long(value))[:-1]
+    return hex(ctypes.c_ulong(long(value)).value)[:-1]
   else:
     return unicode(value)
 
@@ -832,7 +832,7 @@ class LocalVarsWindow(BaseWindow):
     chunks+=[{'str':' = '}]
     valueloc=(funcname,path)
     if type_code==gdb.TYPE_CODE_PTR:
-      value_addr = long(value)
+      value_addr = ctypes.c_ulong(long(value)).value
     else:
       try:
         value_addr = value.address
@@ -899,7 +899,7 @@ class LocalVarsWindow(BaseWindow):
         'onclick_data':self.base_onclick_data('collapse_variable',funcname=funcname,path=path)
       })
     else:
-      array_data_chunks.append({'str':'[CantAccsMem]\n'})
+      chunks.append({'str':'[CantAccsMem]'})
     return chunks
 
   def base_onclick_data(self,cmdname,**kwargs):
@@ -1071,18 +1071,13 @@ class LocalVarsWindow(BaseWindow):
   def possible_read_memory_ptr(self,value,**kwargs):
     assert value.type.strip_typedefs().code==gdb.TYPE_CODE_PTR
     n1=kwargs.get('n1',0)
-    infer = gdb.selected_inferior ()
-    if infer==None:
-      return False
-    addr=long(value)
+    addr=ctypes.c_ulong(long(value)).value
     size=value.dereference().type.sizeof
-    try:
-      infer.read_memory (addr+n1*size,size)
-      return True
-    except gdb.MemoryError:
-      return False
+    return self.possible_read_memory(addr+n1*size,size)
 
   def possible_read_memory(self,addr,size):
+    if addr<0:
+      return False
     infer = gdb.selected_inferior ()
     if infer==None:
       return False
@@ -1161,13 +1156,13 @@ class LocalVarsWindow(BaseWindow):
           pass
         elif is_incomplete_type_ptr(value):
           pass
-        elif not self.possible_read_memory_ptr(value, n1=self.user_slice.get((funcname,path),(0,None))[0]):
+#        elif not self.possible_read_memory_ptr(value, n1=self.user_slice.get((funcname,path),(0,None))[0]):
           #gdb_print('{}\n'.format(path))
-          chunks.append({'str':'\n'})
-          chunks+=self.name_to_chunks(name,with_equal=False)
-          chunks.append(self.make_slice_chunk_auto(path,funcname))
-          chunks.append({'str':' = '})
-          chunks.append({'str':'[CantAccsMem]'})
+#          chunks.append({'str':'\n'})
+#          chunks+=self.name_to_chunks(name,with_equal=False)
+#          chunks.append(self.make_slice_chunk_auto(path,funcname))
+#          chunks.append({'str':' = '})
+#          chunks.append({'str':'[CantAccsMem]'})
         else:
           #все OK
           pointer_data_chunks = self.pointer_data_to_chunks (value, name, path, deref_depth, **kwargs)
