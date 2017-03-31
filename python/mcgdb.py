@@ -23,6 +23,55 @@ TMP_FILE_NAME="/tmp/mcgdb/mcgdb-tmp-file-{pid}.txt".format(pid=os.getpid())
 main_thread_ident=threading.current_thread().ident
 mcgdb_main=None
 
+
+class MCGDB_VERSION(object):
+  major=1
+  minor=1
+
+
+def get_gdb_version():
+  match=re.match('(\d+)\.(\d+)\.(\d+)?',gdb.VERSION)
+  if not match:
+    return (None,None)
+  else:
+    major,minor,micro = match.groups()
+    conv=lambda x: int(x) if x!=None else x
+    return (conv(major),conv(minor),conv(micro))
+
+
+def is_gdb_version_correct():
+  good_major=7
+  good_minor=12
+  major,minor,micro=get_gdb_version()
+  if major==None or minor==None:
+    gdb_print("WARNING: can't recognize gdb version. Version must be >= {ma}.{mi}\n".format(
+      ma=major,mi=minor))
+    return True
+  if major < good_major:
+    gdb_print("ERROR: gdb version must be >= {ma}.{mi}\n".format(
+      ma=good_major,mi=good_minor))
+    return False
+  if minor < good_minor:
+    gdb_print("ERROR: gdb version must be >= {ma}.{mi}\n".format(
+      ma=good_major,mi=good_minor))
+    return False
+  return True
+
+def is_python_version_correct():
+  if sys.version_info.major!=2 or sys.version_info.minor<7:
+    gdb_print('ERROR: mcgdb use python 2.7, but you gdb compiled with {major}.{minor}.{micor}'.format(
+      major=sys.version_info.major,
+      minor=sys.version_info.minor,
+      micro=sys.version_info.micro,
+    ))
+    gdb_print('ERROR: recompile gdb with `./configure --with-python=python2`')
+    return False
+  else:
+    return True
+
+is_gdb_version_correct()
+is_python_version_correct()
+
 class ThQueue(object):
   def __init__(self):
     self.mutex = threading.Lock()
@@ -1824,10 +1873,16 @@ class GEThread(object):
 
 
 
+
 class McgdbMain(object):
   def __init__(self):
-    if not self.__is_gdb_version_correct():
+    if not is_gdb_version_correct():
       return
+    if not is_python_version_correct():
+      return
+    gdb_print('\nmcgdb version: {major}.{minor}\n'.format(major=MCGDB_VERSION.major,minor=MCGDB_VERSION.minor))
+    gdb_print('python version: {major}.{minor}.{micor}\n'.format(major=sys.version_info.major,minor=sys.version_info.minor,micor=sys.version_info.micro))
+    gdb_print('(gdb) ')
     gdb_rfd,gdb_wfd=os.pipe() #Through gdb_[rw]fd main pythread will be send commands to another thread
     self.gdb_wfd=gdb_wfd
     gdb.execute('set pagination off',False,False)
@@ -1853,33 +1908,6 @@ class McgdbMain(object):
     self.open_window('main')
     self.open_window('localvars')
 
-  def __get_gdb_version(self):
-    try:
-      s=gdb.execute('show version',False,True)
-      major,minor=re.compile(r"GNU gdb \(GDB\) (\d+).(\d+)",re.MULTILINE).search(s).groups()
-      ver=(int(major),int(minor))
-      return ver
-    except:
-      return (None,None)
-
-
-  def __is_gdb_version_correct(self):
-    good_major=7
-    good_minor=12
-    major,minor=self.__get_gdb_version()
-    if major==None or minor==None:
-      gdb_print("WARNING: can't recognize gdb version. Version must be >= {ma}.{mi}\n".format(
-        ma=major,mi=minor))
-      return True
-    if major < good_major:
-      gdb_print("ERROR: gdb version must be >= {ma}.{mi}\n".format(
-        ma=good_major,mi=good_minor))
-      return False
-    if minor < good_minor:
-      gdb_print("ERROR: gdb version must be >= {ma}.{mi}\n".format(
-        ma=good_major,mi=good_minor))
-      return False
-    return True
 
   def stop_event_loop(self):
     pkgsend(self.gdb_wfd,{'cmd':'stop_event_loop',})

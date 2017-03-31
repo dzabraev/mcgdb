@@ -28,7 +28,7 @@
   wget https://ftp.gnu.org/gnu/gdb/gdb-7.12.tar.xz  
   tar xvJf gdb-7.12.tar.xz  
   cd gdb-7.12  
-  ./configure --with-python  
+  ./configure --with-python=python2  
   make -j4  
   checkinstall  
 
