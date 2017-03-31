@@ -532,7 +532,7 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
 def is_incomplete_type_ptr(value):
   return  value.type.strip_typedefs().code==gdb.TYPE_CODE_PTR and \
           value.type.strip_typedefs().target().strip_typedefs().code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION) and \
-          len(value.type.target().strip_typedefs().fields())==0
+          len(value.type.strip_typedefs().target().strip_typedefs().fields())==0
 
 def stringify_value(value,**kwargs):
   '''Конвертация gdb.Value в строку
@@ -548,13 +548,16 @@ def stringify_value(value,**kwargs):
     return '<OptimizedOut>'
   type_code = value.type.strip_typedefs().code
   enable_additional_text=kwargs.get('enable_additional_text',False)
-  if type_code==gdb.TYPE_CODE_INT and kwargs.get('integer_as_hex') and value.type.sizeof<=8:
-    #gdb can't conver value to python-long if sizeof(value) > 8
-    return hex(long(value))[:-1]
-  if type_code in (gdb.TYPE_CODE_PTR,) and not enable_additional_text:
-    return hex(ctypes.c_ulong(long(value)).value)[:-1]
-  else:
-    return unicode(value)
+  try:
+    if type_code==gdb.TYPE_CODE_INT and kwargs.get('integer_as_hex') and value.type.strip_typedefs().sizeof<=8:
+      #gdb can't conver value to python-long if sizeof(value) > 8
+      return hex(long(value))[:-1]
+    if type_code in (gdb.TYPE_CODE_PTR,) and not enable_additional_text:
+      return hex(ctypes.c_ulong(long(value)).value)[:-1]
+    else:
+      return unicode(value)
+  except gdb.error:
+    return "unavailable"
 
 def stringify_value_safe(*args,**kwargs):
   try:
@@ -618,13 +621,13 @@ class LocalVarsWindow(BaseWindow):
     path=pkg['data']['path']
     funcname=pkg['data']['funcname']
     self.expand_variable[(funcname,path)]=True
-    self.update_all()
+    self.update_localvars()
 
   def _collapse_variable(self,pkg):
     path=pkg['data']['path']
     funcname=pkg['data']['funcname']
     self.expand_variable[(funcname,path)]=False
-    self.update_all()
+    self.update_localvars()
 
 
 
@@ -864,7 +867,7 @@ class LocalVarsWindow(BaseWindow):
       name_lambda = lambda value,valuepath,**kwargs : None
       elem_as_array=False
 
-    arr_elem_size=deref_value.type.sizeof
+    arr_elem_size=deref_value.type.strip_typedefs().sizeof
     arr_size=n2-n1+1 if n2!=None else 1
     if value_addr==None or self.possible_read_memory(value_addr,arr_elem_size*arr_size):
       if 'delimiter' in kwargs:
@@ -1022,7 +1025,7 @@ class LocalVarsWindow(BaseWindow):
 
     chunks1=[]
     data_chunks=[]
-    for field in value.type.fields():
+    for field in value.type.strip_typedefs().fields():
       field_name = field.name
       field_value = value[field_name]
       value_path='{path}.{field_name}'.format(path=path,field_name=field_name)
@@ -1069,6 +1072,7 @@ class LocalVarsWindow(BaseWindow):
       kwargs['funcname'] = self._get_frame_funcname(gdb.selected_frame())
     if 'already_deref' not in kwargs:
       kwargs['already_deref'] = set()
+    kwargs['max_deref_depth']=0
     return self.value_to_chunks_1(value,name,path,deref_depth,**kwargs)
 
   def value_withstr_to_chunks(self,value,name,path,deref_depth,**kwargs):
@@ -1082,7 +1086,7 @@ class LocalVarsWindow(BaseWindow):
     assert value.type.strip_typedefs().code==gdb.TYPE_CODE_PTR
     n1=kwargs.get('n1',0)
     addr=ctypes.c_ulong(long(value)).value
-    size=value.dereference().type.sizeof
+    size=value.dereference().type.strip_typedefs().sizeof
     return self.possible_read_memory(addr+n1*size,size)
 
   def possible_read_memory(self,addr,size):
@@ -1130,7 +1134,7 @@ class LocalVarsWindow(BaseWindow):
 
 
   def functionptr_to_chunks_argtypes(self,value, name, path, deref_depth, **kwargs):
-    arg_types = [field.type for field in value.dereference().type.fields()]
+    arg_types = [field.type for field in value.dereference().type.strip_typedefs().fields()]
     return_type = value.dereference().type.strip_typedefs().target()
     func_addr = self.ptrval_to_ulong(value)
     func_name='unknown'
@@ -1196,7 +1200,6 @@ class LocalVarsWindow(BaseWindow):
             **disable_dereference (bool): Если True, то dereference делаться не будет. По умолчанию False.
 
     '''
-    #path = self.append_path(path_parent,path_name)
     chunks=[]
     type_code = value.type.strip_typedefs().code
     type_str = str(value.type.strip_typedefs())
@@ -1213,7 +1216,7 @@ class LocalVarsWindow(BaseWindow):
       if re.match('.*char \[.*\]$',type_str):
         chunks+=self.value_withstr_to_chunks(value,name,path,deref_depth,**kwargs)
       else:
-        n1_orig,n2_orig = value.type.range()
+        n1_orig,n2_orig = value.type.strip_typedefs().range()
         funcname=kwargs['funcname']
         user_slice = self.user_slice.get((funcname,path))
         if user_slice:
@@ -1418,7 +1421,11 @@ class LocalVarsWindow(BaseWindow):
     rows_regs=[]
     for regname in self.regnames:
       regvalue = gdb.parse_and_eval(regname)
-      chunks = self.value_to_chunks(regvalue,regname, integer_as_hex=True, disable_dereference=True)
+      try:
+        chunks = self.value_to_chunks(regvalue,regname, integer_as_hex=True, disable_dereference=True)
+      except:
+        gdb_print(regname+'\n')
+        raise
       col  = {'chunks' : chunks}
       row  = {'columns' : [col]}
       rows_regs.append(row)
