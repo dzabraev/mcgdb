@@ -820,6 +820,10 @@ class LocalVarsWindow(BaseWindow):
     arrloc=(funcname,path)
 
     type_code=value.type.strip_typedefs().code
+    if name:
+      chunks+=self.value_type_to_chunks(value,**kwargs)
+      chunks.append({'str':' '})
+
     if type(name) is str:
       slice_chunk = self.make_slice_chunk(n1,n2,path,funcname)
       varname=[
@@ -947,7 +951,10 @@ class LocalVarsWindow(BaseWindow):
 
   def pointer_to_chunks (self, value, name, path, deref_depth, **kwargs):
     chunks=[]
-    chunks+=self.name_to_chunks(name)
+    if name:
+      chunks+=self.value_type_to_chunks(value,**kwargs)
+      chunks.append({'str':' '})
+      chunks+=self.name_to_chunks(name)
     chunks += self.changable_value_to_chunks(value,path,**kwargs)
     return chunks
 
@@ -994,7 +1001,10 @@ class LocalVarsWindow(BaseWindow):
     already_deref = kwargs['already_deref']
     type_code = value.type.strip_typedefs().code
     chunks=[]
-    chunks+=self.name_to_chunks(name)
+    if name:
+      chunks+=self.value_type_to_chunks(value,**kwargs)
+      chunks.append({'str':' '})
+      chunks+=self.name_to_chunks(name)
     funcname=kwargs.get('funcname')
     valueloc=(funcname,path)
     try:
@@ -1087,7 +1097,81 @@ class LocalVarsWindow(BaseWindow):
     except gdb.MemoryError:
       return False
 
+  def ptrval_to_ulong(self,value):
+    return ctypes.c_ulong(long(value)).value
 
+  def functionptr_to_chunks(self,value, name, path, deref_depth, **kwargs):
+    chunks=[]
+    func_addr = self.ptrval_to_ulong(value)
+    function=None
+    try:
+      block=gdb.block_for_pc (func_addr)
+    except RuntimeError:
+      block=None
+    while block:
+      if block.function:
+        function = block.function
+        break
+      block=block.superblock
+    if function:
+      func_name=function.name
+    else:
+      func_name='unknown'
+    if name:
+      chunks+=self.value_type_to_chunks(value,**kwargs)
+      chunks.append({'str':' '})
+      chunks+=self.name_to_chunks(name)
+    #chunks.append({'str':hex(func_addr)[:-1]})
+    chunks+=self.changable_value_to_chunks(value,path,**kwargs)
+    chunks.append({'str':' '})
+    chunks.append({'str':'<{}>'.format(func_name)})
+    return chunks
+
+
+
+  def functionptr_to_chunks_argtypes(self,value, name, path, deref_depth, **kwargs):
+    arg_types = [field.type for field in value.dereference().type.fields()]
+    return_type = value.dereference().type.strip_typedefs().target()
+    func_addr = self.ptrval_to_ulong(value)
+    func_name='unknown'
+    try:
+      block=gdb.block_for_pc (func_addr)
+    except RuntimeError:
+      block=None
+    while block:
+      if block.function:
+        func_name = block.function.name
+        break
+      block=block.superblock
+    chunks=[]
+    chunks.append({'str':'{'})
+    chunks.append({'str':str(return_type),'name':'datatype'})
+    chunks.append({'str':' '})
+    chunks.append({'str':'('})
+    arg_chunks=[{'str':str(arg_type),'name':'datatype'} for arg_type in arg_types]
+    if len(arg_chunks)>0:
+      arg_chunks_commas=[]
+      arg_chunks_commas.append(arg_chunks[0])
+      for arg_chunk in arg_chunks[1:]:
+        arg_chunks_commas.append({'str':','})
+        arg_chunks_commas.append(arg_chunk)
+      chunks+=arg_chunks_commas
+    chunks.append({'str':')'})
+    chunks.append({'str':'}'})
+    chunks.append({'str':' '})
+    chunks.append({'str':hex(func_addr)[:-1]})
+    chunks.append({'str':' '})
+    chunks.append({'str':'<{}>'.format(func_name)})
+    return chunks
+
+  def value_type_to_chunks(self,value,**kwargs):
+    type_code=value.type.strip_typedefs().code
+    if type_code==gdb.TYPE_CODE_STRUCT:
+      return [{'str':'struct','name':'datatype'}]
+    elif type_code==gdb.TYPE_CODE_UNION:
+      return [{'str':'union','name':'datatype'}]
+    else:
+      return [{'str':str(value.type),'name':'datatype'}]
 
   def value_to_chunks_1(self,value,name,path,deref_depth,**kwargs):
     ''' Конвертирование gdb.Value в json-дерево. Рекурсия.
@@ -1142,35 +1226,35 @@ class LocalVarsWindow(BaseWindow):
         chunks += self.array_to_chunks (value, name, n1, n2, path, deref_depth, **kwargs)
     elif type_code==gdb.TYPE_CODE_PTR:
       if re.match('.*char \*$',type_str):
-        chunks+=self.name_to_chunks(name)
-        #chunks.append({'str':' = '})
-        #chunks.append({'str':stringify_value_safe(value,enable_additional_text=True,**kwargs),'name':'varvalue'})
+        #строку печатаем по-другому в сравнении с обычным pointer
+        if name:
+          chunks+=self.value_type_to_chunks(value,**kwargs)
+          chunks.append({'str':' '})
+          chunks+=self.name_to_chunks(name)
         chunks+=self.changable_value_to_chunks(value,path,enable_additional_text=True,**kwargs)
       else:
-        chunks += self.pointer_to_chunks (value, name, path, deref_depth, **kwargs)
-        #помимо прочего, попробуем прочитать память по указателю. Если читается успешно, то печатаем
-        #если не удается прочитать, то пишем ошибку
-        if value.is_optimized_out:
-          pass
-        elif re.match('.*void \*$',type_str):
-          pass
-        elif is_incomplete_type_ptr(value):
-          pass
-#        elif not self.possible_read_memory_ptr(value, n1=self.user_slice.get((funcname,path),(0,None))[0]):
-          #gdb_print('{}\n'.format(path))
-#          chunks.append({'str':'\n'})
-#          chunks+=self.name_to_chunks(name,with_equal=False)
-#          chunks.append(self.make_slice_chunk_auto(path,funcname))
-#          chunks.append({'str':' = '})
-#          chunks.append({'str':'[CantAccsMem]'})
-        else:
+        is_funct_ptr=False
+        pointer_data_chunks = []
+        if not value.is_optimized_out and not re.match('.*void \*$',type_str) and not is_incomplete_type_ptr(value):
           #все OK
-          pointer_data_chunks = self.pointer_data_to_chunks (value, name, path, deref_depth, **kwargs)
-          if pointer_data_chunks != []:
-            chunks+=[{'str':'\n'}]
-            chunks+=pointer_data_chunks
+          if value.dereference().type.strip_typedefs().code==gdb.TYPE_CODE_FUNC:
+            is_funct_ptr=True
+          else:
+            pointer_data_chunks = self.pointer_data_to_chunks (value, name, path, deref_depth, **kwargs)
+        if is_funct_ptr:
+          pointer_chunks = self.functionptr_to_chunks(value, name, path, deref_depth, **kwargs)
+        else:
+          pointer_chunks = self.pointer_to_chunks (value, name, path, deref_depth, **kwargs)
+        chunks+=pointer_chunks
+        if len(pointer_data_chunks) > 0:
+          chunks+=[{'str':'\n'}]
+          chunks+=pointer_data_chunks
+
+
     else:
       if  name!=None:
+        chunks+=self.value_type_to_chunks(value,**kwargs)
+        chunks.append({'str':' '})
         chunks+=self.name_to_chunks(name)
       chunks+=self.changable_value_to_chunks(value,path,**kwargs)
     return chunks
