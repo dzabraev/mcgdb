@@ -583,9 +583,13 @@ def is_incomplete_type_ptr(value):
           value.type.strip_typedefs().target().strip_typedefs().code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION) and \
           len(value.type.strip_typedefs().target().strip_typedefs().fields())==0
 
+def valueaddress_to_ulong(value):
+  if value==None:
+    return None
+  return ctypes.c_ulong(long(value)).value
+
 def stringify_value(value,**kwargs):
   '''Конвертация gdb.Value в строку
-
     Args:
       **enable_additional_text (bool):
         Если True, то будет печататься нечто вроде 
@@ -604,6 +608,7 @@ def stringify_value(value,**kwargs):
     if type_code in (gdb.TYPE_CODE_PTR,) and not enable_additional_text:
       return hex(ctypes.c_ulong(long(value)).value)[:-1]
     else:
+      #например, если делать unicode или str для `.*char *`, то память будет читаться дважды.
       return unicode(value)
   except gdb.error:
     return "unavailable"
@@ -615,6 +620,7 @@ def stringify_value_safe(*args,**kwargs):
     return 'Cannot access memory'
 
 
+
 class LocalVarsWindow(BaseWindow):
   ''' Representation of window with localvars of current frame
   '''
@@ -623,6 +629,7 @@ class LocalVarsWindow(BaseWindow):
   startcmd='mcgdb open localvars'
 
   def __init__(self, **kwargs):
+    self.clear_caches()
     super(LocalVarsWindow,self).__init__(**kwargs)
     self.window_event_handlers.update({
       'onclick_data'    : self._onclick_data,
@@ -650,6 +657,10 @@ class LocalVarsWindow(BaseWindow):
       reg=reg.split()
       if len(reg)>0 and reg[0] and reg[0]!="''" and len(reg[0])>0:
         self.regnames.append('$'+reg[0])
+
+  def clear_caches(self):
+    self.value_cache={}
+    self.value_str_cache={}
 
   def process_connection(self):
     rc=super(LocalVarsWindow,self).process_connection()
@@ -714,7 +725,7 @@ class LocalVarsWindow(BaseWindow):
       return None
     path=pkg['data']['path']
     user_input = pkg['user_input']
-    value=gdb.parse_and_eval(path)
+    value=self.valcache(path)
     if value.type.strip_typedefs().code in (gdb.TYPE_CODE_INT,gdb.TYPE_CODE_PTR):
       try:
         new_value=long(gdb.parse_and_eval(user_input))
@@ -776,16 +787,6 @@ class LocalVarsWindow(BaseWindow):
     else:
       return [{'cmd':'shellcmd','cmdname':'frame'}]
 
-
-  def gdb_inferior_stop(self):
-    pass
-  def gdb_inferior_exited(self):
-    pass
-  def gdb_new_objfile(self):
-    pass
-  def gdb_update_current_frame(self,filename,line):
-    pass
-
   def update_localvars(self):
     lvars=self._get_local_vars()
     pkg={'cmd':'localvars','table':lvars}
@@ -837,6 +838,75 @@ class LocalVarsWindow(BaseWindow):
     #  res=[]
     return res
 
+  def add_valcache_byaddr(self,value):
+    addr=valueaddress_to_ulong(value.address)
+    if addr==None:
+      return False
+    key=(addr,str(value.type))
+    self.value_cache[key]=value
+    return True
+
+  def get_this_frame_num(self):
+    frame=gdb.selected_frame()
+    if frame==None:
+      return None
+    cnt=0
+    while frame:
+      cnt+=1
+      frame=frame.newer()
+    return cnt
+
+  def cached_stringify_value(self,value,path,**kwargs):
+    frnum=self.get_this_frame_num()
+    if frnum==None:
+      valcache=None
+    else:
+      key=(frnum,path)
+      valcache=self.value_str_cache.get(key)
+    if valcache==None:
+      valcache=stringify_value_safe(value,**kwargs)
+      self.value_str_cache[key]=valcache
+    return valcache
+
+
+  def valcache(self,value_or_path,**kwargs):
+    '''return value from cache if exists else return argument value'''
+    if type(value_or_path) is str:
+      path=value_or_path
+      frnum=self.get_this_frame_num()
+      if frnum==None:
+        valcache1=None
+      else:
+        key=(frnum,path)
+        valcache1=self.value_str_cache.get(key)
+      if valcache1==None:
+        valcache1=gdb.parse_and_eval(path)
+        self.value_cache[key]=valcache1
+        self.add_valcache_byaddr(valcache1)
+    else:
+      value=value_or_path
+      addr=valueaddress_to_ulong(value.address)
+      if addr==None:
+        return value
+      key=(addr,str(value.type))
+      valcache1=self.value_cache.get(key)
+      if valcache1==None:
+        self.add_valcache_byaddr(value)
+        valcache1=value
+    return valcache1
+
+  def valcache_unicode(self,value):
+    addr=valueaddress_to_ulong(value.address)
+    if addr==None:
+      return unicode(value)
+    key=(addr,str(value.type))
+    cacheval=self.value_cache_unicode.get(key)
+    if cacheval==None:
+      cacheval=unicode(value)
+      self.value_cache_unicode[key]=cacheval
+    return cacheval
+
+
   def make_subarray_name(self,value,valuepath,**kwargs):
     funcname = kwargs.get('funcname')
     n1,n2=self.user_slice.get((funcname,valuepath),(0,2))
@@ -845,6 +915,22 @@ class LocalVarsWindow(BaseWindow):
     [{'str':')','name':'varname'}]+\
     [self.make_slice_chunk(n1,n2,valuepath,funcname)]
     return chunks
+
+  def is_array_fetchable(self,arr,n1,n2):
+    '''Данная функция возвращает True, если элементы массива с номерами [n1,n2] включая концы
+        доступны для чтения. False в противном случае.
+        Прочитанные (fetch_lazy) значения массива будут сохранены в кэш.
+    '''
+    try:
+      self.valcache(arr[n1]).fetch_lazy()
+      if n2==None:
+        return True
+      self.valcache(arr[n2]).fetch_lazy()
+      for i in range(n1+1,n2):
+        self.valcache(arr[i]).fetch_lazy()
+    except gdb.MemoryError:
+      return False
+    return True
 
   def array_to_chunks (self, value, name, n1, n2, path, deref_depth, **kwargs):
     ''' Конвертация массива или указателя, который указывает на массив в json-дерево.
@@ -920,7 +1006,8 @@ class LocalVarsWindow(BaseWindow):
 
     arr_elem_size=deref_value.type.strip_typedefs().sizeof
     arr_size=n2-n1+1 if n2!=None else 1
-    if value_addr==None or self.possible_read_memory(value_addr,arr_elem_size*arr_size):
+    #if value_addr==None or self.possible_read_memory(value_addr,arr_elem_size*arr_size):
+    if value_addr==None or self.is_array_fetchable(value,n1,n2):
       if 'delimiter' in kwargs:
         delimiter=kwargs['delimiter']
       else:
@@ -930,12 +1017,8 @@ class LocalVarsWindow(BaseWindow):
           delimiter={'str':',\n'}
       for i in range(n1,n22):
         path_idx = '{path}[{idx}]'.format(path=path,idx=i)
-        try:
-          value_idx = value[i]
-          value_idx_name = name_lambda(value_idx,path_idx,**kwargs)
-        except gdb.MemoryError:
-          memory_error_idx=i
-          break
+        value_idx = self.valcache(value[i])
+        value_idx_name = name_lambda(value_idx,path_idx,**kwargs)
         if elem_as_array:
           array_data_chunks+=self.pointer_data_to_chunks(value_idx,value_idx_name,path_idx,deref_depth,**kwargs)
         else:
@@ -1025,10 +1108,13 @@ class LocalVarsWindow(BaseWindow):
     return chunks
 
   def changable_value_to_chunks(self,value,path,**kwargs):
-    valuestr  = stringify_value_safe(value,**kwargs)
+    if kwargs.get('enable_additional_text',False)==True:
+      valuestr  = self.cached_stringify_value(value,path,**kwargs)
+    else:
+      valuestr  = stringify_value(value,**kwargs)
     if 'proposed_text' not in kwargs:
       kwargs['enable_additional_text']=False
-      strvalue_pure=stringify_value_safe(value,**kwargs)
+      strvalue_pure=stringify_value(value,**kwargs)
       kwargs['proposed_text'] = strvalue_pure
     valuetype1 = str(value.type)
     valuetype2 = str(value.type.strip_typedefs())
@@ -1061,10 +1147,10 @@ class LocalVarsWindow(BaseWindow):
       chunks+=self.name_to_chunks(name)
     funcname=kwargs.get('funcname')
     valueloc=(funcname,path)
-    try:
-      value_addr = value.address
-    except gdb.MemoryError:
-      value_addr=None
+    #try:
+    value_addr = value.address
+    #except gdb.MemoryError:
+    #  value_addr=None
     is_already_deref = value_addr!=None and value_addr in already_deref
     max_deref_depth = kwargs.get('max_deref_depth',3)
     if  max_deref_depth!=None and \
@@ -1080,7 +1166,7 @@ class LocalVarsWindow(BaseWindow):
     data_chunks=[]
     for field in value.type.strip_typedefs().fields():
       field_name = field.name
-      field_value = value[field_name]
+      field_value = self.valcache(value[field_name])
       value_path='{path}.{field_name}'.format(path=path,field_name=field_name)
       data_chunks+=self.value_to_chunks_1(field_value,field_name,value_path,deref_depth,**kwargs)
       data_chunks.append({'str':'\n'})
@@ -1132,7 +1218,7 @@ class LocalVarsWindow(BaseWindow):
   def value_withstr_to_chunks(self,value,name,path,deref_depth,**kwargs):
     chunks=[]
     chunks+=self.name_to_chunks(name)
-    chunks.append({'str':stringify_value_safe(value,enable_additional_text=True), 'name':'varvalue'})
+    chunks.append({'str':self.cached_stringify_value(value,path,enable_additional_text=True), 'name':'varvalue'})
     #chunks+=self.value_to_str_chunks(value,path,enable_additional_text=True,**kwargs)
     return chunks
 
@@ -1306,8 +1392,6 @@ class LocalVarsWindow(BaseWindow):
         if len(pointer_data_chunks) > 0:
           chunks+=[{'str':'\n'}]
           chunks+=pointer_data_chunks
-
-
     else:
       if  name!=None:
         chunks+=self.value_type_to_chunks(value,**kwargs)
@@ -1350,7 +1434,6 @@ class LocalVarsWindow(BaseWindow):
     lvars=[]
     funcname=self._get_frame_funcname(gdb.selected_frame())
     for name,value in variables.iteritems():
-      #kwargs={}
       chunks = self.value_to_chunks(value,name,funcname=funcname)
       check_chunks(chunks)
       col = {'chunks':chunks}
@@ -1376,7 +1459,7 @@ class LocalVarsWindow(BaseWindow):
         if (symbol.is_argument or symbol.is_variable):
             name = symbol.name
             if name not in variables:
-              variables[name] = symbol.value(frame)
+              variables[name] = self.valcache(symbol.value(frame))
       if block.function:
         break
       block = block.superblock
@@ -1392,9 +1475,9 @@ class LocalVarsWindow(BaseWindow):
       while block:
         for sym in block:
           if sym.is_argument:
-            value = sym.value(frame)
+            value = self.valcache(sym.value(frame))
             args.append(
-              (sym.name,stringify_value_safe(value))
+              (sym.name,stringify_value(value))
             )
         if block.function:
           break
@@ -1474,7 +1557,7 @@ class LocalVarsWindow(BaseWindow):
   def _get_regs_1(self):
     rows_regs=[]
     for regname in self.regnames:
-      regvalue = gdb.parse_and_eval(regname)
+      regvalue = self.valcache(regname)
       try:
         chunks = self.value_to_chunks(regvalue,regname, integer_as_hex=True, disable_dereference=True, max_deref_depth=None)
       except:
@@ -1552,8 +1635,10 @@ class LocalVarsWindow(BaseWindow):
     elif name=='exited':
       self.update_all()
     elif name=='stop':
+      self.clear_caches()
       self.update_all()
     elif name=='new_objfile':
+      self.value_cache={}
       self.update_all()
     elif name=='clear_objfiles':
       self.update_all()
@@ -1562,10 +1647,13 @@ class LocalVarsWindow(BaseWindow):
     elif name=='inferior_call_post':
       pass
     elif name=='memory_changed':
+      self.clear_caches()
       self.update_localvars()
       self.update_registers()
     elif name=='register_changed':
-      pass
+      self.clear_caches()
+      self.update_localvars()
+      self.update_registers()
     elif name=='breakpoint_created':
       pass
     elif name=='breakpoint_modified':
