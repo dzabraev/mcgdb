@@ -30,11 +30,11 @@ class MCGDB_VERSION(object):
 
 
 def get_gdb_version():
-  match=re.match('(\d+)\.(\d+)\.(\d+)?',gdb.VERSION)
+  match=re.match('(\d+)\.(\d+)(\.(\d+))?',gdb.VERSION)
   if not match:
-    return (None,None)
+    return (None,None,None)
   else:
-    major,minor,micro = match.groups()
+    major,minor,micro_dot,micro = match.groups()
     conv=lambda x: int(x) if x!=None else x
     return (conv(major),conv(minor),conv(micro))
 
@@ -1882,6 +1882,7 @@ class McgdbMain(object):
       return
     gdb_print('\nmcgdb version: {major}.{minor}\n'.format(major=MCGDB_VERSION.major,minor=MCGDB_VERSION.minor))
     gdb_print('python version: {major}.{minor}.{micor}\n'.format(major=sys.version_info.major,minor=sys.version_info.minor,micor=sys.version_info.micro))
+    gdb_print('gdb version: {VERSION}\n'.format(VERSION=gdb.VERSION))
     gdb_print('(gdb) ')
     gdb_rfd,gdb_wfd=os.pipe() #Through gdb_[rw]fd main pythread will be send commands to another thread
     self.gdb_wfd=gdb_wfd
