@@ -853,7 +853,12 @@ class LocalVarsWindow(BaseWindow):
     cnt=0
     while frame:
       cnt+=1
-      frame=frame.newer()
+      try:
+        frame=frame.newer()
+      except gdb.error:
+        #if gdb reached remote protocol timeout and can't read registers
+        #then frame can be invalid.
+        return None
     return cnt
 
   def cached_stringify_value(self,value,path,**kwargs):
@@ -871,7 +876,7 @@ class LocalVarsWindow(BaseWindow):
 
   def valcache(self,value_or_path,**kwargs):
     '''return value from cache if exists else return argument value'''
-    if type(value_or_path) is str:
+    if type(value_or_path) in (str,unicode):
       path=value_or_path
       frnum=self.get_this_frame_num()
       if frnum==None:
