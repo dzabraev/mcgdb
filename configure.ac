@@ -1,5 +1,5 @@
 AC_PREREQ([2.69])
-AC_INIT([mcgdb], [1.1], [dzabraew@gmail.com])
+AC_INIT([mcgdb], [1.2], [dzabraew@gmail.com])
 AM_INIT_AUTOMAKE
 AC_OUTPUT(Makefile)
 AC_CONFIG_SRCDIR([tests/myclass.h])
