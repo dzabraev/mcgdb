@@ -105,10 +105,7 @@ def gdb_print(msg):
   gdb.post_event(lambda : gdb.write(msg))
 
 def get_prompt():
-  res=exec_in_main_pythread( gdb.execute, ('show prompt',False,True) )
-  regex=re.compile('''Gdb's prompt is "([^"]+)".''')
-  prompt=regex.match(res).groups()[0]
-  return prompt
+  return gdb.parameter('prompt')
 
 def gdb_stopped_1():
   try:
@@ -1977,7 +1974,7 @@ class McgdbMain(object):
     gdb_print('\nmcgdb version: {major}.{minor}\n'.format(major=MCGDB_VERSION.major,minor=MCGDB_VERSION.minor))
     gdb_print('python version: {major}.{minor}.{micor}\n'.format(major=sys.version_info.major,minor=sys.version_info.minor,micor=sys.version_info.micro))
     gdb_print('gdb version: {VERSION}\n'.format(VERSION=gdb.VERSION))
-    gdb_print('(gdb) ')
+    gdb_print(get_prompt())
     gdb_rfd,gdb_wfd=os.pipe() #Through gdb_[rw]fd main pythread will be send commands to another thread
     self.gdb_wfd=gdb_wfd
     gdb.execute('set pagination off',False,False)
