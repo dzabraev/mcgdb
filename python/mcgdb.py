@@ -879,10 +879,11 @@ class LocalVarsWindow(BaseWindow):
     if type(value_or_path) in (str,unicode):
       path=value_or_path
       frnum=self.get_this_frame_num()
-      if frnum==None:
+      th=gdb.selected_thread()
+      if frnum==None or th==None:
         valcache1=None
       else:
-        key=(frnum,path)
+        key=(frnum,path,th.global_num)
         valcache1=self.value_str_cache.get(key)
       if valcache1==None:
         valcache1=gdb.parse_and_eval(path)
@@ -1643,7 +1644,7 @@ class LocalVarsWindow(BaseWindow):
       self.clear_caches()
       self.update_all()
     elif name=='new_objfile':
-      self.value_cache={}
+      self.clear_caches()
       self.update_all()
     elif name=='clear_objfiles':
       self.update_all()
