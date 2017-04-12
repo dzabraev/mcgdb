@@ -882,11 +882,6 @@ uninstall-am: uninstall-binSCRIPTS uninstall-pkgdataDATA \
 	uninstall-pkgdatapythonDATA
 
 
-#ifndef GDB
-#ifeq ($(GDB),)
-#GDB = gdb
-#endif
-
 python/mcgdb_const.py:
 	echo -n ''                                                          > python/mcgdb_const.py
 	echo "PATH_TO_MC = '$(abs_builddir)/mc/src/mcgdb_mc'"              >> python/mcgdb_const.py
