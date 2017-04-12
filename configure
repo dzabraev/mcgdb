@@ -613,6 +613,7 @@ CPPFLAGS
 LDFLAGS
 CXXFLAGS
 CXX
+GDB
 LTLIBOBJS
 LIBOBJS
 AM_BACKSLASH
@@ -689,6 +690,7 @@ enable_dependency_tracking
       ac_precious_vars='build_alias
 host_alias
 target_alias
+GDB
 CXX
 CXXFLAGS
 LDFLAGS
@@ -1319,6 +1321,7 @@ Optional Features:
                           speeds up one-time build
 
 Some influential environment variables:
+  GDB         set gdb
   CXX         C++ compiler command
   CXXFLAGS    C++ compiler flags
   LDFLAGS     linker flags, e.g. -L<lib dir> if you have libraries in a
@@ -3627,6 +3630,11 @@ fi
 
 ac_config_headers="$ac_config_headers config.h"
 
+
+
+if test "${GDB}x" == "x" ; then
+  GDB=gdb
+fi
 
 ac_config_links="$ac_config_links python/mcgdb.py:python/mcgdb.py defines-mcgdb.gdb:defines-mcgdb.gdb"
 

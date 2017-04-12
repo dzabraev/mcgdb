@@ -24,7 +24,8 @@ startup.gdb :
 
 mcgdb :
 	cp $(srcdir)/mcgdb.in $(builddir)/mcgdb
-	sed "s#STARTUP_SCRIPT=startup.gdb#STARTUP_SCRIPT=$(abs_builddir)/startup.gdb#"  mcgdb -i
+	sed "s#__STARTUP_GDB__#$(abs_builddir)/startup.gdb#"  mcgdb -i
+	sed "s#__GDB__#$(GDB)#" mcgdb -i
 	chmod +x mcgdb
 
 install-exec-hook:

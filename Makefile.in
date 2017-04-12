@@ -249,6 +249,7 @@ ECHO_C = @ECHO_C@
 ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EXEEXT = @EXEEXT@
+GDB = @GDB@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
@@ -881,6 +882,11 @@ uninstall-am: uninstall-binSCRIPTS uninstall-pkgdataDATA \
 	uninstall-pkgdatapythonDATA
 
 
+#ifndef GDB
+#ifeq ($(GDB),)
+#GDB = gdb
+#endif
+
 python/mcgdb_const.py:
 	echo -n ''                                                          > python/mcgdb_const.py
 	echo "PATH_TO_MC = '$(abs_builddir)/mc/src/mcgdb_mc'"              >> python/mcgdb_const.py
@@ -893,7 +899,8 @@ startup.gdb :
 
 mcgdb :
 	cp $(srcdir)/mcgdb.in $(builddir)/mcgdb
-	sed "s#STARTUP_SCRIPT=startup.gdb#STARTUP_SCRIPT=$(abs_builddir)/startup.gdb#"  mcgdb -i
+	sed "s#__STARTUP_GDB__#$(abs_builddir)/startup.gdb#"  mcgdb -i
+	sed "s#__GDB__#$(GDB)#" mcgdb -i
 	chmod +x mcgdb
 
 install-exec-hook:
