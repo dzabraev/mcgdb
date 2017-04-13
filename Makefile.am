@@ -29,14 +29,14 @@ mcgdb :
 	chmod +x mcgdb
 
 install-exec-hook:
-	sed "s#STARTUP_SCRIPT=.*#STARTUP_SCRIPT=$(DESTDIR)$(pkgdatadir)/startup.gdb#"  $(DESTDIR)$(bindir)/mcgdb -i
+	sed "s#STARTUP_SCRIPT=.*#STARTUP_SCRIPT=$(pkgdatadir)/startup.gdb#"  $(DESTDIR)$(bindir)/mcgdb -i
 
 install-data-hook:
 	mkdir -p $(DESTDIR)$(pkgdatadir)
 	mkdir -p $(DESTDIR)$(pkgdatapythondir)
 	echo ''                                                     > $(DESTDIR)$(pkgdatadir)/startup.gdb
-	echo "source $(DESTDIR)$(pkgdatapythondir)/mcgdb_const.py" >> $(DESTDIR)$(pkgdatadir)/startup.gdb
-	echo "source $(DESTDIR)$(pkgdatapythondir)/mcgdb.py"       >> $(DESTDIR)$(pkgdatadir)/startup.gdb
+	echo "source $(pkgdatapythondir)/mcgdb_const.py" >> $(DESTDIR)$(pkgdatadir)/startup.gdb
+	echo "source $(pkgdatapythondir)/mcgdb.py"       >> $(DESTDIR)$(pkgdatadir)/startup.gdb
 	echo -n ''                                                        > $(DESTDIR)$(pkgdatapythondir)/mcgdb_const.py
-	echo "PATH_TO_MC = '$(DESTDIR)$(bindir)/mcgdb_mc'"               >> $(DESTDIR)$(pkgdatapythondir)/mcgdb_const.py
-	echo "PATH_TO_DEFINES_MCGDB = '$(DESTDIR)$(pkgdatadir)/defines-mcgdb.gdb'" >> $(DESTDIR)$(pkgdatapythondir)/mcgdb_const.py
+	echo "PATH_TO_MC = '$(bindir)/mcgdb_mc'"               >> $(DESTDIR)$(pkgdatapythondir)/mcgdb_const.py
+	echo "PATH_TO_DEFINES_MCGDB = '$(pkgdatadir)/defines-mcgdb.gdb'" >> $(DESTDIR)$(pkgdatapythondir)/mcgdb_const.py

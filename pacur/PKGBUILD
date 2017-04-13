@@ -14,46 +14,88 @@ pkgdesclong=(
 )
 maintainer="Maxim Dzabraev <dzabraew@gmail.com>"
 
-arch="all"
+arch="amd64"
 license=("GPLv3")
 section="utils"
 priority="optional"
 url="https://github.com/dzabraev/${pkgname}"
 sources=(
-    "https://github.com/dzabraev/mcgdb/releases/download/${pkgver}/mcgdb-${pkgver}.tar.gz"
+    #"https://github.com/dzabraev/mcgdb/releases/download/${pkgver}/mcgdb-${pkgver}.tar.gz"
+    "https://github.com/dzabraev/mcgdb/archive/master.tar.gz"
 )
 hashsums=(
-    "42abc661c8aec2a9e284a84482184772"
+    #"42abc661c8aec2a9e284a84482184772"
+    "4d262a8b6444b0f146111d2ad8d54b6c"
 )
 
 depends:apt=(
   "libglib2.0-dev"
   "libslang2-dev"
+  "libpython2.7-dev"
+  "python"
 )
 
+
+
+
 build:apt() {
-    wget http://www.digip.org/jansson/releases/jansson-2.10.tar.gz
-    tar xzvf jansson-2.10.tar.gz
-    mkdir obj-jansson
-    cd obj-jansson
+    cd ${srcdir}
+    mkdir -p root
+
+    apt-get -y install texinfo #packages that needed for build only
+    apt-get -y install libglib2.0-dev libslang2-dev libpython2.7-dev python
+
+    wget "https://ftp.gnu.org/gnu/gdb/gdb-7.12.1.tar.xz"
+    tar xvJf "gdb-7.12.1.tar.xz"
+    cd "gdb-7.12.1"
+    mkdir obj
+    cd obj
+    ../configure --with-python=python2 --program-prefix=mcgdb_ --prefix=/usr/bin/mcgdb_aux
+    make -j4
+    cd ${srcdir}
+
+    wget "http://www.digip.org/jansson/releases/jansson-2.10.tar.gz"
+    tar xzvf "jansson-2.10.tar.gz"
+    cd "jansson-2.10"
+    mkdir -p obj
+    cd obj
+    ../configure --disable-shared --prefix=${srcdir}/root
     make -j4
     make install
+    cd ${srcdir}
 
-    apt-get -y install libglib2.0-dev libslang2-dev
-    tar xzvf "mcgdb-${pkgver}.tar.gz"
-    cd "mcgdb-${pkgver}"
-    mkdir obj-mcgdb
-    cd obj-mcgdb
-    ../configure
+#    wget http://ftp.gnome.org/pub/gnome/sources/glib/2.52/glib-2.52.1.tar.xz
+#    tar xvJf glib-2.52.1.tar.xz
+#    cd glib-2.52.1
+#    mkdir obj
+#    cd obj
+#    ../configure --disable-shared --prefix=${srcdir}/root
+#    make -j4
+#    make install
+#    cd ${srcdir}
+
+#    wget http://www.jedsoft.org/releases/slang/slang-2.3.1a.tar.bz2
+#    tar xvjf slang-2.3.1a.tar.bz2
+#    cd slang-2.3.1a
+#    ./configure --disable-shared --prefix=${srcdir}/root
+#    make -j4
+#    make install
+#    cd ${srcdir}
+
+    #tar xzvf "mcgdb-${pkgver}.tar.gz"
+    #cd "mcgdb-${pkgver}"
+    tar xzvf "master.tar.gz"
+    cd mcgdb-master
+    mkdir obj
+    cd obj
+    PKG_CONFIG_PATH=${srcdir}/root/lib/pkgconfig ../configure --prefix=/usr GDB=/usr/bin/mcgdb_aux/bin/mcgdb_gdb
     make -j4
-#    mkdir -p "go/src"
-#    export GOPATH="${srcdir}/go"
-#    mv "${pkgname}-${pkgver}" "go/src"
-#    cd "go/src/${pkgname}-${pkgver}"
-#    go get
-#    go build -a
+    cd ${srcdir}
 }
 
 package() {
+    cd ${srcdir}/gdb-7.12.1/obj
+    make install DESTDIR=${pkgdir}
+    cd ${srcdir}/mcgdb-master/obj
     make install DESTDIR=${pkgdir}
 }
