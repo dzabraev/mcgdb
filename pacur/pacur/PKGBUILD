@@ -2,15 +2,17 @@ targets=(
 #    "archlinux"
 #    "centos"
 #    "debian"
-#    "fedora"
-    "ubuntu"
+    "fedora-22"
+#    "ubuntu"
 )
 pkgname="mcgdb"
 pkgver="1.2"
 pkgrel="1"
 pkgdesc="midnight commander as gdb front end"
 pkgdesclong=(
-    "midnight commander as gdb front end"
+    "mcgdb adds to gdb two additional windows:"
+    "1. current execution position in source code"
+    "2. window with local vars, registers, threads and stack"
 )
 maintainer="Maxim Dzabraev <dzabraew@gmail.com>"
 
@@ -19,31 +21,57 @@ license=("GPLv3")
 section="utils"
 priority="optional"
 url="https://github.com/dzabraev/${pkgname}"
+
 sources=(
-    #"https://github.com/dzabraev/mcgdb/releases/download/${pkgver}/mcgdb-${pkgver}.tar.gz"
     "https://github.com/dzabraev/mcgdb/archive/master.tar.gz"
 )
+
 hashsums=(
-    #"42abc661c8aec2a9e284a84482184772"
-    "4d262a8b6444b0f146111d2ad8d54b6c"
+    "2a92614c0d5bc5c5273d044f83620d53"
 )
 
-depends:apt=(
+
+depends:ubuntu=(
   "libglib2.0-dev"
   "libslang2-dev"
   "libpython2.7-dev"
   "python"
 )
 
+makedepends:ubuntu=(
+  "libglib2.0-dev"
+  "libslang2-dev"
+  "libpython2.7-dev"
+  "python"
+  "texinfo"
+  "g++"
+  "pkg-config"
+)
+
+
+depends:fedora=(
+  "glib2-devel"
+  "slang-devel"
+  "python-devel"
+  "python"
+)
+
+
+makedepends:fedora=(
+  "glib2-devel"
+  "slang-devel"
+  "python-devel"
+  "python"
+  "texinfo"
+  "gcc-c++"
+  "rpm-build"
+)
 
 
 
-build:apt() {
+build() {
     cd ${srcdir}
     mkdir -p root
-
-    apt-get -y install texinfo #packages that needed for build only
-    apt-get -y install libglib2.0-dev libslang2-dev libpython2.7-dev python
 
     wget "https://ftp.gnu.org/gnu/gdb/gdb-7.12.1.tar.xz"
     tar xvJf "gdb-7.12.1.tar.xz"
@@ -64,26 +92,7 @@ build:apt() {
     make install
     cd ${srcdir}
 
-#    wget http://ftp.gnome.org/pub/gnome/sources/glib/2.52/glib-2.52.1.tar.xz
-#    tar xvJf glib-2.52.1.tar.xz
-#    cd glib-2.52.1
-#    mkdir obj
-#    cd obj
-#    ../configure --disable-shared --prefix=${srcdir}/root
-#    make -j4
-#    make install
-#    cd ${srcdir}
 
-#    wget http://www.jedsoft.org/releases/slang/slang-2.3.1a.tar.bz2
-#    tar xvjf slang-2.3.1a.tar.bz2
-#    cd slang-2.3.1a
-#    ./configure --disable-shared --prefix=${srcdir}/root
-#    make -j4
-#    make install
-#    cd ${srcdir}
-
-    #tar xzvf "mcgdb-${pkgver}.tar.gz"
-    #cd "mcgdb-${pkgver}"
     tar xzvf "master.tar.gz"
     cd mcgdb-master
     mkdir obj
