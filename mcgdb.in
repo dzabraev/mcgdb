@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
 STARTUP_SCRIPT=__STARTUP_GDB__
-GDB=__GDB__
+if test "${GDB}x" == "x"; then
+  GDB=__GDB__
+fi
 
 ver=`$GDB --version | head -n 1| sed -r 's/GNU gdb.* ([[:digit:]]+).([[:digit:]]+).*/\1 \2/'`
 major=`echo $ver | awk '{print $1}'`
