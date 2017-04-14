@@ -10,7 +10,7 @@ Move = f6
 MakeDir = f7
 Delete = f8
 Menu = f9
-Quit = f10
+#Quit = f10
 MenuLastSelected = f19
 QuitQuiet = f20
 Find = alt-question
@@ -315,7 +315,7 @@ Replace = f4
 ReplaceContinue = f14
 Complete = alt-tab
 InsertFile = f15
-Quit = f10; esc
+#Quit = f10; esc
 InsertOverwrite = insert
 Help = f1
 # Date =
@@ -362,6 +362,8 @@ SpellCheckCurrentWord = ctrl-p
 # WindowNext =
 # WindowPrev =
 # ExtendedKeyMap =
+Mcgdb_exit = f10; q
+
 
 [viewer]
 Help = f1

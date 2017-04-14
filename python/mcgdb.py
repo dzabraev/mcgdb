@@ -461,7 +461,7 @@ class BaseWindow(object):
 You can try execute this command manually from another terminal.
 stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
   complete_cmd=complete_cmd,rc=rc,stdout=out,stderr=err))
-        gdb_print('''Can't open gui window. execute manually: `{cmd}`'''.format(cmd=cmd))
+        gdb_print('''\nCan't open gui window({type}). execute manually: `{cmd}`\n'''.format(cmd=cmd,type=self.type))
 
   def _editor_next(self,pkg):
     if gdb_stopped():

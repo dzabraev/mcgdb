@@ -346,7 +346,8 @@ enum
     CK_MCGDB_Print,
     CK_MCGDB_Frame_up,
     CK_MCGDB_Frame_down,
-    CK_MCGDB_Finish
+    CK_MCGDB_Finish,
+    CK_MCGDB_Exit,
 };
 
 /*** structures declarations (and typedefs of structures)*****************************************/

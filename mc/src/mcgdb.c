@@ -553,6 +553,7 @@ mcgdb_permissible_key(WEdit * e, int c) {
   }
   edit_translate_key (e, c, &cmd, &ch);
   switch(cmd) {
+    case CK_MCGDB_Exit:
     case CK_Quit:
     case CK_QuitQuiet:
     case CK_Close: /*
@@ -630,6 +631,8 @@ mcgdb_permissible_key(WEdit * e, int c) {
     case CK_MarkColumnScrollDown:
     case CK_MarkColumnParagraphUp:
     case CK_MarkColumnParagraphDown:
+        /* file commands */
+    case CK_EditSyntaxFile:
     /* block commands */
     case CK_BlockSave:
     case CK_BlockShiftLeft:
@@ -738,8 +741,8 @@ mcgdb_cmd_goto_eline (void) {
 gboolean
 mcgdb_available_key (int c) {
   switch (c) {
-    case KEY_F(10):
-      return FALSE;
+    //case KEY_F(10):
+    //  return FALSE;
     default:
       return TRUE;
   }
