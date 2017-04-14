@@ -598,6 +598,11 @@ process_cell_tree_mouse_callbacks (GNode *root, int y, int x) {
           handled=TRUE;
           return handled;
         }
+        free (CHUNK(node)->str);
+        asprintf(&CHUNK(node)->str,"<Wait change: %s>", f);
+        json_decref (CHUNK(node)->onclick_data);
+        CHUNK(node)->onclick_data=NULL;
+        CHUNK(node)->color=EDITOR_NORMAL_COLOR;
       }
       msg_obj = json_object();
       json_object_set_new (msg_obj, "cmd", json_string ("onclick_data"));
