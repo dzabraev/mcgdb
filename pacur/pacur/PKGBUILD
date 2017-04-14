@@ -2,7 +2,7 @@ targets=(
 #    "archlinux"
 #    "centos"
 #    "debian"
-    "fedora-22"
+    "fedora"
 #    "ubuntu"
 )
 pkgname="mcgdb"
@@ -27,7 +27,7 @@ sources=(
 )
 
 hashsums=(
-    "2a92614c0d5bc5c5273d044f83620d53"
+    "fce2709c3aac9d53fff6fdae97be39ce"
 )
 
 
@@ -47,6 +47,35 @@ makedepends:ubuntu=(
   "g++"
   "pkg-config"
 )
+
+
+depends:ubuntu-precise=(
+  "libglib2.0-dev"
+  "libslang2-dev"
+  "python2.7-dev"
+  "python"
+)
+
+makedepends:ubuntu-precise=(
+  "libglib2.0-dev"
+  "libslang2-dev"
+  "python2.7-dev"
+  "python"
+  "texinfo"
+  "g++"
+  "pkg-config"
+)
+
+
+
+
+
+
+
+
+
+
+
 
 
 depends:fedora=(
