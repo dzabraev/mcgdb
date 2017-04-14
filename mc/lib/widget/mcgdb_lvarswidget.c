@@ -574,9 +574,10 @@ get_moset_depth_node_with_yx (GNode *node, int y, int x) {
 }
 
 static gboolean
-process_cell_tree_mouse_callbacks (GNode *root, int y, int x) {
+process_cell_tree_mouse_callbacks (Table *tab, GNode *root, int y, int x) {
   /*x,y являются абсолютными координатами*/
   gboolean handled = FALSE;
+  gboolean insert_wait_text=FALSE;
   GNode * node = get_moset_depth_node_with_yx (root,y,x);
   if (node==NULL)
     node=root;
@@ -598,19 +599,23 @@ process_cell_tree_mouse_callbacks (GNode *root, int y, int x) {
           handled=TRUE;
           return handled;
         }
-        free (CHUNK(node)->str);
-        asprintf(&CHUNK(node)->str,"<Wait change: %s>", f);
-        json_decref (CHUNK(node)->onclick_data);
-        CHUNK(node)->onclick_data=NULL;
-        CHUNK(node)->color=EDITOR_NORMAL_COLOR;
+        insert_wait_text=TRUE;
       }
       msg_obj = json_object();
       json_object_set_new (msg_obj, "cmd", json_string ("onclick_data"));
       json_object_set (msg_obj, "data", onclick_data);
       json_object_set_new (msg_obj, "user_input", json_string (f));
-      g_free (f);
       send_pkg_to_gdb (json_dumps (msg_obj,0));
       json_decref (msg_obj);
+      if (insert_wait_text) {
+        free (CHUNK(node)->str);
+        asprintf(&CHUNK(node)->str,"<Wait change: %s>", f);
+        json_decref (CHUNK(node)->onclick_data);
+        CHUNK(node)->onclick_data=NULL;
+        CHUNK(node)->color=EDITOR_NORMAL_COLOR;
+        tab->redraw|=REDRAW_TAB;
+      }
+      g_free (f);
       handled=TRUE;
       return handled;
     }
@@ -655,22 +660,21 @@ table_process_mouse_click(Table *tab, mouse_event_t * event) {
   message_assert (ncol<tab->ncols);
 
   handled = process_cell_tree_mouse_callbacks(
+    tab,
     TABROW(g_row)->columns[ncol],
     click_y,
     click_x
   );
-  if (handled)
-    return;
 
-  if (tab->cell_callbacks)
+  if (!handled && tab->cell_callbacks)
     handled = tab->cell_callbacks[ncol](row,nrow,ncol);
-    if (handled)
-      return;
 
-  if (tab->row_callback) {
+  if (!handled && tab->row_callback) {
     handled = tab->row_callback(row,nrow,ncol);
-    if (handled)
-      return;
+  }
+
+  if (tab->redraw) {
+    table_draw (tab);
   }
 }
 
