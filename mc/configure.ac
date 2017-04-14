@@ -617,27 +617,6 @@ lib/widget/Makefile
 misc/syntax/Makefile
 misc/syntax/Syntax
 
-doc/Makefile
-
-doc/hints/Makefile
-doc/hints/l10n/Makefile
-
-doc/man/Makefile
-doc/man/es/Makefile
-doc/man/hu/Makefile
-doc/man/it/Makefile
-doc/man/pl/Makefile
-doc/man/ru/Makefile
-doc/man/sr/Makefile
-
-doc/hlp/Makefile
-doc/hlp/es/Makefile
-doc/hlp/hu/Makefile
-doc/hlp/it/Makefile
-doc/hlp/pl/Makefile
-doc/hlp/ru/Makefile
-doc/hlp/sr/Makefile
-
 intl/Makefile
 po/Makefile.in
 ])

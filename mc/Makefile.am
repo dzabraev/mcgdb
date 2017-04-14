@@ -1,7 +1,8 @@
 ## Process this file with automake to create Makefile.in.
 AUTOMAKE_OPTIONS = 1.5
 
-SUBDIRS = intl po lib src contrib misc doc
+SUBDIRS = intl po lib src contrib misc
+
 
 if HAVE_TESTS
     SUBDIRS += tests
