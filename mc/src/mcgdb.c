@@ -118,6 +118,9 @@ get_window_type(json_t *pkg) {
 
 int
 open_gdb_input_fd (void) {
+  /*  open socket and connect to gdb.
+      initialize global variable |gdb_input_fd| 
+  */
   int sockfd;
   struct sockaddr_in serv_addr;
   char buf[100];
@@ -125,12 +128,12 @@ open_gdb_input_fd (void) {
 
   if(mcgdb_listen_port==0) {
     printf("you must specify `--gdb-port port`\n");
-    mcgdb_exit();
+    return FALSE;
   }
   sockfd = socket(AF_INET, SOCK_STREAM, 0);
   if (sockfd < 0) {
     perror("ERROR opening socket");
-    mcgdb_exit();
+    return FALSE;
   }
   memset(&serv_addr, 0, sizeof(serv_addr)); 
   serv_addr.sin_family=AF_INET;
@@ -138,7 +141,7 @@ open_gdb_input_fd (void) {
   serv_addr.sin_port=htons(mcgdb_listen_port);
   if( connect(sockfd,(struct sockaddr *)&serv_addr,sizeof(serv_addr)) < 0) {
     perror("ERROR connect");
-    mcgdb_exit();
+    return FALSE;
   }
   gdb_input_fd=sockfd;
   while (1) {
@@ -166,7 +169,7 @@ open_gdb_input_fd (void) {
     json_decref(pkg);
   }
   json_decref(pkg);
-  return sockfd;
+  return TRUE;
 }
 
 void

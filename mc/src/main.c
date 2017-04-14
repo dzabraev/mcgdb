@@ -222,6 +222,7 @@ main (int argc, char *argv[])
     gboolean config_migrated = FALSE;
     char *config_migrate_msg;
     int exit_code = EXIT_FAILURE;
+    gboolean ok;
 
     mc_global.timer = mc_timer_new ();
 
@@ -245,6 +246,12 @@ main (int argc, char *argv[])
         str_uninit_strings ();
         mc_timer_destroy (mc_global.timer);
         return exit_code;
+    }
+
+    ok = open_gdb_input_fd();
+    if (!ok) {
+      printf("Can't connect to gdb. Type `mcgdb open <type>` in gdb and repaste command.\n");
+      exit(EXIT_FAILURE);
     }
 
     /* do this before mc_args_show_info () to view paths in the --datadir-info output */
