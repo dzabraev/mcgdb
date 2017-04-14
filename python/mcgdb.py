@@ -599,9 +599,18 @@ def stringify_value(value,**kwargs):
   type_code = value.type.strip_typedefs().code
   enable_additional_text=kwargs.get('enable_additional_text',False)
   try:
-    if type_code==gdb.TYPE_CODE_INT and kwargs.get('integer_as_hex') and value.type.strip_typedefs().sizeof<=8:
+    if type_code==gdb.TYPE_CODE_INT and kwargs.get('integer_mode') in ('hex','fullhex','bin') and value.type.strip_typedefs().sizeof<=8:
+      mode=kwargs.get('integer_mode')
+      bitsz=value.type.sizeof*8
       #gdb can't conver value to python-long if sizeof(value) > 8
-      return hex(long(value))[:-1]
+      if mode=='hex':
+        return hex(long(value))[:-1]
+      elif mode=='fullhex':
+        pattern='0x{{:0{hexlen}x}}'.format(hexlen=bitsz/4)
+        return pattern.format(ctypes.c_ulong(long(value)).value)
+      elif mode=='bin':
+        pattern='{{:0{bitlen}b}}'.format(bitlen=bitsz)
+        return pattern.format(ctypes.c_ulong(long(value)).value)
     if type_code in (gdb.TYPE_CODE_PTR,) and not enable_additional_text:
       return hex(ctypes.c_ulong(long(value)).value)[:-1]
     else:
@@ -647,6 +656,7 @@ class LocalVarsWindow(BaseWindow):
     self.regnames=[]
     self.user_slice={}
     self.expand_variable={}
+    #grab register names
     regtab = gdb.execute('maint print registers',False,True).split('\n')[1:]
     for reg in regtab:
       if reg=="*1: Register type's name NULL.":
@@ -962,8 +972,9 @@ class LocalVarsWindow(BaseWindow):
 
     type_code=value.type.strip_typedefs().code
     if name:
-      chunks+=self.value_type_to_chunks(value,**kwargs)
-      chunks.append({'str':' '})
+      if kwargs.get('print_typename',True):
+        chunks+=self.value_type_to_chunks(value,**kwargs)
+        chunks.append({'str':' '})
 
     if type(name) is str:
       slice_chunk = self.make_slice_chunk(n1,n2,path,funcname)
@@ -1092,8 +1103,9 @@ class LocalVarsWindow(BaseWindow):
   def pointer_to_chunks (self, value, name, path, deref_depth, **kwargs):
     chunks=[]
     if name:
-      chunks+=self.value_type_to_chunks(value,**kwargs)
-      chunks.append({'str':' '})
+      if kwargs.get('print_typename',True):
+        chunks+=self.value_type_to_chunks(value,**kwargs)
+        chunks.append({'str':' '})
       chunks+=self.name_to_chunks(name)
     chunks += self.changable_value_to_chunks(value,path,**kwargs)
     return chunks
@@ -1145,8 +1157,9 @@ class LocalVarsWindow(BaseWindow):
     type_code = value.type.strip_typedefs().code
     chunks=[]
     if name:
-      chunks+=self.value_type_to_chunks(value,**kwargs)
-      chunks.append({'str':' '})
+      if kwargs.get('print_typename',True):
+        chunks+=self.value_type_to_chunks(value,**kwargs)
+        chunks.append({'str':' '})
       chunks+=self.name_to_chunks(name)
     funcname=kwargs.get('funcname')
     valueloc=(funcname,path)
@@ -1206,6 +1219,7 @@ class LocalVarsWindow(BaseWindow):
                 список печатать не надо.
             **already_deref (set): множество, состоящее из целых чисел. Кадое число трактуется, как адрес.
                 Для каждого адреса из данного множества разыменование производиться не будет.
+            **print_typename (bool): True-->типы печатаются False-->не печатаются.
     '''
     path=name
     deref_depth=0
@@ -1265,8 +1279,9 @@ class LocalVarsWindow(BaseWindow):
     else:
       func_name='unknown'
     if name:
-      chunks+=self.value_type_to_chunks(value,**kwargs)
-      chunks.append({'str':' '})
+      if kwargs.get('print_typename',True):
+        chunks+=self.value_type_to_chunks(value,**kwargs)
+        chunks.append({'str':' '})
       chunks+=self.name_to_chunks(name)
     #chunks.append({'str':hex(func_addr)[:-1]})
     chunks+=self.changable_value_to_chunks(value,path,**kwargs)
@@ -1347,6 +1362,7 @@ class LocalVarsWindow(BaseWindow):
     type_code = value.type.strip_typedefs().code
     type_str = str(value.type.strip_typedefs())
     funcname=kwargs.get('funcname')
+    print_typename=kwargs.get('print_typename',True)
     if type_code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION):
       chunks+=self.struct_to_chunks(value,name,path,deref_depth,**kwargs)
     elif type_code==gdb.TYPE_CODE_ARRAY:
@@ -1374,8 +1390,9 @@ class LocalVarsWindow(BaseWindow):
       if re.match('.*char \*$',type_str):
         #строку печатаем по-другому в сравнении с обычным pointer
         if name:
-          chunks+=self.value_type_to_chunks(value,**kwargs)
-          chunks.append({'str':' '})
+          if print_typename:
+            chunks+=self.value_type_to_chunks(value,**kwargs)
+            chunks.append({'str':' '})
           chunks+=self.name_to_chunks(name)
         chunks+=self.changable_value_to_chunks(value,path,enable_additional_text=True,**kwargs)
       else:
@@ -1397,7 +1414,8 @@ class LocalVarsWindow(BaseWindow):
           chunks+=pointer_data_chunks
     else:
       if  name!=None:
-        chunks+=self.value_type_to_chunks(value,**kwargs)
+        if print_typename:
+          chunks+=self.value_type_to_chunks(value,**kwargs)
         chunks.append({'str':' '})
         chunks+=self.name_to_chunks(name)
       chunks+=self.changable_value_to_chunks(value,path,**kwargs)
@@ -1557,12 +1575,38 @@ class LocalVarsWindow(BaseWindow):
   def get_stack(self):
     return exec_in_main_pythread (self._get_stack_1,())
 
+  def integer_as_struct_chunks(self,value,name,**kwargs):
+    chunks=[]
+    if kwargs.get('print_typename',True):
+      chunks+=self.value_type_to_chunks(value)
+      chunks.append({'str':' '})
+    chunks+=self.name_to_chunks(name)
+    data_chunks=[]
+    #data_chunks += self.name_to_chunks('hex')
+    data_chunks += self.value_to_chunks(value,'hex', integer_mode='fullhex', disable_dereference=True, max_deref_depth=None, print_typename=False)
+    data_chunks += [{'str':'\n'}]
+    #data_chunks += self.name_to_chunks('bin')
+    data_chunks += self.value_to_chunks(value,'bin', integer_mode='bin',     disable_dereference=True, max_deref_depth=None, print_typename=False)
+    data_chunks += [{'str':'\n'}]
+    chunks.append({'str':'{\n',})
+    chunks+=[{'chunks':data_chunks,'type_code':'TYPE_CODE_STRUCT'}]
+    chunks.append({'str':'}\n',})
+    return chunks
+
   def _get_regs_1(self):
     rows_regs=[]
     for regname in self.regnames:
       regvalue = self.valcache(regname)
+      chunks=[]
       try:
-        chunks = self.value_to_chunks(regvalue,regname, integer_as_hex=True, disable_dereference=True, max_deref_depth=None)
+        if regvalue.type.strip_typedefs().code==gdb.TYPE_CODE_INT:
+          chunks += self.integer_as_struct_chunks(regvalue,regname)
+        else:
+          chunks += self.value_to_chunks(regvalue,regname, integer_mode='hex', disable_dereference=True, max_deref_depth=None)
+        #chunks.append({'str':'\n'})
+        #chunks += self.value_to_chunks(regvalue,regname, integer_mode='fullhex', disable_dereference=True, max_deref_depth=None)
+        #chunks.append({'str':'\n'})
+        #chunks += self.value_to_chunks(regvalue,regname, integer_mode='bin',     disable_dereference=True, max_deref_depth=None)
       except:
         gdb_print(regname+'\n')
         raise
