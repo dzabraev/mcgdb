@@ -315,7 +315,6 @@ Replace = f4
 ReplaceContinue = f14
 Complete = alt-tab
 InsertFile = f15
-#Quit = f10; esc
 InsertOverwrite = insert
 Help = f1
 # Date =
@@ -363,6 +362,7 @@ SpellCheckCurrentWord = ctrl-p
 # WindowPrev =
 # ExtendedKeyMap =
 Mcgdb_exit = f10; q
+Quit = f19
 
 
 [viewer]

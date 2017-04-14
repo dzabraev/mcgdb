@@ -1087,6 +1087,8 @@ wtable_callback (Widget * w, __attribute__((unused)) Widget * sender, widget_msg
           mcgdb_cmd_finish ();
         case 'c':
           mcgdb_cmd_continue ();
+        case KEY_F (10):
+          mcgdb_exit_confirm ();
           break;
         default:
           break;

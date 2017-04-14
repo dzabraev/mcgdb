@@ -75,6 +75,15 @@ mcgdb_exit(void) {
   longjmp (mcgdb_jump_buf, 1);
 }
 
+void
+mcgdb_exit_confirm(void) {
+  int ok;
+  ok = (edit_query_dialog2 (_("Exit"), _("Exit from debug window?"), _("&Yes"), _("&Cancel")) == 0);
+  if (ok)
+    mcgdb_exit ();
+  return;
+}
+
 static enum window_type
 get_window_type(json_t *pkg) {
   json_t *val;
@@ -494,7 +503,7 @@ mcgdb_gdbevt_covert_to_key (void) {
   int d_key;
   switch( event_from_gdb->command ) {
     case MCGDB_FCLOSE:
-      d_key=KEY_F(10);
+      d_key=KEY_F(19); /*this button will be translate into CK_Quit*/
       break;
     default:
       abort ();

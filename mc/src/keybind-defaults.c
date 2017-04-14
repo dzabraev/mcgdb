@@ -346,7 +346,7 @@ static const global_keymap_ini_t default_editor_keymap[] = {
     {"Search", "f7"},
     {"Remove", "f8; ctrl-delete"},
     {"Menu", "f9"},
-    {"Quit", "f10; esc"},
+    {"Quit", "f19"},
     {"UserMenu", "f11"},
     {"SaveAs", "f12; ctrl-f2"},
     {"MarkColumn", "f13"},

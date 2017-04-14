@@ -71,6 +71,8 @@ struct gdb_action {
 
 void mcgdb_error(void);
 void mcgdb_exit(void);
+void mcgdb_exit_confirm(void);
+
 
 static inline int write_all(int fd, const void *buf, size_t count)
 {
