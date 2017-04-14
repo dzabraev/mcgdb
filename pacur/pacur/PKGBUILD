@@ -2,7 +2,7 @@ targets=(
 #    "archlinux"
 #    "centos"
 #    "debian"
-    "fedora"
+    "fedora-22"
 #    "ubuntu"
 )
 pkgname="mcgdb"
@@ -21,13 +21,13 @@ license=("GPLv3")
 section="utils"
 priority="optional"
 url="https://github.com/dzabraev/${pkgname}"
-
+revision="973fb0bbf7ff34c631b5eaab2286b194054fe777"
 sources=(
-    "https://github.com/dzabraev/mcgdb/archive/master.tar.gz"
+    "https://github.com/dzabraev/mcgdb/archive/${revision}.zip"
 )
 
 hashsums=(
-    "fce2709c3aac9d53fff6fdae97be39ce"
+    "806e4d4182adbb614a84c270406cc1be"
 )
 
 
@@ -102,15 +102,6 @@ build() {
     cd ${srcdir}
     mkdir -p root
 
-    wget "https://ftp.gnu.org/gnu/gdb/gdb-7.12.1.tar.xz"
-    tar xvJf "gdb-7.12.1.tar.xz"
-    cd "gdb-7.12.1"
-    mkdir obj
-    cd obj
-    ../configure --with-python=python2 --program-prefix=mcgdb_ --prefix=/usr/bin/mcgdb_aux
-    make -j4
-    cd ${srcdir}
-
     wget "http://www.digip.org/jansson/releases/jansson-2.10.tar.gz"
     tar xzvf "jansson-2.10.tar.gz"
     cd "jansson-2.10"
@@ -121,12 +112,19 @@ build() {
     make install
     cd ${srcdir}
 
-
-    tar xzvf "master.tar.gz"
-    cd mcgdb-master
+    cd "mcgdb-${revision}"
     mkdir obj
     cd obj
     PKG_CONFIG_PATH=${srcdir}/root/lib/pkgconfig ../configure --prefix=/usr GDB=/usr/bin/mcgdb_aux/bin/mcgdb_gdb
+    make -j4
+    cd ${srcdir}
+
+    wget "https://ftp.gnu.org/gnu/gdb/gdb-7.12.1.tar.xz"
+    tar xvJf "gdb-7.12.1.tar.xz"
+    cd "gdb-7.12.1"
+    mkdir obj
+    cd obj
+    ../configure --with-python=python2 --program-prefix=mcgdb_ --prefix=/usr/bin/mcgdb_aux
     make -j4
     cd ${srcdir}
 }
@@ -134,6 +132,6 @@ build() {
 package() {
     cd ${srcdir}/gdb-7.12.1/obj
     make install DESTDIR=${pkgdir}
-    cd ${srcdir}/mcgdb-master/obj
+    cd ${srcdir}/mcgdb-${revision}/obj
     make install DESTDIR=${pkgdir}
 }
