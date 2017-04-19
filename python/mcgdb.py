@@ -599,13 +599,13 @@ def stringify_value(value,**kwargs):
   type_code = value.type.strip_typedefs().code
   enable_additional_text=kwargs.get('enable_additional_text',False)
   try:
-    if type_code==gdb.TYPE_CODE_INT and kwargs.get('integer_mode') in ('hex','fullhex','bin') and value.type.strip_typedefs().sizeof<=8:
+    if type_code==gdb.TYPE_CODE_INT and kwargs.get('integer_mode') in ('dec','hex','bin') and value.type.strip_typedefs().sizeof<=8:
       mode=kwargs.get('integer_mode')
       bitsz=value.type.sizeof*8
       #gdb can't conver value to python-long if sizeof(value) > 8
-      if mode=='hex':
-        return hex(long(value))[:-1]
-      elif mode=='fullhex':
+      if mode=='dec':
+        return str(long(value))
+      elif mode=='hex':
         pattern='0x{{:0{hexlen}x}}'.format(hexlen=bitsz/4)
         return pattern.format(ctypes.c_ulong(long(value)).value)
       elif mode=='bin':
@@ -648,9 +648,10 @@ class LocalVarsWindow(BaseWindow):
       'expand_variable' : self._expand_variable,
       'collapse_variable':self._collapse_variable,
     }
+    self.converters={
+      'bin_to_long' : self.bin_to_long
+    }
     self.regex_split = re.compile('\s*([^\s]+)\s+([^\s+]+)\s+(.*)')
-    #self.slice_type_1=re.compile('^\s*(\d+)\s*$')
-    #self.slice_type_2=re.compile('^\s*(\d+)[:, ](\d+)\s*$')
     self.slice_regex=re.compile('^(-?\d+)([:, ](-?\d+))?$')
 
     self.regnames=[]
@@ -665,6 +666,10 @@ class LocalVarsWindow(BaseWindow):
       if len(reg)>0 and reg[0] and reg[0]!="''" and len(reg[0])>0:
         self.regnames.append('$'+reg[0])
 
+  def bin_to_long(self,str_bin):
+    '''converst string-binary-representation of number to long'''
+    return long(str_bin,2)
+
   def clear_caches(self):
     self.value_cache={}
     self.value_str_cache={}
@@ -677,7 +682,6 @@ class LocalVarsWindow(BaseWindow):
 
 
   def _onclick_data(self,pkg):
-    #gdb_print(str(pkg)+'\n')
     click_cmd = pkg['data']['click_cmd']
     cb=self.click_cmd_cbs.get(click_cmd)
     if cb==None:
@@ -730,10 +734,13 @@ class LocalVarsWindow(BaseWindow):
     if not inferior_alive ():
       self.send_error('inferior not alive')
       return None
-    path=pkg['data']['path']
+    data=pkg['data']
+    path=data['path']
     user_input = pkg['user_input']
     value=self.valcache(path)
-    if value.type.strip_typedefs().code in (gdb.TYPE_CODE_INT,gdb.TYPE_CODE_PTR):
+    if 'converter' in data:
+      new_value = self.converters.get(data['converter'])(user_input)
+    elif value.type.strip_typedefs().code in (gdb.TYPE_CODE_INT,gdb.TYPE_CODE_PTR):
       try:
         new_value=long(gdb.parse_and_eval(user_input))
       except Exception as e:
@@ -750,7 +757,11 @@ class LocalVarsWindow(BaseWindow):
     self.update_all()
 
   def _change_variable(self,pkg):
-    return exec_in_main_pythread(self._change_variable_1, (pkg,))
+    res=exec_in_main_pythread(self._change_variable_1, (pkg,))
+    self.update_all() #обновление будет осуществлятсья всегда, даже в случае
+    #некорректно введенных данных. Поскольку после введения данных у пользователя
+    #отображается <Wait change: ... >, и это сообщение надо заменить предыдущим значением.
+    return res
 
 
   def _select_thread_1(self,nthread):
@@ -1145,6 +1156,8 @@ class LocalVarsWindow(BaseWindow):
       'path':path,
       'input_text': '{type} {path}'.format(path=path,type=valuetype),
     }
+    if 'converter' in kwargs:
+      onclick_data['converter']=kwargs['converter']
     res={'str':valuestr,'name':'varvalue', 'onclick_data':onclick_data, 'onclick_user_input':True}
     if 'proposed_text' in kwargs:
       res['proposed_text']=kwargs['proposed_text']
@@ -1576,17 +1589,24 @@ class LocalVarsWindow(BaseWindow):
     return exec_in_main_pythread (self._get_stack_1,())
 
   def integer_as_struct_chunks(self,value,name,**kwargs):
+    '''Данная функция предназначается для печати целочисленного
+        регистра, как структуру с полями dec,hex,bin
+    '''
     chunks=[]
     if kwargs.get('print_typename',True):
       chunks+=self.value_type_to_chunks(value)
       chunks.append({'str':' '})
     chunks+=self.name_to_chunks(name)
     data_chunks=[]
-    #data_chunks += self.name_to_chunks('hex')
-    data_chunks += self.value_to_chunks(value,'hex', integer_mode='fullhex', disable_dereference=True, max_deref_depth=None, print_typename=False)
+    data_chunks += self.name_to_chunks('dec')
+    data_chunks += self.changable_value_to_chunks(value,name, integer_mode='dec')
     data_chunks += [{'str':'\n'}]
-    #data_chunks += self.name_to_chunks('bin')
-    data_chunks += self.value_to_chunks(value,'bin', integer_mode='bin',     disable_dereference=True, max_deref_depth=None, print_typename=False)
+    data_chunks += self.name_to_chunks('hex')
+    data_chunks += self.changable_value_to_chunks(value,name, integer_mode='hex')
+    data_chunks += [{'str':'\n'}]
+    data_chunks += self.name_to_chunks('bin')
+    data_chunks += self.changable_value_to_chunks(value,name, integer_mode='bin',converter='bin_to_long')
+    data_chunks += [{'str':'\n'}]
     data_chunks += [{'str':'\n'}]
     chunks.append({'str':'{\n',})
     chunks+=[{'chunks':data_chunks,'type_code':'TYPE_CODE_STRUCT'}]
@@ -1603,10 +1623,6 @@ class LocalVarsWindow(BaseWindow):
           chunks += self.integer_as_struct_chunks(regvalue,regname)
         else:
           chunks += self.value_to_chunks(regvalue,regname, integer_mode='hex', disable_dereference=True, max_deref_depth=None)
-        #chunks.append({'str':'\n'})
-        #chunks += self.value_to_chunks(regvalue,regname, integer_mode='fullhex', disable_dereference=True, max_deref_depth=None)
-        #chunks.append({'str':'\n'})
-        #chunks += self.value_to_chunks(regvalue,regname, integer_mode='bin',     disable_dereference=True, max_deref_depth=None)
       except:
         gdb_print(regname+'\n')
         raise
