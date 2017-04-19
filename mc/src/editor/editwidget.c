@@ -581,15 +581,15 @@ static inline void
 edit_set_buttonbar (WEdit * edit, WButtonBar * bb)
 {
     buttonbar_set_label (bb, 1, Q_ ("ButtonBar|Help"), editor_map, NULL);
-    buttonbar_set_label (bb, 2, Q_ ("ButtonBar|Save"), editor_map, WIDGET (edit));
+    //buttonbar_set_label (bb, 2, Q_ ("ButtonBar|Save"), editor_map, WIDGET (edit));
     buttonbar_set_label (bb, 3, Q_ ("ButtonBar|Mark"), editor_map, WIDGET (edit));
-    buttonbar_set_label (bb, 4, Q_ ("ButtonBar|Replac"), editor_map, WIDGET (edit));
-    buttonbar_set_label (bb, 5, Q_ ("ButtonBar|Copy"), editor_map, WIDGET (edit));
-    buttonbar_set_label (bb, 6, Q_ ("ButtonBar|Move"), editor_map, WIDGET (edit));
+    //buttonbar_set_label (bb, 4, Q_ ("ButtonBar|Replac"), editor_map, WIDGET (edit));
+    //buttonbar_set_label (bb, 5, Q_ ("ButtonBar|Copy"), editor_map, WIDGET (edit));
+    //buttonbar_set_label (bb, 6, Q_ ("ButtonBar|Move"), editor_map, WIDGET (edit));
     buttonbar_set_label (bb, 7, Q_ ("ButtonBar|Search"), editor_map, WIDGET (edit));
-    buttonbar_set_label (bb, 8, Q_ ("ButtonBar|Delete"), editor_map, WIDGET (edit));
+    //buttonbar_set_label (bb, 8, Q_ ("ButtonBar|Delete"), editor_map, WIDGET (edit));
     buttonbar_set_label (bb, 9, Q_ ("ButtonBar|PullDn"), editor_map, NULL);
-    buttonbar_set_label (bb, 10, Q_ ("ButtonBar|Quit"), editor_map, NULL);
+    //buttonbar_set_label (bb, 19, Q_ ("ButtonBar|Quit"), editor_map, NULL);
 }
 
 /* --------------------------------------------------------------------------------------------- */

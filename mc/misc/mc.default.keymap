@@ -361,7 +361,7 @@ SpellCheckCurrentWord = ctrl-p
 # WindowNext =
 # WindowPrev =
 # ExtendedKeyMap =
-Mcgdb_exit = f10; q
+Mcgdb_exit = f10;
 Quit = f19
 
 
