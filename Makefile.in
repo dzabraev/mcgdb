@@ -83,8 +83,7 @@ subdir = .
 DIST_COMMON = INSTALL NEWS README AUTHORS ChangeLog \
 	$(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/configure $(am__configure_deps) \
-	$(srcdir)/config.h.in $(top_srcdir)/python/mcgdb.py \
-	$(srcdir)/defines-mcgdb.gdb \
+	$(srcdir)/config.h.in $(srcdir)/defines-mcgdb.gdb \
 	$(top_srcdir)/distribution/do_checkinstall.sh COPYING compile \
 	depcomp install-sh missing
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -96,7 +95,7 @@ am__CONFIG_DISTCLEAN_FILES = config.status config.cache config.log \
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = config.h
 CONFIG_CLEAN_FILES = do_checkinstall.sh
-CONFIG_CLEAN_VPATH_FILES = python/mcgdb.py defines-mcgdb.gdb
+CONFIG_CLEAN_VPATH_FILES = defines-mcgdb.gdb
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
     $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
@@ -124,8 +123,7 @@ am__uninstall_files_from_dir = { \
     || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
          $(am__cd) "$$dir" && rm -f $$files; }; \
   }
-am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkgdatadir)" \
-	"$(DESTDIR)$(pkgdatapythondir)"
+am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkgdatadir)"
 SCRIPTS = $(bin_SCRIPTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
@@ -154,7 +152,7 @@ am__can_run_installinfo = \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
-DATA = $(pkgdata_DATA) $(pkgdatapython_DATA)
+DATA = $(pkgdata_DATA)
 RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
   distclean-recursive maintainer-clean-recursive
 am__recursive_targets = \
@@ -322,8 +320,7 @@ pkgdatapythondir = $(datadir)/@PACKAGE@/python
 SUBDIRS = mc
 bin_SCRIPTS = mcgdb
 pkgdata_DATA = defines-mcgdb.gdb  startup.gdb
-pkgdatapython_DATA = python/mcgdb.py python/mcgdb_const.py
-EXTRA_DIST = mcgdb.in
+EXTRA_DIST = mcgdb.in startup.gdb.in
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-recursive
 
@@ -433,27 +430,6 @@ uninstall-pkgdataDATA:
 	@list='$(pkgdata_DATA)'; test -n "$(pkgdatadir)" || list=; \
 	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
 	dir='$(DESTDIR)$(pkgdatadir)'; $(am__uninstall_files_from_dir)
-install-pkgdatapythonDATA: $(pkgdatapython_DATA)
-	@$(NORMAL_INSTALL)
-	@list='$(pkgdatapython_DATA)'; test -n "$(pkgdatapythondir)" || list=; \
-	if test -n "$$list"; then \
-	  echo " $(MKDIR_P) '$(DESTDIR)$(pkgdatapythondir)'"; \
-	  $(MKDIR_P) "$(DESTDIR)$(pkgdatapythondir)" || exit 1; \
-	fi; \
-	for p in $$list; do \
-	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
-	  echo "$$d$$p"; \
-	done | $(am__base_list) | \
-	while read files; do \
-	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(pkgdatapythondir)'"; \
-	  $(INSTALL_DATA) $$files "$(DESTDIR)$(pkgdatapythondir)" || exit $$?; \
-	done
-
-uninstall-pkgdatapythonDATA:
-	@$(NORMAL_UNINSTALL)
-	@list='$(pkgdatapython_DATA)'; test -n "$(pkgdatapythondir)" || list=; \
-	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
-	dir='$(DESTDIR)$(pkgdatapythondir)'; $(am__uninstall_files_from_dir)
 
 # This directory's subdirectories are mostly independent; you can cd
 # into them and run 'make' without going through this Makefile.
@@ -754,7 +730,7 @@ check: check-recursive
 all-am: Makefile $(SCRIPTS) $(DATA) config.h
 installdirs: installdirs-recursive
 installdirs-am:
-	for dir in "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkgdatadir)" "$(DESTDIR)$(pkgdatapythondir)"; do \
+	for dir in "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkgdatadir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-recursive
@@ -808,7 +784,7 @@ info: info-recursive
 
 info-am:
 
-install-data-am: install-pkgdataDATA install-pkgdatapythonDATA
+install-data-am: install-pkgdataDATA
 	@$(NORMAL_INSTALL)
 	$(MAKE) $(AM_MAKEFLAGS) install-data-hook
 install-dvi: install-dvi-recursive
@@ -816,8 +792,7 @@ install-dvi: install-dvi-recursive
 install-dvi-am:
 
 install-exec-am: install-binSCRIPTS
-	@$(NORMAL_INSTALL)
-	$(MAKE) $(AM_MAKEFLAGS) install-exec-hook
+
 install-html: install-html-recursive
 
 install-html-am:
@@ -856,11 +831,10 @@ ps: ps-recursive
 
 ps-am:
 
-uninstall-am: uninstall-binSCRIPTS uninstall-pkgdataDATA \
-	uninstall-pkgdatapythonDATA
+uninstall-am: uninstall-binSCRIPTS uninstall-pkgdataDATA
 
 .MAKE: $(am__recursive_targets) all install-am install-data-am \
-	install-exec-am install-strip
+	install-strip
 
 .PHONY: $(am__recursive_targets) CTAGS GTAGS TAGS all all-am \
 	am--refresh check check-am clean clean-cscope clean-generic \
@@ -871,45 +845,62 @@ uninstall-am: uninstall-binSCRIPTS uninstall-pkgdataDATA \
 	dvi-am html html-am info info-am install install-am \
 	install-binSCRIPTS install-data install-data-am \
 	install-data-hook install-dvi install-dvi-am install-exec \
-	install-exec-am install-exec-hook install-html install-html-am \
-	install-info install-info-am install-man install-pdf \
-	install-pdf-am install-pkgdataDATA install-pkgdatapythonDATA \
-	install-ps install-ps-am install-strip installcheck \
-	installcheck-am installdirs installdirs-am maintainer-clean \
-	maintainer-clean-generic mostlyclean mostlyclean-generic pdf \
-	pdf-am ps ps-am tags tags-am uninstall uninstall-am \
-	uninstall-binSCRIPTS uninstall-pkgdataDATA \
-	uninstall-pkgdatapythonDATA
+	install-exec-am install-html install-html-am install-info \
+	install-info-am install-man install-pdf install-pdf-am \
+	install-pkgdataDATA install-ps install-ps-am install-strip \
+	installcheck installcheck-am installdirs installdirs-am \
+	maintainer-clean maintainer-clean-generic mostlyclean \
+	mostlyclean-generic pdf pdf-am ps ps-am tags tags-am uninstall \
+	uninstall-am uninstall-binSCRIPTS uninstall-pkgdataDATA
 
 
-python/mcgdb_const.py:
-	echo -n ''                                                          > python/mcgdb_const.py
-	echo "PATH_TO_MC = '$(abs_builddir)/mc/src/mcgdb_mc'"              >> python/mcgdb_const.py
-	echo "PATH_TO_DEFINES_MCGDB = '$(abs_builddir)/defines-mcgdb.gdb'" >> python/mcgdb_const.py
+.PHONY:mcgdb-python-build
+mcgdb-python-build:
+	mkdir -p $(abs_builddir)/python/mcgdb
+	ln -s $(srcdir)/python/mcgdb/srcwin.py $(abs_builddir)/python/mcgdb/srcwin.py
+	ln -s $(srcdir)/python/mcgdb/asmwin.py $(abs_builddir)/python/mcgdb/asmwin.py
+	ln -s $(srcdir)/python/mcgdb/auxwin.py $(abs_builddir)/python/mcgdb/auxwin.py
+	ln -s $(srcdir)/python/mcgdb/basewin.py $(abs_builddir)/python/mcgdb/basewin.py
+	ln -s $(srcdir)/python/mcgdb/commands.py $(abs_builddir)/python/mcgdb/commands.py
+	ln -s $(srcdir)/python/mcgdb/common.py $(abs_builddir)/python/mcgdb/common.py
+	ln -s $(srcdir)/python/mcgdb/__init__.py $(abs_builddir)/python/mcgdb/__init__.py
+	sed "s#__PATH_TO_DEFINES_MCGDB__#$(abs_builddir)/defines-mcgdb.gdb#"  $(abs_builddir)/python/mcgdb/__init__.py -i
+	sed "s#__PATH_TO_MC__#$(abs_builddir)/mc/src/mcgdb_mc#"               $(abs_builddir)/python/mcgdb/__init__.py -i
+
+all : mcgdb-python-build
+
+.PHONY:mcgdb-python-install
+mcgdb-python-install:
+	mkdir -p $(DESTDIR)$(pkgdatapythondir)
+	cp -r $(srcdir)/python/mcgdb $(DESTDIR)$(pkgdatapythondir)
+	sed "s#__PATH_TO_DEFINES_MCGDB__#$(pkgdatadir)/defines-mcgdb.gdb#"  $(pkgdatapythondir)/mcgdb/__init__.py -i
+	sed "s#__PATH_TO_MC__#$(bindir)/mcgdb_mc#"                            $(pkgdatapythondir)/mcgdb/__init__.py -i
 
 startup.gdb :
-	echo '' > startup.gdb
-	echo "source $(abs_builddir)/python/mcgdb_const.py" >> startup.gdb
-	echo "source $(abs_builddir)/python/mcgdb.py"       >> startup.gdb
+	cp $(srcdir)/startup.gdb.in $(abs_builddir)/startup.gdb
+	sed 's#__MCGDB_PYTHON_PATH__#$(abs_builddir)/python#' $(abs_builddir)/startup.gdb -i
+
+startup.gdb-install :
+	cp $(srcdir)/startup.gdb.in $(DESTDIR)$(pkgdatadir)/startup.gdb
+	sed 's#__MCGDB_PYTHON_PATH__#$(pkgdatapythondir)#' $(DESTDIR)$(pkgdatadir)/startup.gdb -i
 
 mcgdb :
 	cp $(srcdir)/mcgdb.in $(builddir)/mcgdb
-	sed "s#__STARTUP_GDB__#$(abs_builddir)/startup.gdb#"  mcgdb -i
-	sed "s#__GDB__#$(GDB)#" mcgdb -i
-	chmod +x mcgdb
+	sed "s#__STARTUP_GDB__#$(abs_builddir)/startup.gdb#"  $(builddir)/mcgdb -i
+	sed "s#__GDB__#$(GDB)#" $(builddir)/mcgdb -i
+	chmod +x $(builddir)/mcgdb
 
-install-exec-hook:
-	sed "s#STARTUP_SCRIPT=.*#STARTUP_SCRIPT=$(pkgdatadir)/startup.gdb#"  $(DESTDIR)$(bindir)/mcgdb -i
+mcgdb-install :
+	cp $(srcdir)/mcgdb.in $(DESTDIR)$(bindir)/mcgdb
+	sed "s#__STARTUP_GDB__#$(pkgdatadir)/startup.gdb#"  $(DESTDIR)$(bindir)/mcgdb -i
+	sed "s#__GDB__#$(GDB)#" $(DESTDIR)$(bindir)/mcgdb -i
+	chmod +x $(DESTDIR)$(bindir)/mcgdb
 
-install-data-hook:
+.PHONY : create-data-dirs
+create-data-dirs :
 	mkdir -p $(DESTDIR)$(pkgdatadir)
-	mkdir -p $(DESTDIR)$(pkgdatapythondir)
-	echo ''                                                     > $(DESTDIR)$(pkgdatadir)/startup.gdb
-	echo "source $(pkgdatapythondir)/mcgdb_const.py" >> $(DESTDIR)$(pkgdatadir)/startup.gdb
-	echo "source $(pkgdatapythondir)/mcgdb.py"       >> $(DESTDIR)$(pkgdatadir)/startup.gdb
-	echo -n ''                                                        > $(DESTDIR)$(pkgdatapythondir)/mcgdb_const.py
-	echo "PATH_TO_MC = '$(bindir)/mcgdb_mc'"               >> $(DESTDIR)$(pkgdatapythondir)/mcgdb_const.py
-	echo "PATH_TO_DEFINES_MCGDB = '$(pkgdatadir)/defines-mcgdb.gdb'" >> $(DESTDIR)$(pkgdatapythondir)/mcgdb_const.py
+
+install-data-hook : create-data-dirs startup.gdb-install mcgdb-python-install mcgdb-install
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

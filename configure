@@ -3636,7 +3636,7 @@ if test "${GDB}x" == "x" ; then
   GDB=gdb
 fi
 
-ac_config_links="$ac_config_links python/mcgdb.py:python/mcgdb.py defines-mcgdb.gdb:defines-mcgdb.gdb"
+ac_config_links="$ac_config_links defines-mcgdb.gdb:defines-mcgdb.gdb"
 
 ac_config_links="$ac_config_links do_checkinstall.sh:distribution/do_checkinstall.sh"
 
@@ -5814,7 +5814,6 @@ do
   case $ac_config_target in
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
     "config.h") CONFIG_HEADERS="$CONFIG_HEADERS config.h" ;;
-    "python/mcgdb.py") CONFIG_LINKS="$CONFIG_LINKS python/mcgdb.py:python/mcgdb.py" ;;
     "defines-mcgdb.gdb") CONFIG_LINKS="$CONFIG_LINKS defines-mcgdb.gdb:defines-mcgdb.gdb" ;;
     "do_checkinstall.sh") CONFIG_LINKS="$CONFIG_LINKS do_checkinstall.sh:distribution/do_checkinstall.sh" ;;
     "depfiles") CONFIG_COMMANDS="$CONFIG_COMMANDS depfiles" ;;

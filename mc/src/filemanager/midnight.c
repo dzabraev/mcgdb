@@ -1763,10 +1763,10 @@ do_nc (void)
         if (!rc) {
           setup_dummy_mc ();
           switch(mcgdb_wtype) {
-            case MCGDB_MAIN_WINDOW:
+            case MCGDB_SRCWIN:
               ret = mc_maybe_editor_or_viewer ();
               break;
-            case MCGDB_LVARS_WINDOW:
+            case MCGDB_AUXWIN:
               ret = mcgdb_aux_dlg ();
               break;
             default:

@@ -45,10 +45,8 @@ enum gdb_cmd {
 
 enum window_type {
   MCGDB_UNKNOWN_WINDOW_TYPE=0,
-  MCGDB_MAIN_WINDOW,
-  MCGDB_SOURCE_WINDOW,
-  MCGDB_BACKTRACE_WINDOW,
-  MCGDB_LVARS_WINDOW
+  MCGDB_SRCWIN,
+  MCGDB_AUXWIN,
 };
 
 typedef enum  {

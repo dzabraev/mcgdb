@@ -96,17 +96,11 @@ get_window_type(json_t *pkg) {
   }
   else {
     buf=json_string_value(val);
-    if(      STREQ(buf,"main_window") ) {
-      type = MCGDB_MAIN_WINDOW;
+    if(      STREQ(buf,"srcwin") ) {
+      type = MCGDB_SRCWIN;
     }
-    else if( STREQ(buf,"source_window") ) {
-      type = MCGDB_SOURCE_WINDOW;
-    }
-    else if( STREQ(buf,"backtrace_window") ) {
-      type = MCGDB_BACKTRACE_WINDOW;
-    }
-    else if( STREQ(buf,"localvars_window") ) {
-      type = MCGDB_LVARS_WINDOW;
+    else if( STREQ(buf,"auxwin") ) {
+      type = MCGDB_AUXWIN;
     }
     else {
       type = MCGDB_UNKNOWN_WINDOW_TYPE;
