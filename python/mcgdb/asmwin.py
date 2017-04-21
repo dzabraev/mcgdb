@@ -30,7 +30,7 @@ class AsmWin(mcgdb.basewin.BaseWin):
 
   @exec_main
   def get_function_block(self,frame):
-    block=frame.block
+    block=frame.block()
     while block:
       if block.function:
         return block
@@ -90,18 +90,24 @@ class AsmWin(mcgdb.basewin.BaseWin):
       return self.text_chunk('you must select thread')
     arch = frame.architecture()
     disas = arch.disassemble(start_addr,end_addr)
-    disas_chunks=[]
+    rows=[]
     for row in disas:
-      asm=row['asm']
+      asm=row['asm'].split()
+      cmd=asm[0]
+      code=' '.join(asm[1:])
       addr=row['addr']
-      disas_chunks+=[
-        {'str':'0x{:016x}'.format(addr)},
-        {'str':' '},
-        {'str':asm},
-        {'str':'\n'},
-      ]
-    return disas_chunks
+      cols={'columns':[
+        {'chunks':[
+          self.text_chunk('0x{:016x}'.format(addr)),
+          self.text_chunk(cmd.rjust(10),name='asm_op'),
+          self.text_chunk('  '),
+          self.text_chunk(code),
+        ]},
+      ]}
+      rows.append(cols)
+    return rows
 
+  @exec_main
   def update_asm_code(self):
     funcname,start_addr,end_addr = self.get_selected_frame_func()
     #funcname_loc,start_addr_loc,end_addr_loc = self.get_func_addr_by_location(self.location)
@@ -116,11 +122,12 @@ class AsmWin(mcgdb.basewin.BaseWin):
       need_update_asm_code=self.need_redisplay_asm or self.start_addr!=start_addr or self.end_addr!=end_addr
     if need_update_asm_code:
       if not frame:
-        asm_chunks = self.text_chunk('not frame selected')
+        asm_rows = self.text_chunk('not frame selected')
       else:
-        asm_chunks = self.asm_to_chunks()
-      row = {'columns' : [asm_chunks]}
-      table={'rows':[row]}
+        asm_rows = self.asm_to_chunks()
+      #col={'chunks':asm_chunks}
+      #row = {'columns' : [col]}
+      table={'rows':asm_rows, 'draw_vline':False, 'draw_hline':False}
       pkg={'cmd':'table_asm','table':table,}
       self.send(pkg)
     if need_update_cur_pos:

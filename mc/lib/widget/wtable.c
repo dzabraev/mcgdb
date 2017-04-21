@@ -121,6 +121,13 @@ insert_pkg_json_into_table (json_t *json_tab, Table *tab) {
   json_t *json_rows = json_object_get (json_tab, "rows");
   size_t size_rows = json_array_size (json_rows);
   json_t *json_selected_row = json_object_get (json_tab,"selected_row");
+  json_t *draw;
+  if ((draw = json_object_get (json_tab,"draw_vline"))) {
+    tab->draw_vline = json_boolean_value (draw);
+  }
+  if ((draw = json_object_get (json_tab,"draw_hline"))) {
+    tab->draw_hline = json_boolean_value (draw);
+  }
   int selected_row =  json_selected_row ? json_integer_value (json_selected_row) : -1;
   tab->selected_row = selected_row;
   for (size_t i=0;i<size_rows;i++) {
@@ -137,7 +144,7 @@ pkg_table_package(json_t *pkg, WTable *wtab, const char *tabname) {
    * табличных пакетов. Функция вставляет данные из пакета "table_data"
    * в таблицу tabname
    */
-  Table *tab = wtable_get_table(wtab,tabname);
+  Table *tab = wtable_get_table (wtab,tabname);
   table_clear_rows(tab);
   insert_pkg_json_into_table (json_object_get(pkg,"table"), tab);
 }
@@ -278,6 +285,9 @@ json_get_chunk_name (json_t * chunk) {
     else if (!strcmp(name,"parenthesis")) {
       return CHUNKNAME_PARENTHESIS;
     }
+    else if (!strcmp(name,"asm_op")) {
+      return CHUNKNAME_ASM_OP;
+    }
     else {
       return CHUNKNAME_NONE;
     }
@@ -345,6 +355,10 @@ cell_data_new_from_json (json_t * json_chunk) {
     case CHUNKNAME_FRAME_FUNC_NAME:
       data->color = tty_try_alloc_color_pair2 ("cyan", "blue", NULL, FALSE);
       break;
+    case CHUNKNAME_ASM_OP:
+      data->color = tty_try_alloc_color_pair2 ("yellow", "blue", NULL, FALSE);
+      break;
+
     default:
       break;
   }
@@ -593,6 +607,13 @@ table_set_colwidth_formula(Table * tab, int (*formula)(const Table * tab, int nc
   tab->formula = formula;
 }
 
+void
+wtable_set_colwidth_formula(WTable *wtab, const char *tabname, int (*formula)(const Table * tab, int ncol)) {
+  Table *tab = wtable_get_table (wtab,tabname);
+  table_set_colwidth_formula (tab, formula);
+}
+
+
 static void
 tty_setalloc_color (const char *fg, const char *bg, const char * attr, gboolean x) {
   int color = tty_try_alloc_color_pair2 (fg, bg, attr, x);
@@ -836,16 +857,20 @@ table_draw(Table * tab) {
     offset=ROW_OFFSET(tab,0);
     if (offset>TAB_TOP(tab) && offset<=TAB_BOTTOM(tab)) {
       tty_setcolor(EDITOR_NORMAL_COLOR);
-      tty_draw_hline(offset,tab->x,mc_tty_frm[MC_TTY_FRM_HORIZ],tab->cols);
+      if (tab->draw_hline) {
+        tty_draw_hline(offset,tab->x,mc_tty_frm[MC_TTY_FRM_HORIZ],tab->cols);
+        tab->last_row_pos++;
+      }
     }
-    tab->last_row_pos++;
     /*Делаем проход до самой последней строки что бы
      * вычислить координаты начала и конца каждой строки*/
     row = g_list_next (row);
   }
   tty_setcolor(EDITOR_NORMAL_COLOR);
-  for(int i=1;i<tab->ncols;i++) {
-    tty_draw_vline(tab->y,tab->colstart[i],mc_tty_frm[MC_TTY_FRM_VERT],tab->lines);
+  if (tab->draw_vline) {
+    for(int i=1;i<tab->ncols;i++) {
+      tty_draw_vline(tab->y,tab->colstart[i],mc_tty_frm[MC_TTY_FRM_VERT],tab->lines);
+    }
   }
 }
 
@@ -879,6 +904,8 @@ table_new (long ncols) {
   tab = g_new0(Table,1);
   tab->ncols=ncols;
   tab->nrows=0;
+  tab->draw_vline = TRUE;
+  tab->draw_hline = TRUE;
   tab->colstart = (long *)g_new0(long,ncols+1);
   tab->row_offset=0;
   table_set_colwidth_formula(tab,formula_eq_col);

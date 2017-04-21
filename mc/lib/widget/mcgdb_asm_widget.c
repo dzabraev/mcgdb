@@ -38,10 +38,14 @@ static void mcgdb_asm_dialog_mouse_callback (Widget * w, mouse_msg_t msg, mouse_
 static cb_ret_t mcgdb_asm_dialog_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *data);
 static void mcgdb_asm_dialog_gdbevt (WDialog *h);
 
-static void mcgdb_asm_dialog_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
+
+
+static void
+mcgdb_asm_dialog_mouse_callback (__attribute__((unused)) Widget *  w,
+    __attribute__((unused)) mouse_msg_t msg, mouse_event_t * event) {
+  gboolean unhandled = TRUE;
+  event->result.abort = unhandled;
 }
-
-
 
 static void
 mcgdb_asm_dialog_gdbevt (WDialog *h) {
@@ -122,7 +126,7 @@ mcgdb_asm_dlg(void) {
   //int wait_gdb=1;
   //while(wait_gdb) {}
 
-  wtasm = wtable_new (0,0,1,1);
+  wtasm = wtable_new (0,0,LINES,COLS);
   wtable_add_table(wtasm,"asm",1);
   wtable_set_current_table(wtasm, "asm");
   wtable_update_bound(wtasm);

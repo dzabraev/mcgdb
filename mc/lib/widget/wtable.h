@@ -85,6 +85,7 @@ typedef enum chunk_name {
   CHUNKNAME_REGVALUE,
   CHUNKNAME_FRAME_FUNC_NAME,
   CHUNKNAME_PARENTHESIS,
+  CHUNKNAME_ASM_OP,
 } chunk_name_t;
 
 typedef struct celldata {
@@ -120,6 +121,8 @@ typedef struct Table {
   table_row *active_row;
   WTable *wtab;
   int selected_row;
+  gboolean draw_vline;
+  gboolean draw_hline;
 } Table;
 
 
@@ -139,6 +142,7 @@ void     wtable_update_bound (WTable *wtab);
 WTable  *wtable_new (int y, int x, int height, int width);
 void     wtable_add_table(WTable *wtab, const char *tabname, int ncols);
 void     wtable_set_current_table(WTable *wtab, const char *tabname);
+void     wtable_set_colwidth_formula(WTable *wtab, const char *tabname, int (*formula)(const Table * tab, int ncol));
 
 
 #define WTABLE(x) ((WTable *)x)
