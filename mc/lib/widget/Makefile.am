@@ -23,6 +23,6 @@ libmcwidget_la_SOURCES = \
 	widget-common.c widget-common.h \
 	wtools.c wtools.h \
 	mcgdb_lvarswidget.c mcgdb_lvarswidget.h \
-	mcgdb_asm.c mcgdb_asm.h
+	mcgdb_asm_widget.c mcgdb_asm_widget.h
 
 AM_CPPFLAGS = -I$(top_srcdir) $(GLIB_CFLAGS)

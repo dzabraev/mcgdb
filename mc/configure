@@ -718,8 +718,6 @@ ENABLE_VFS_SMB_TRUE
 subdirs
 ENABLE_VFS_SFTP_FALSE
 ENABLE_VFS_SFTP_TRUE
-LIBSSH_LIBS
-LIBSSH_CFLAGS
 ENABLE_VFS_SFS_FALSE
 ENABLE_VFS_SFS_TRUE
 ENABLE_VFS_FTP_FALSE
@@ -790,8 +788,6 @@ GMSGFMT
 MSGFMT
 GETTEXT_MACRO_VERSION
 USE_NLS
-JANSSON_LIBS
-JANSSON_CFLAGS
 LIBOBJS
 HAVE_TEXTMODE_X11_SUPPORT_FALSE
 HAVE_TEXTMODE_X11_SUPPORT_TRUE
@@ -802,12 +798,6 @@ X_CFLAGS
 XMKMF
 PCRE_CPPFLAGS
 PCRE_LIBS
-SLANG_LIBS
-SLANG_CFLAGS
-GMODULE_LIBS
-GMODULE_CFLAGS
-GLIB_LIBS
-GLIB_CFLAGS
 TESTS_LDFLAGS
 HAVE_TESTS_FALSE
 HAVE_TESTS_TRUE
@@ -821,9 +811,6 @@ HAVE_nroff
 RUBY
 PYTHON
 PERL
-PKG_CONFIG_LIBDIR
-PKG_CONFIG_PATH
-PKG_CONFIG
 LT_SYS_LIBRARY_PATH
 OTOOL64
 OTOOL
@@ -1019,22 +1006,7 @@ LIBS
 CPPFLAGS
 CPP
 LT_SYS_LIBRARY_PATH
-PKG_CONFIG
-PKG_CONFIG_PATH
-PKG_CONFIG_LIBDIR
-CHECK_CFLAGS
-CHECK_LIBS
-GLIB_CFLAGS
-GLIB_LIBS
-GMODULE_CFLAGS
-GMODULE_LIBS
-SLANG_CFLAGS
-SLANG_LIBS
 XMKMF
-JANSSON_CFLAGS
-JANSSON_LIBS
-LIBSSH_CFLAGS
-LIBSSH_LIBS
 DOXYGEN_PAPER_SIZE'
 ac_subdirs_all='src/vfs/smbfs/helpers'
 
@@ -1771,31 +1743,7 @@ Some influential environment variables:
   CPP         C preprocessor
   LT_SYS_LIBRARY_PATH
               User-defined run-time library search path.
-  PKG_CONFIG  path to pkg-config utility
-  PKG_CONFIG_PATH
-              directories to add to pkg-config's search path
-  PKG_CONFIG_LIBDIR
-              path overriding pkg-config's built-in search path
-  CHECK_CFLAGS
-              C compiler flags for CHECK, overriding pkg-config
-  CHECK_LIBS  linker flags for CHECK, overriding pkg-config
-  GLIB_CFLAGS C compiler flags for GLIB, overriding pkg-config
-  GLIB_LIBS   linker flags for GLIB, overriding pkg-config
-  GMODULE_CFLAGS
-              C compiler flags for GMODULE, overriding pkg-config
-  GMODULE_LIBS
-              linker flags for GMODULE, overriding pkg-config
-  SLANG_CFLAGS
-              C compiler flags for SLANG, overriding pkg-config
-  SLANG_LIBS  linker flags for SLANG, overriding pkg-config
   XMKMF       Path to xmkmf, Makefile generator for X Window System
-  JANSSON_CFLAGS
-              C compiler flags for JANSSON, overriding pkg-config
-  JANSSON_LIBS
-              linker flags for JANSSON, overriding pkg-config
-  LIBSSH_CFLAGS
-              C compiler flags for LIBSSH, overriding pkg-config
-  LIBSSH_LIBS linker flags for LIBSSH, overriding pkg-config
   DOXYGEN_PAPER_SIZE
               a4wide (default), a4, letter, legal or executive
 
@@ -15112,126 +15060,7 @@ CC=$lt_save_CC
 
 
 
-
-
-
-
-
-
-
-if test "x$ac_cv_env_PKG_CONFIG_set" != "xset"; then
-	if test -n "$ac_tool_prefix"; then
-  # Extract the first word of "${ac_tool_prefix}pkg-config", so it can be a program name with args.
-set dummy ${ac_tool_prefix}pkg-config; ac_word=$2
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
-$as_echo_n "checking for $ac_word... " >&6; }
-if ${ac_cv_path_PKG_CONFIG+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  case $PKG_CONFIG in
-  [\\/]* | ?:[\\/]*)
-  ac_cv_path_PKG_CONFIG="$PKG_CONFIG" # Let the user override the test with a path.
-  ;;
-  *)
-  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-for as_dir in $PATH
-do
-  IFS=$as_save_IFS
-  test -z "$as_dir" && as_dir=.
-    for ac_exec_ext in '' $ac_executable_extensions; do
-  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
-    ac_cv_path_PKG_CONFIG="$as_dir/$ac_word$ac_exec_ext"
-    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
-    break 2
-  fi
-done
-  done
-IFS=$as_save_IFS
-
-  ;;
-esac
-fi
-PKG_CONFIG=$ac_cv_path_PKG_CONFIG
-if test -n "$PKG_CONFIG"; then
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $PKG_CONFIG" >&5
-$as_echo "$PKG_CONFIG" >&6; }
-else
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-fi
-
-
-fi
-if test -z "$ac_cv_path_PKG_CONFIG"; then
-  ac_pt_PKG_CONFIG=$PKG_CONFIG
-  # Extract the first word of "pkg-config", so it can be a program name with args.
-set dummy pkg-config; ac_word=$2
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
-$as_echo_n "checking for $ac_word... " >&6; }
-if ${ac_cv_path_ac_pt_PKG_CONFIG+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  case $ac_pt_PKG_CONFIG in
-  [\\/]* | ?:[\\/]*)
-  ac_cv_path_ac_pt_PKG_CONFIG="$ac_pt_PKG_CONFIG" # Let the user override the test with a path.
-  ;;
-  *)
-  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-for as_dir in $PATH
-do
-  IFS=$as_save_IFS
-  test -z "$as_dir" && as_dir=.
-    for ac_exec_ext in '' $ac_executable_extensions; do
-  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
-    ac_cv_path_ac_pt_PKG_CONFIG="$as_dir/$ac_word$ac_exec_ext"
-    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
-    break 2
-  fi
-done
-  done
-IFS=$as_save_IFS
-
-  ;;
-esac
-fi
-ac_pt_PKG_CONFIG=$ac_cv_path_ac_pt_PKG_CONFIG
-if test -n "$ac_pt_PKG_CONFIG"; then
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_pt_PKG_CONFIG" >&5
-$as_echo "$ac_pt_PKG_CONFIG" >&6; }
-else
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-fi
-
-  if test "x$ac_pt_PKG_CONFIG" = x; then
-    PKG_CONFIG=""
-  else
-    case $cross_compiling:$ac_tool_warned in
-yes:)
-{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
-$as_echo "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
-ac_tool_warned=yes ;;
-esac
-    PKG_CONFIG=$ac_pt_PKG_CONFIG
-  fi
-else
-  PKG_CONFIG="$ac_cv_path_PKG_CONFIG"
-fi
-
-fi
-if test -n "$PKG_CONFIG"; then
-	_pkg_min_version=0.9.0
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking pkg-config is at least version $_pkg_min_version" >&5
-$as_echo_n "checking pkg-config is at least version $_pkg_min_version... " >&6; }
-	if $PKG_CONFIG --atleast-pkgconfig-version $_pkg_min_version; then
-		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-	else
-		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-		PKG_CONFIG=""
-	fi
-fi
+PKG_PROG_PKG_CONFIG
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether ln -s works" >&5
 $as_echo_n "checking whether ln -s works... " >&6; }
@@ -15684,79 +15513,11 @@ fi
 
 
     if test x$enable_tests != xno; then
-
-pkg_failed=no
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for CHECK" >&5
-$as_echo_n "checking for CHECK... " >&6; }
-
-if test -n "$CHECK_CFLAGS"; then
-    pkg_cv_CHECK_CFLAGS="$CHECK_CFLAGS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"check >= 0.9.8\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "check >= 0.9.8") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_CHECK_CFLAGS=`$PKG_CONFIG --cflags "check >= 0.9.8" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-if test -n "$CHECK_LIBS"; then
-    pkg_cv_CHECK_LIBS="$CHECK_LIBS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"check >= 0.9.8\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "check >= 0.9.8") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_CHECK_LIBS=`$PKG_CONFIG --libs "check >= 0.9.8" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-
-
-
-if test $pkg_failed = yes; then
-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-
-if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
-        _pkg_short_errors_supported=yes
-else
-        _pkg_short_errors_supported=no
-fi
-        if test $_pkg_short_errors_supported = yes; then
-	        CHECK_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "check >= 0.9.8" 2>&1`
-        else
-	        CHECK_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "check >= 0.9.8" 2>&1`
-        fi
-	# Put the nasty error message in config.log where it belongs
-	echo "$CHECK_PKG_ERRORS" >&5
-
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: 'Check' utility not found. Check your environment" >&5
-$as_echo "$as_me: WARNING: 'Check' utility not found. Check your environment" >&2;}
-elif test $pkg_failed = untried; then
-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: 'Check' utility not found. Check your environment" >&5
-$as_echo "$as_me: WARNING: 'Check' utility not found. Check your environment" >&2;}
-else
-	CHECK_CFLAGS=$pkg_cv_CHECK_CFLAGS
-	CHECK_LIBS=$pkg_cv_CHECK_LIBS
-        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-	have_check=yes
-fi
+        PKG_CHECK_MODULES(
+            CHECK,
+            check >= 0.9.8,
+            have_check=yes,
+            AC_MSG_WARN(['Check' utility not found. Check your environment]))
 
 
     fi
@@ -15794,77 +15555,7 @@ fi
 
 
     glib_found=no
-
-pkg_failed=no
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for GLIB" >&5
-$as_echo_n "checking for GLIB... " >&6; }
-
-if test -n "$GLIB_CFLAGS"; then
-    pkg_cv_GLIB_CFLAGS="$GLIB_CFLAGS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"glib-2.0 >= 2.26\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "glib-2.0 >= 2.26") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_GLIB_CFLAGS=`$PKG_CONFIG --cflags "glib-2.0 >= 2.26" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-if test -n "$GLIB_LIBS"; then
-    pkg_cv_GLIB_LIBS="$GLIB_LIBS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"glib-2.0 >= 2.26\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "glib-2.0 >= 2.26") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_GLIB_LIBS=`$PKG_CONFIG --libs "glib-2.0 >= 2.26" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-
-
-
-if test $pkg_failed = yes; then
-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-
-if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
-        _pkg_short_errors_supported=yes
-else
-        _pkg_short_errors_supported=no
-fi
-        if test $_pkg_short_errors_supported = yes; then
-	        GLIB_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "glib-2.0 >= 2.26" 2>&1`
-        else
-	        GLIB_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "glib-2.0 >= 2.26" 2>&1`
-        fi
-	# Put the nasty error message in config.log where it belongs
-	echo "$GLIB_PKG_ERRORS" >&5
-
-	:
-elif test $pkg_failed = untried; then
-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-	:
-else
-	GLIB_CFLAGS=$pkg_cv_GLIB_CFLAGS
-	GLIB_LIBS=$pkg_cv_GLIB_LIBS
-        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-	glib_found=yes
-fi
+    PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.26, glib_found=yes, :)
     if test x"$glib_found" = xno; then
         as_fn_error $? "glib-2.0 not found or version too old (must be >= 2.26)" "$LINENO" 5
     fi
@@ -15875,151 +15566,11 @@ fi
     g_module_supported=""
 
     found_gmodule=no
-
-pkg_failed=no
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for GMODULE" >&5
-$as_echo_n "checking for GMODULE... " >&6; }
-
-if test -n "$GMODULE_CFLAGS"; then
-    pkg_cv_GMODULE_CFLAGS="$GMODULE_CFLAGS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"gmodule-no-export-2.0 >= 2.26\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "gmodule-no-export-2.0 >= 2.26") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_GMODULE_CFLAGS=`$PKG_CONFIG --cflags "gmodule-no-export-2.0 >= 2.26" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-if test -n "$GMODULE_LIBS"; then
-    pkg_cv_GMODULE_LIBS="$GMODULE_LIBS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"gmodule-no-export-2.0 >= 2.26\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "gmodule-no-export-2.0 >= 2.26") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_GMODULE_LIBS=`$PKG_CONFIG --libs "gmodule-no-export-2.0 >= 2.26" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-
-
-
-if test $pkg_failed = yes; then
-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-
-if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
-        _pkg_short_errors_supported=yes
-else
-        _pkg_short_errors_supported=no
-fi
-        if test $_pkg_short_errors_supported = yes; then
-	        GMODULE_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "gmodule-no-export-2.0 >= 2.26" 2>&1`
-        else
-	        GMODULE_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "gmodule-no-export-2.0 >= 2.26" 2>&1`
-        fi
-	# Put the nasty error message in config.log where it belongs
-	echo "$GMODULE_PKG_ERRORS" >&5
-
-	:
-elif test $pkg_failed = untried; then
-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-	:
-else
-	GMODULE_CFLAGS=$pkg_cv_GMODULE_CFLAGS
-	GMODULE_LIBS=$pkg_cv_GMODULE_LIBS
-        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-	found_gmodule=yes
-fi
+    PKG_CHECK_MODULES(GMODULE, gmodule-no-export-2.0 >= 2.26, found_gmodule=yes, :)
     if test x"$found_gmodule" = xyes; then
         g_module_supported="gmodule-no-export-2.0"
     else
-
-pkg_failed=no
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for GMODULE" >&5
-$as_echo_n "checking for GMODULE... " >&6; }
-
-if test -n "$GMODULE_CFLAGS"; then
-    pkg_cv_GMODULE_CFLAGS="$GMODULE_CFLAGS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"gmodule-2.0 >= 2.26\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "gmodule-2.0 >= 2.26") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_GMODULE_CFLAGS=`$PKG_CONFIG --cflags "gmodule-2.0 >= 2.26" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-if test -n "$GMODULE_LIBS"; then
-    pkg_cv_GMODULE_LIBS="$GMODULE_LIBS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"gmodule-2.0 >= 2.26\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "gmodule-2.0 >= 2.26") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_GMODULE_LIBS=`$PKG_CONFIG --libs "gmodule-2.0 >= 2.26" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-
-
-
-if test $pkg_failed = yes; then
-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-
-if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
-        _pkg_short_errors_supported=yes
-else
-        _pkg_short_errors_supported=no
-fi
-        if test $_pkg_short_errors_supported = yes; then
-	        GMODULE_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "gmodule-2.0 >= 2.26" 2>&1`
-        else
-	        GMODULE_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "gmodule-2.0 >= 2.26" 2>&1`
-        fi
-	# Put the nasty error message in config.log where it belongs
-	echo "$GMODULE_PKG_ERRORS" >&5
-
-	:
-elif test $pkg_failed = untried; then
-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-	:
-else
-	GMODULE_CFLAGS=$pkg_cv_GMODULE_CFLAGS
-	GMODULE_LIBS=$pkg_cv_GMODULE_LIBS
-        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-	found_gmodule=yes
-fi
+                PKG_CHECK_MODULES(GMODULE, gmodule-2.0 >= 2.26, found_gmodule=yes, :)
         if test x"$found_gmodule" = xyes; then
             g_module_supported="gmodule-2.0"
         fi
@@ -16422,77 +15973,7 @@ fi
 
     else
         found_slang=no
-
-pkg_failed=no
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for SLANG" >&5
-$as_echo_n "checking for SLANG... " >&6; }
-
-if test -n "$SLANG_CFLAGS"; then
-    pkg_cv_SLANG_CFLAGS="$SLANG_CFLAGS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"slang >= 2.0\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "slang >= 2.0") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_SLANG_CFLAGS=`$PKG_CONFIG --cflags "slang >= 2.0" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-if test -n "$SLANG_LIBS"; then
-    pkg_cv_SLANG_LIBS="$SLANG_LIBS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"slang >= 2.0\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "slang >= 2.0") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_SLANG_LIBS=`$PKG_CONFIG --libs "slang >= 2.0" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-
-
-
-if test $pkg_failed = yes; then
-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-
-if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
-        _pkg_short_errors_supported=yes
-else
-        _pkg_short_errors_supported=no
-fi
-        if test $_pkg_short_errors_supported = yes; then
-	        SLANG_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "slang >= 2.0" 2>&1`
-        else
-	        SLANG_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "slang >= 2.0" 2>&1`
-        fi
-	# Put the nasty error message in config.log where it belongs
-	echo "$SLANG_PKG_ERRORS" >&5
-
-	:
-elif test $pkg_failed = untried; then
-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-	:
-else
-	SLANG_CFLAGS=$pkg_cv_SLANG_CFLAGS
-	SLANG_LIBS=$pkg_cv_SLANG_LIBS
-        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-	found_slang=yes
-fi
+        PKG_CHECK_MODULES(SLANG, slang >= 2.0, found_slang=yes, :)
         if test x"$found_slang" = "xyes"; then
             MCLIBS="$pkg_cv_SLANG_LIBS $MCLIBS"
             CPPFLAGS="$pkg_cv_SLANG_CFLAGS $CPPFLAGS"
@@ -19470,79 +18951,12 @@ fi
 done
 
 
-
-pkg_failed=no
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for JANSSON" >&5
-$as_echo_n "checking for JANSSON... " >&6; }
-
-if test -n "$JANSSON_CFLAGS"; then
-    pkg_cv_JANSSON_CFLAGS="$JANSSON_CFLAGS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"jansson\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "jansson") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_JANSSON_CFLAGS=`$PKG_CONFIG --cflags "jansson" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-if test -n "$JANSSON_LIBS"; then
-    pkg_cv_JANSSON_LIBS="$JANSSON_LIBS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"jansson\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "jansson") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_JANSSON_LIBS=`$PKG_CONFIG --libs "jansson" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-
-
-
-if test $pkg_failed = yes; then
-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-
-if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
-        _pkg_short_errors_supported=yes
-else
-        _pkg_short_errors_supported=no
-fi
-        if test $_pkg_short_errors_supported = yes; then
-	        JANSSON_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "jansson" 2>&1`
-        else
-	        JANSSON_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "jansson" 2>&1`
-        fi
-	# Put the nasty error message in config.log where it belongs
-	echo "$JANSSON_PKG_ERRORS" >&5
-
-	as_fn_error $? "Couldn't find jansson library" "$LINENO" 5
-
-elif test $pkg_failed = untried; then
-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-	as_fn_error $? "Couldn't find jansson library" "$LINENO" 5
-
-else
-	JANSSON_CFLAGS=$pkg_cv_JANSSON_CFLAGS
-	JANSSON_LIBS=$pkg_cv_JANSSON_LIBS
-        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-	CFLAGS="$CFLAGS $JANSSON_CFLAGS" LIBS="$LIBS $JANSSON_LIBS"
-fi
+PKG_CHECK_MODULES(
+  JANSSON,
+  jansson,
+  CFLAGS="$CFLAGS $JANSSON_CFLAGS" LIBS="$LIBS $JANSSON_LIBS",
+  AC_MSG_ERROR([Couldn't find jansson library])
+)
 
 
 ac_fn_c_check_header_mongrel "$LINENO" "jansson.h" "ac_cv_header_jansson_h" "$ac_includes_default"
@@ -27713,77 +27127,7 @@ if test "${enable_vfs_sftp+set}" = set; then :
 fi
 
     if test "$enable_vfs" != "no" -a x"$enable_vfs_sftp" != x"no"; then
-
-pkg_failed=no
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for LIBSSH" >&5
-$as_echo_n "checking for LIBSSH... " >&6; }
-
-if test -n "$LIBSSH_CFLAGS"; then
-    pkg_cv_LIBSSH_CFLAGS="$LIBSSH_CFLAGS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libssh2 >= 1.2.5\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "libssh2 >= 1.2.5") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_LIBSSH_CFLAGS=`$PKG_CONFIG --cflags "libssh2 >= 1.2.5" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-if test -n "$LIBSSH_LIBS"; then
-    pkg_cv_LIBSSH_LIBS="$LIBSSH_LIBS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libssh2 >= 1.2.5\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "libssh2 >= 1.2.5") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_LIBSSH_LIBS=`$PKG_CONFIG --libs "libssh2 >= 1.2.5" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-
-
-
-if test $pkg_failed = yes; then
-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-
-if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
-        _pkg_short_errors_supported=yes
-else
-        _pkg_short_errors_supported=no
-fi
-        if test $_pkg_short_errors_supported = yes; then
-	        LIBSSH_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libssh2 >= 1.2.5" 2>&1`
-        else
-	        LIBSSH_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libssh2 >= 1.2.5" 2>&1`
-        fi
-	# Put the nasty error message in config.log where it belongs
-	echo "$LIBSSH_PKG_ERRORS" >&5
-
-	:
-elif test $pkg_failed = untried; then
-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-	:
-else
-	LIBSSH_CFLAGS=$pkg_cv_LIBSSH_CFLAGS
-	LIBSSH_LIBS=$pkg_cv_LIBSSH_LIBS
-        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-	found_libssh=yes
-fi
+        PKG_CHECK_MODULES(LIBSSH, libssh2 >= 1.2.5, found_libssh=yes, :)
         if test x"$found_libssh" = "xyes"; then
 
     if test x"$vfs_flags" = "x" ; then
