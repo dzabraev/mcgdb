@@ -1769,6 +1769,9 @@ do_nc (void)
             case MCGDB_AUXWIN:
               ret = mcgdb_aux_dlg ();
               break;
+            case MCGDB_ASMWIN:
+              ret = mcgdb_asm_dlg ();
+              break;
             default:
               mcgdb_error();
           }

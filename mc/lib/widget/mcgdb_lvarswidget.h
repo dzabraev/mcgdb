@@ -136,6 +136,8 @@ typedef struct WTable
 WTable *find_lvars (WDialog *h);
 gboolean is_mcgdb_aux_dialog(WDialog *h);
 
+void pkg_table_package(json_t *pkg, WTable *wtab, const char *tabname);
+
 #define WTABLE(x) ((WTable *)x)
 #define TABLE(x)  ((Table *)x)
 #define SELBAR_BUTTON(x) ((SelbarButton *)x)

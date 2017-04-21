@@ -24,7 +24,7 @@ class CmdOpenWindow (gdb.Command):
   def __init__ (self):
     super (CmdOpenWindow, self).__init__ ("mcgdb open", gdb.COMMAND_USER)
     self.permissible_options=['--manually']
-    self.types=['src', 'aux']
+    self.types=['src', 'aux','asm']
 
   def invoke (self, arg, from_tty):
     self.dont_repeat()

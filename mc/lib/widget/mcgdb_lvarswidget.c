@@ -153,7 +153,7 @@ insert_pkg_json_into_table (json_t *json_tab, Table *tab) {
   //table_add_offset (tab,0);
 }
 
-static void
+void
 pkg_table_package(json_t *pkg, WTable *wtab, const char *tabname) {
   /* Данная функция предназначена для обработки
    * табличных пакетов. Функция вставляет данные из пакета "table_data"

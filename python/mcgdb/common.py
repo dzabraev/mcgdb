@@ -143,6 +143,10 @@ def error(msg):
   exec_in_main_pythread (logging.error,(msg,))
 
 
+def exec_main(f):
+  def decorated(*args,**kwargs):
+    return exec_in_main_pythread (f,args,kwargs)
+  return decorated
 
 def gdb_stopped_1():
   try:
@@ -367,10 +371,10 @@ breakpoint_queue=BreakpointQueue()
 def inferior_alive ():
   return not gdb.selected_thread()==None
 
-def exec_in_main_pythread(func,args=()):
+def exec_in_main_pythread(func,args=(),kwargs={}):
   #Данную функцию нельзя вызывать более чем из одного потока
   if is_main_thread():
-    return func(*args)
+    return func(*args,**kwargs)
   result = {}
   evt=threading.Event()
 
@@ -416,12 +420,13 @@ class GEThread(object):
     # данного потока заблокируется в ожидании соединения. После детектирования 
     # запроса на установления соединения будет вызван метод window.process_connection
     # и window переместится из self.wait_connection в self.fte
-    import  mcgdb.srcwin, mcgdb.auxwin
+    import  mcgdb.srcwin, mcgdb.auxwin, mcgdb.asmwin
     type=pkg['type']
     manually=pkg.get('manually',False)
     cls={
       'src': mcgdb.srcwin.SrcWin,
       'aux': mcgdb.auxwin.AuxWin,
+      'asm': mcgdb.asmwin.AsmWin,
     }
     WinClsConstr=cls[type]
     if WinClsConstr==None:

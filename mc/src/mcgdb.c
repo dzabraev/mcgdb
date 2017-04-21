@@ -102,6 +102,9 @@ get_window_type(json_t *pkg) {
     else if( STREQ(buf,"auxwin") ) {
       type = MCGDB_AUXWIN;
     }
+    else if( STREQ(buf,"asmwin") ) {
+      type = MCGDB_ASMWIN;
+    }
     else {
       type = MCGDB_UNKNOWN_WINDOW_TYPE;
     }

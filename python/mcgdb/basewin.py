@@ -19,6 +19,11 @@ class BaseWin(object):
                 запустить окно. Данную опцию нужно применять, когда нет возможности запустить граф. окно
                 из gdb. Например, если зайти по ssh на удаленную машину, то не всегда есть возможность
                 запустить gnome-terminal.
+
+        При создании класса, в методе __init__ будет создан процесс, в котором будет запущено
+        графическое окно. Данному окну будет передан порт, который прослушивается в gdb.
+        Графическое окно будет устанавливать соединение с этим портом на адрес 127.0.0.1
+        Данное соединение должно приниматься методом `process_connection`.
     '''
     if not hasattr(self,'window_event_handlers'):
       self.window_event_handlers={}
@@ -31,6 +36,21 @@ class BaseWin(object):
       'editor_frame_down'       :  self._editor_frame_down,
       'editor_finish'           :  self._editor_finish,
     })
+
+    self.gdb_event_cbs = {
+      'cont'                :   self.gdbevt_cont,
+      'exited'              :   self.gdbevt_exited,
+      'stop'                :   self.gdbevt_stop,
+      'new_objfile'         :   self.gdbevt_new_objfile,
+      'clear_objfiles'      :   self.gdbevt_clear_objfiles,
+      'inferior_call_pre'   :   self.gdbevt_inferior_call_pre,
+      'inferior_call_post'  :   self.gdbevt_inferior_call_post,
+      'memory_changed'      :   self.gdbevt_memory_changed,
+      'register_changed'    :   self.gdbevt_register_changed,
+      'breakpoint_created'  :   self.gdbevt_breakpoint_created,
+      'breakpoint_modified' :   self.gdbevt_breakpoint_modified,
+      'breakpoint_deleted'  :   self.gdbevt_breakpoint_deleted,
+    }
 
     mcgdb._dw[self.type]=self #debug
     if os.path.exists(os.path.abspath('~/tmp/mcgdb-debug/core')):
@@ -96,6 +116,8 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
 
 
   def process_connection(self):
+    '''Принять (accept) соединение от граф. окна.
+    '''
     self.conn = self.lsock.accept()[0]
     self.lsock.close()
     self.lsock      =None
@@ -175,10 +197,38 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     return exec_in_main_pythread(self.__get_current_position_1,())
 
   def send_error(self,message):
+    '''Вывести пользователю ошибку в граф. окне.
+    '''
     try:
       self.send({'cmd':'error_message','message':message})
     except:
       pass
+
+  def process_gdbevt(self,name,evt):
+    cb = self.gdb_event_cbs.get(name)
+    if not cb:
+      return None
+    return cb(evt)
+
+
+  def gdbevt_cont(self,evt):pass
+  def gdbevt_exited(self,evt):pass
+  def gdbevt_stop(self,evt):pass
+  def gdbevt_new_objfile(self,evt):pass
+  def gdbevt_clear_objfiles(self,evt):pass
+  def gdbevt_inferior_call_pre(self,evt):pass
+  def gdbevt_inferior_call_post(self,evt):pass
+  def gdbevt_memory_changed(self,evt):pass
+  def gdbevt_register_changed(self,evt):pass
+  def gdbevt_breakpoint_created(self,evt):pass
+  def gdbevt_breakpoint_modified(self,evt):pass
+  def gdbevt_breakpoint_deleted(self,evt):pass
+
+  def text_chunk(self,string,**kwargs):
+    d=kwargs
+    d.update({'str':string})
+    return d
+
 
 
 

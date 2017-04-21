@@ -47,6 +47,7 @@ enum window_type {
   MCGDB_UNKNOWN_WINDOW_TYPE=0,
   MCGDB_SRCWIN,
   MCGDB_AUXWIN,
+  MCGDB_ASMWIN,
 };
 
 typedef enum  {
