@@ -36,7 +36,7 @@ static int asmtab_id;
 
 static void mcgdb_asm_dialog_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event);
 static cb_ret_t mcgdb_asm_dialog_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *data);
-static void mcgdb_aux_dialog_gdbevt (WDialog *h);
+static void mcgdb_asm_dialog_gdbevt (WDialog *h);
 
 static void mcgdb_asm_dialog_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
 }
@@ -116,7 +116,7 @@ static cb_ret_t mcgdb_asm_dialog_callback (Widget * w, Widget * sender, widget_m
 
 int
 mcgdb_asm_dlg(void) {
-  WDialog *aux_dlg;
+  WDialog *dlg;
   WTable  *wtasm;
 
   //int wait_gdb=1;
@@ -127,10 +127,10 @@ mcgdb_asm_dlg(void) {
   wtable_set_current_table(wtasm, "asm");
   wtable_update_bound(wtasm);
 
-  aux_dlg = dlg_create (FALSE, 0, 0, 0, 0, WPOS_FULLSCREEN, FALSE, NULL, mcgdb_asm_dialog_callback,
+  dlg = dlg_create (FALSE, 0, 0, 0, 0, WPOS_FULLSCREEN, FALSE, NULL, mcgdb_asm_dialog_callback,
                     mcgdb_asm_dialog_mouse_callback, "[ASM]", NULL);
-  add_widget (aux_dlg, wtasm);
+  add_widget (dlg, wtasm);
   asmtab_id = WIDGET(wtasm)->id;
-  dlg_run (aux_dlg);
+  dlg_run (dlg);
   return 0;
 }
