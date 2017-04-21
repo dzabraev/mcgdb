@@ -121,7 +121,7 @@ class AsmWin(mcgdb.basewin.BaseWin):
         asm_chunks = self.asm_to_chunks()
       row = {'columns' : [asm_chunks]}
       table={'rows':[row]}
-      pkg={'cmd':'asm','table':table,}
+      pkg={'cmd':'table_asm','table':table,}
       self.send(pkg)
     if need_update_cur_pos:
       pass

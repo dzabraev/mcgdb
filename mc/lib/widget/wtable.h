@@ -16,7 +16,6 @@
 
 
 
-int mcgdb_aux_dlg(void);
 
 typedef struct BlockCoord{
   int x_start;
@@ -133,10 +132,14 @@ typedef struct WTable
 } WTable;
 
 
-WTable *find_lvars (WDialog *h);
-gboolean is_mcgdb_aux_dialog(WDialog *h);
 
-void pkg_table_package(json_t *pkg, WTable *wtab, const char *tabname);
+void pkg_table_package (json_t *pkg, WTable *wtab, const char *tabname);
+
+void     wtable_update_bound (WTable *wtab);
+WTable  *wtable_new (int y, int x, int height, int width);
+void     wtable_add_table(WTable *wtab, const char *tabname, int ncols);
+void     wtable_set_current_table(WTable *wtab, const char *tabname);
+
 
 #define WTABLE(x) ((WTable *)x)
 #define TABLE(x)  ((Table *)x)

@@ -149,7 +149,7 @@ am_libmcwidget_la_OBJECTS = button.lo buttonbar.lo check.lo dialog.lo \
 	dialog-switch.lo gauge.lo groupbox.lo hline.lo history.lo \
 	input.lo input_complete.lo listbox-window.lo listbox.lo \
 	label.lo menu.lo mouse.lo quick.lo radio.lo widget-common.lo \
-	wtools.lo mcgdb_lvarswidget.lo mcgdb_asm.lo
+	wtools.lo mcgdb_aux_widget.lo mcgdb_asm_widget.lo wtable.lo
 libmcwidget_la_OBJECTS = $(am_libmcwidget_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -471,8 +471,9 @@ libmcwidget_la_SOURCES = \
 	radio.c radio.h \
 	widget-common.c widget-common.h \
 	wtools.c wtools.h \
-	mcgdb_lvarswidget.c mcgdb_lvarswidget.h \
-	mcgdb_asm.c mcgdb_asm.h
+	mcgdb_aux_widget.c mcgdb_aux_widget.h \
+	mcgdb_asm_widget.c mcgdb_asm_widget.h \
+	wtable.c wtable.h
 
 AM_CPPFLAGS = -I$(top_srcdir) $(GLIB_CFLAGS)
 all: all-am
@@ -544,13 +545,14 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/label.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/listbox-window.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/listbox.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mcgdb_asm.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mcgdb_lvarswidget.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mcgdb_asm_widget.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mcgdb_aux_widget.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/menu.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mouse.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/quick.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radio.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/widget-common.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/wtable.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/wtools.Plo@am__quote@
 
 .c.o:

@@ -25,7 +25,8 @@
 
 #include "src/mcgdb.h"
 #include "src/mcgdb-bp.h"
-#include "lib/widget/mcgdb_lvarswidget.h"
+#include "lib/widget/mcgdb_aux_widget.h"
+#include "lib/widget/mcgdb_asm_widget.h"
 
 
 #define STREQ(s1,s2) (!strncmp(s1,s2,strlen(s2)))
@@ -295,6 +296,9 @@ get_command_num(json_t *pkg) {
     else if (compare_cmd("threads")) {
       return MCGDB_THREADS;
     }
+    else if (compare_cmd("table_asm")) {
+      return MCGDB_TABLE_ASM;
+    }
     else if (compare_cmd("error_message")) {
       return MCGDB_ERROR_MESSAGE;
     }
@@ -547,7 +551,7 @@ evt_convertable_to_key(struct gdb_action * gdb_evt) {
 
 
 void mcgdb_checkset_read_gdb_events(WDialog * h) {
-  read_gdb_events = (find_editor (h)!=NULL) || is_mcgdb_aux_dialog(h);
+  read_gdb_events = (find_editor (h)!=NULL) || is_mcgdb_aux_dialog(h) || is_mcgdb_asm_dialog(h);
 }
 
 

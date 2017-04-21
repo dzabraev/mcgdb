@@ -90,7 +90,8 @@
 #include "midnight.h"
 #include "src/mcgdb.h"
 
-#include "lib/widget/mcgdb_lvarswidget.h"
+#include "lib/widget/mcgdb_aux_widget.h"
+#include "lib/widget/mcgdb_asm_widget.h"
 
 /*** global variables ****************************************************************************/
 

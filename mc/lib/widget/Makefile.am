@@ -22,7 +22,8 @@ libmcwidget_la_SOURCES = \
 	radio.c radio.h \
 	widget-common.c widget-common.h \
 	wtools.c wtools.h \
-	mcgdb_lvarswidget.c mcgdb_lvarswidget.h \
-	mcgdb_asm_widget.c mcgdb_asm_widget.h
+	mcgdb_aux_widget.c mcgdb_aux_widget.h \
+	mcgdb_asm_widget.c mcgdb_asm_widget.h \
+	wtable.c wtable.h
 
 AM_CPPFLAGS = -I$(top_srcdir) $(GLIB_CFLAGS)

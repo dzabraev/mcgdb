@@ -40,6 +40,7 @@ enum gdb_cmd {
   MCGDB_BACKTRACE,
   MCGDB_REGISTERS,
   MCGDB_THREADS,
+  MCGDB_TABLE_ASM,
 
 };
 

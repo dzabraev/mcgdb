@@ -19,7 +19,7 @@
 #include "lib/tty/key.h"
 
 #include "src/mcgdb.h"
-#include "lib/widget/mcgdb_lvarswidget.h"
+#include "lib/widget/wtable.h"
 #include "lib/widget/mcgdb_asm_widget.h"
 
 #include "lib/tty/tty.h"
@@ -36,6 +36,7 @@ static int asmtab_id;
 
 static void mcgdb_asm_dialog_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event);
 static cb_ret_t mcgdb_asm_dialog_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *data);
+static void mcgdb_aux_dialog_gdbevt (WDialog *h);
 
 static void mcgdb_asm_dialog_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
 }
@@ -43,7 +44,7 @@ static void mcgdb_asm_dialog_mouse_callback (Widget * w, mouse_msg_t msg, mouse_
 
 
 static void
-mcgdb_aux_dialog_gdbevt (WDialog *h) {
+mcgdb_asm_dialog_gdbevt (WDialog *h) {
   WTable *wtab;
   struct gdb_action * act = event_from_gdb;
   json_t *pkg = act->pkg;
@@ -63,7 +64,15 @@ mcgdb_aux_dialog_gdbevt (WDialog *h) {
 }
 
 
+
+gboolean
+is_mcgdb_asm_dialog(WDialog *h) {
+  return h->widget.callback==mcgdb_asm_dialog_callback;
+}
+
 static cb_ret_t mcgdb_asm_dialog_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *data) {
+  WDialog *h = DIALOG (w);
+  WTable  *wtasm;
   switch (msg) {
     case MSG_KEY:
       {
