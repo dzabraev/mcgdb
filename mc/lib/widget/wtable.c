@@ -327,6 +327,7 @@ cell_data_new_from_json (json_t * json_chunk) {
   if ((selected = json_object_get (json_chunk,"selected"))) {
     if (selected && json_boolean_value(selected))
       data->selected = TRUE;
+      data->color = tty_try_alloc_color_pair2 ("red", "black", "bold", FALSE);
   }
   if ((onclick_data=json_object_get (json_chunk,"onclick_data"))) {
     json_incref (onclick_data);
@@ -336,31 +337,32 @@ cell_data_new_from_json (json_t * json_chunk) {
     data->onclick_user_input=TRUE;
   else
     data->onclick_user_input=FALSE;
-  data->name = json_get_chunk_name (json_chunk);
-  data->color = EDITOR_NORMAL_COLOR;
-  switch (data->name) {
-    case CHUNKNAME_FRAME_NUM:
-    case CHUNKNAME_TH_GLOBAL_NUM:
-      if (data->selected)
-        data->color = tty_try_alloc_color_pair2 ("red", "black", "bold", FALSE);
-      break;
-    case CHUNKNAME_VARNAME:
-    case CHUNKNAME_REGNAME:
-      data->color = tty_try_alloc_color_pair2 ("yellow", "blue", NULL, FALSE);
-      break;
-    case CHUNKNAME_VARVALUE:
-    case CHUNKNAME_REGVALUE:
-      data->color = tty_try_alloc_color_pair2 ("green", "blue", NULL, FALSE);
-      break;
-    case CHUNKNAME_FRAME_FUNC_NAME:
-      data->color = tty_try_alloc_color_pair2 ("cyan", "blue", NULL, FALSE);
-      break;
-    case CHUNKNAME_ASM_OP:
-      data->color = tty_try_alloc_color_pair2 ("yellow", "blue", NULL, FALSE);
-      break;
-
-    default:
-      break;
+  if (!data->selected) {
+    data->name = json_get_chunk_name (json_chunk);
+    data->color = EDITOR_NORMAL_COLOR;
+    switch (data->name) {
+      case CHUNKNAME_FRAME_NUM:
+      case CHUNKNAME_TH_GLOBAL_NUM:
+        if (data->selected)
+          data->color = tty_try_alloc_color_pair2 ("red", "black", "bold", FALSE);
+        break;
+      case CHUNKNAME_VARNAME:
+      case CHUNKNAME_REGNAME:
+        data->color = tty_try_alloc_color_pair2 ("yellow", "blue", NULL, FALSE);
+        break;
+      case CHUNKNAME_VARVALUE:
+      case CHUNKNAME_REGVALUE:
+        data->color = tty_try_alloc_color_pair2 ("green", "blue", NULL, FALSE);
+        break;
+      case CHUNKNAME_FRAME_FUNC_NAME:
+        data->color = tty_try_alloc_color_pair2 ("cyan", "blue", NULL, FALSE);
+        break;
+      case CHUNKNAME_ASM_OP:
+        data->color = tty_try_alloc_color_pair2 ("yellow", "blue", NULL, FALSE);
+        break;
+      default:
+        break;
+    }
   }
   return data;
 }

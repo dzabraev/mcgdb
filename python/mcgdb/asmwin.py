@@ -91,21 +91,29 @@ class AsmWin(mcgdb.basewin.BaseWin):
     arch = frame.architecture()
     disas = arch.disassemble(start_addr,end_addr)
     rows=[]
-    for row in disas:
+    pc=frame.pc()
+    selected_row=None
+    for idx,row in enumerate(disas):
       asm=row['asm'].split()
       cmd=asm[0]
       code=' '.join(asm[1:])
       addr=row['addr']
+      spaces=' '*(10-len(cmd))
+      kw={}
+      if addr==pc:
+        kw['selected']=True
+        selected_row=idx
       cols={'columns':[
         {'chunks':[
           self.text_chunk('0x{:016x}'.format(addr)),
-          self.text_chunk(cmd.rjust(10),name='asm_op'),
+          self.text_chunk(spaces),
+          self.text_chunk(cmd,name='asm_op', **kw),
           self.text_chunk('  '),
           self.text_chunk(code),
         ]},
       ]}
       rows.append(cols)
-    return rows
+    return rows,selected_row
 
   @exec_main
   def update_asm_code(self):
@@ -121,11 +129,14 @@ class AsmWin(mcgdb.basewin.BaseWin):
     else:
       need_update_asm_code=self.need_redisplay_asm or self.start_addr!=start_addr or self.end_addr!=end_addr
     if need_update_asm_code:
+      selected_row=None
       if not frame:
         asm_rows = self.text_chunk('not frame selected')
       else:
-        asm_rows = self.asm_to_chunks()
+        asm_rows,selected_row = self.asm_to_chunks()
       table={'rows':asm_rows, 'draw_vline':False, 'draw_hline':False}
+      if selected_row!=None:
+        table['selected_row']=selected_row
       pkg={'cmd':'table_asm','table':table,}
       self.send(pkg)
     if need_update_cur_pos:
