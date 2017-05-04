@@ -52,6 +52,15 @@ class BaseWin(object):
       'breakpoint_deleted'  :   self.gdbevt_breakpoint_deleted,
     }
 
+    self.shellcmd_cbs = {
+      'quit'        : self.shellcmd_quit,
+      'bp_disable'  : self.shellcmd_bp_disable,
+      'bp_enable'   : self.shellcmd_bp_enable,
+      'frame'       : self.shellcmd_frame,
+      'frame_up'    : self.shellcmd_frame_up,
+      'frame_down'  : self.shellcmd_frame_down,
+    }
+
     mcgdb._dw[self.type]=self #debug
     if os.path.exists(os.path.abspath('~/tmp/mcgdb-debug/core')):
       os.remove(os.path.abspath('~/tmp/mcgdb-debug/core'))
@@ -79,6 +88,8 @@ You can try execute this command manually from another terminal.
 stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
   complete_cmd=complete_cmd,rc=rc,stdout=out,stderr=err))
         gdb_print('''\nCan't open gui window({type}). execute manually: `{cmd}`\n'''.format(cmd=cmd,type=self.type))
+
+
 
   def _editor_next(self,pkg):
     if gdb_stopped():
@@ -223,6 +234,18 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
   def gdbevt_breakpoint_created(self,evt):pass
   def gdbevt_breakpoint_modified(self,evt):pass
   def gdbevt_breakpoint_deleted(self,evt):pass
+
+
+  def process_shellcmd(self,cmdname):
+    return self.shellcmd_cbs[cmdname]()
+
+  def shellcmd_quit(self): pass
+  def shellcmd_bp_disable(self): pass
+  def shellcmd_bp_enable(self): pass
+  def shellcmd_frame(self): pass
+  def shellcmd_frame_up(self): pass
+  def shellcmd_frame_down(self): pass
+
 
   def text_chunk(self,string,**kwargs):
     d=kwargs

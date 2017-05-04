@@ -1063,52 +1063,39 @@ class AuxWin(BaseWin):
     self.update_registers()
     self.update_threads()
 
-  def process_gdbevt(self,name,evt):
-    if name=='cont':
-      pass
-    elif name=='exited':
-      self.update_all()
-    elif name=='stop':
-      self.clear_caches()
-      self.update_all()
-    elif name=='new_objfile':
-      self.clear_caches()
-      self.update_all()
-    elif name=='clear_objfiles':
-      self.update_all()
-    elif name=='inferior_call_pre':
-      pass
-    elif name=='inferior_call_post':
-      pass
-    elif name=='memory_changed':
-      self.clear_caches()
-      self.update_localvars()
-      self.update_registers()
-    elif name=='register_changed':
-      self.clear_caches()
-      self.update_localvars()
-      self.update_registers()
-    elif name=='breakpoint_created':
-      pass
-    elif name=='breakpoint_modified':
-      pass
-    elif name=='breakpoint_deleted':
-      pass
 
-  def process_shellcmd(self,cmdname):
-    if cmdname=='quit':
-      pass
-    elif cmdname=='bp_disable':
-      pass
-    elif cmdname=='bp_enable':
-      pass
-    elif cmdname=='frame_up':
-      self.update_all()
-    elif cmdname=='frame_down':
-      self.update_all()
-    elif cmdname=='frame':
-      self.update_all()
-    elif cmdname=='thread':
-      self.update_all()
+  def gdbevt_exited(self,evt):
+    self.update_all()
+
+  def gdbevt_stop(self,evt):
+    self.clear_caches()
+    self.update_all()
+
+  def gdbevt_new_objfile(self,evt):
+    self.clear_caches()
+    self.update_all()
+
+  def gdbevt_clear_objfiles(self,evt):
+    self.update_all()
+
+  def gdbevt_memory_changed(self,evt):
+    self.clear_caches()
+    self.update_localvars()
+    self.update_registers()
+
+  def gdbevt_register_changed(self,evt):
+    self.clear_caches()
+    self.update_localvars()
+    self.update_registers()
+
+
+  def shellcmd_frame_up(self):
+    self.update_all()
+  def shellcmd_frame_down(self):
+    self.update_all()
+  def shellcmd_frame(self):
+    self.update_all()
+  def shellcmd_thread(self):
+    self.update_all()
 
 

@@ -33,47 +33,36 @@ class SrcWin(BaseWin):
     return rc
 
 
-  def process_gdbevt(self,name,evt):
-    if name=='cont':
-      pass
-    elif name=='exited':
-      self.update_current_frame()
-    elif name=='stop':
-      self.update_current_frame()
-      self.update_breakpoints()
-    elif name=='new_objfile':
-      self.update_current_frame()
-    elif name=='clear_objfiles':
-      self.update_current_frame()
-    elif name=='inferior_call_pre':
-      pass
-    elif name=='inferior_call_post':
-      pass
-    elif name=='memory_changed':
-      pass
-    elif name=='register_changed':
-      pass
-    elif name=='breakpoint_created':
-      self.update_breakpoints()
-    elif name=='breakpoint_modified':
-      self.update_breakpoints()
-    elif name=='breakpoint_deleted':
-      self.update_breakpoints()
 
-  def process_shellcmd(self,cmdname):
-    if cmdname=='quit':
-      pass
-    elif cmdname=='bp_disable':
-      pass
-    elif cmdname=='bp_enable':
-      pass
-    elif cmdname=='frame_up':
-      self.update_current_frame()
-    elif cmdname=='frame_down':
-      self.update_current_frame()
-    elif cmdname=='frame':
-      self.update_current_frame()
+  def gdbevt_exited(self,evt):
+    self.update_current_frame()
 
+  def gdbevt_stop(self,evt):
+    self.update_current_frame()
+    self.update_breakpoints()
+
+  def gdbevt_new_objfile(self,evt):
+    self.update_current_frame()
+
+  def gdbevt_clear_objfiles(self,evt):
+    self.update_current_frame()
+
+  def gdbevt_breakpoint_created(self,evt):
+    self.update_breakpoints()
+
+  def gdbevt_breakpoint_modified(self,evt):
+    self.update_breakpoints()
+
+  def gdbevt_breakpoint_deleted(self,evt):
+    self.update_breakpoints()
+
+
+  def shellcmd_frame(self):
+    return self.update_current_frame()
+  def shellcmd_frame_up(self):
+    return self.update_current_frame()
+  def shellcmd_frame_down(self):
+    return self.update_current_frame()
 
   def update_current_frame(self):
     '''Данная функция извлекает из gdb текущий файл

@@ -125,15 +125,11 @@ class AsmWin(mcgdb.basewin.BaseWin):
         asm_rows = self.text_chunk('not frame selected')
       else:
         asm_rows = self.asm_to_chunks()
-      #col={'chunks':asm_chunks}
-      #row = {'columns' : [col]}
       table={'rows':asm_rows, 'draw_vline':False, 'draw_hline':False}
       pkg={'cmd':'table_asm','table':table,}
       self.send(pkg)
     if need_update_cur_pos:
       pass
-      #pc=get_selected_frame_pc()
-      #self.send({'cmd':''})
 
   def gdbevt_stop(self,evt):
     self.update_asm_code()
@@ -142,6 +138,15 @@ class AsmWin(mcgdb.basewin.BaseWin):
     self.need_redisplay_asm=True
     self.update_asm_code()
 
+  def shellcmd_frame_up(self):
+    self.update_asm_code()
 
+  def shellcmd_frame_down(self):
+    self.update_asm_code()
 
+  def shellcmd_frame(self):
+    self.update_asm_code()
+
+  def shellcmd_thread(self):
+    self.update_asm_code()
 
