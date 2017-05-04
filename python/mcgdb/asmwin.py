@@ -5,6 +5,8 @@ import gdb
 import mcgdb.basewin
 from mcgdb.common import exec_main
 
+import re
+
 class AsmWin(mcgdb.basewin.BaseWin):
   '''Окно для отображение ассемблерного кода.
   '''
@@ -20,6 +22,15 @@ class AsmWin(mcgdb.basewin.BaseWin):
     self.pc=None
     self.current_display_blocks=None
     self.need_redisplay_asm=True
+    self.reg_disas_line_addr = re.compile('(=>)?\s+(0x[0-9a-fA-F]+)')
+    self.reg_find_addr = re.compile('\s0x[0-9a-fA-F]+\s')
+    self.click_cmd_cbs={
+      'breakpoint_insert' : self.click_breakpoint_insert,
+      'breakpoint_remove' : self.click_breakpoint_remove,
+    }
+
+  def click_breakpoint_insert(self,pkg): pass
+  def click_breakpoint_remove(self,pkg): pass
 
   @exec_main
   def get_selected_frame_pc(self):
@@ -44,12 +55,27 @@ class AsmWin(mcgdb.basewin.BaseWin):
       return None,None,None
     if not frame:
       return None,None,None
-    block = self.get_function_block(frame)
-    if block:
-      start_addr,end_addr = block.start,block.end
-    else:
-      start_addr,end_addr = None,None
-    return (frame.name(),start_addr,end_addr)
+    try:
+      block = self.get_function_block(frame)
+      if block:
+        start_addr,end_addr = block.start,block.end
+      else:
+        start_addr,end_addr = None,None
+      return (frame.name(),start_addr,end_addr)
+    except RuntimeError:
+      #for ex., if current frame corresponding
+      #to malloc function, then selected_frame().block()
+      #throw RuntimeError
+      pc=frame.pc()
+      res=gdb.execute('maintenance translate-address {addr}'.format(addr=pc),False,True)
+      name = res.split()[0] #function name
+      res=gdb.execute('disas',False,True)
+      lines=res.split('\n')
+      first=lines[1]
+      last=lines[-3]
+      start_addr = long(self.reg_disas_line_addr.search(first).groups()[1],0)
+      end_addr = long(self.reg_disas_line_addr.search(last).groups()[1],0)
+      return name,start_addr,end_addr
 
   @exec_main
   def get_func_addr_by_location(self,location):
@@ -70,8 +96,20 @@ class AsmWin(mcgdb.basewin.BaseWin):
       self.update_asm_code()
     return rc
 
-  @exec_main
+  def tablemsg(self,msg):
+    return [{'columns':[
+          { 'chunks':[self.text_chunk(msg)] }
+        ]}]
+
+
   def asm_to_chunks(self):
+    try:
+      return self.asm_to_chunks_1()
+    except gdb.error as e:
+      return self.tablemsg(str(e)),-1
+
+  @exec_main
+  def asm_to_chunks_1(self):
     if self.location:
       try:
         dl=gdb.decode_line(self.location)
@@ -117,7 +155,12 @@ class AsmWin(mcgdb.basewin.BaseWin):
 
   @exec_main
   def update_asm_code(self):
-    funcname,start_addr,end_addr = self.get_selected_frame_func()
+    try:
+      funcname,start_addr,end_addr = self.get_selected_frame_func()
+    except gdb.error as e:
+      pkg={'cmd':'table_asm','table':self.tablemsg(str(e))}
+      self.send(pkg)
+      return
     #funcname_loc,start_addr_loc,end_addr_loc = self.get_func_addr_by_location(self.location)
     try:
       frame=gdb.selected_frame()

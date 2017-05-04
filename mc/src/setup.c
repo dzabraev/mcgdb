@@ -1359,6 +1359,12 @@ load_keymap_defs (gboolean load_from_file)
         load_keymap_from_section (KEYMAP_SECTION_DIFFVIEWER, diff_keymap, mc_global_keymap);
 #endif
 
+        mcgdb_asm_keymap = g_array_new (TRUE, FALSE, sizeof (global_keymap_t));
+        load_keymap_from_section (KEYMAP_SECTION_MCGDB_ASM, mcgdb_asm_keymap, mc_global_keymap);
+
+        mcgdb_aux_keymap = g_array_new (TRUE, FALSE, sizeof (global_keymap_t));
+        load_keymap_from_section (KEYMAP_SECTION_MCGDB_AUX, mcgdb_aux_keymap, mc_global_keymap);
+
         mc_config_deinit (mc_global_keymap);
     }
 
@@ -1379,6 +1385,8 @@ load_keymap_defs (gboolean load_from_file)
 #ifdef USE_DIFF_VIEW
     diff_map = (global_keymap_t *) diff_keymap->data;
 #endif
+    mcgdb_aux_map = (global_keymap_t *) mcgdb_aux_keymap->data;
+    mcgdb_asm_map = (global_keymap_t *) mcgdb_asm_keymap->data;
 }
 
 /* --------------------------------------------------------------------------------------------- */

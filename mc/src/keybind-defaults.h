@@ -30,6 +30,8 @@ extern GArray *viewer_hex_keymap;
 #ifdef USE_DIFF_VIEW
 extern GArray *diff_keymap;
 #endif
+extern GArray *mcgdb_asm_keymap;
+extern GArray *mcgdb_aux_keymap;
 
 
 extern const global_keymap_t *main_map;
@@ -47,6 +49,10 @@ extern const global_keymap_t *viewer_hex_map;
 #ifdef USE_DIFF_VIEW
 extern const global_keymap_t *diff_map;
 #endif
+
+extern const global_keymap_t *mcgdb_asm_map;
+extern const global_keymap_t *mcgdb_aux_map;
+
 
 /*** declarations of public functions ************************************************************/
 

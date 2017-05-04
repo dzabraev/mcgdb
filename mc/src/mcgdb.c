@@ -796,6 +796,13 @@ mcgdb_cmd_finish(void) {
   send_pkg_to_gdb ("{\"cmd\":\"editor_finish\"}");
 }
 
+void
+mcgdb_shellcmd (const char *cmd) {
+  /*execute `cmd` if gdb shell */
+  char *json_cmd;
+  asprintf(&json_cmd,"{\"cmd\":\"%s\"}",cmd);
+  send_pkg_to_gdb (json_cmd);
+}
 
 void
 mcgdb_cmd_print(void) {

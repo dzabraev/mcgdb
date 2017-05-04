@@ -22,6 +22,9 @@
 #define KEYMAP_SECTION_VIEWER "viewer"
 #define KEYMAP_SECTION_VIEWER_HEX "viewer:hex"
 #define KEYMAP_SECTION_DIFFVIEWER "diffviewer"
+#define KEYMAP_SECTION_MCGDB_AUX "mcgdb_aux"
+#define KEYMAP_SECTION_MCGDB_ASM "mcgdb_asm"
+
 
 #define KEYMAP_SHORTCUT_LENGTH 32       /* FIXME: is 32 bytes enough for shortcut? */
 
@@ -340,7 +343,9 @@ enum
     CK_MCGDB_DE_Breakpoint,
     CK_MCGDB_Goto_ELine,
     CK_MCGDB_Next,
+    CK_MCGDB_Nexti,
     CK_MCGDB_Step,
+    CK_MCGDB_Stepi,
     CK_MCGDB_Until,
     CK_MCGDB_Continue,
     CK_MCGDB_Print,

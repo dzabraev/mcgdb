@@ -188,10 +188,11 @@ wtable_new (int y, int x, int height, int width)
 }
 
 void
-wtable_add_table(WTable *wtab, const char *tabname, int ncols) {
+wtable_add_table(WTable *wtab, const char *tabname, int ncols, global_keymap_t * keymap) {
   Table *tab;
   tab = table_new(ncols);
   tab->wtab = wtab;
+  tab->keymap = keymap;
   table_set_colwidth_formula(tab, formula_eq_col);
   g_hash_table_insert ( wtab->tables, (gpointer) tabname, (gpointer) tab);
   selbar_add_button   ( wtab->selbar, tabname);
@@ -967,51 +968,63 @@ static cb_ret_t
 wtable_callback (Widget * w, __attribute__((unused)) Widget * sender, widget_msg_t msg, int parm, __attribute__((unused)) void *data) {
   cb_ret_t handled = MSG_HANDLED;
   WTable *wtab = (WTable *)w;
+  long command;
   switch(msg) {
     case MSG_DRAW:
       tty_setcolor(EDITOR_NORMAL_COLOR);
       wtab->tab->redraw |= REDRAW_TAB;
       break;
     case MSG_KEY:
-      switch (parm) {
-        case KEY_UP:
+      command = keybind_lookup_keymap_command (wtab->tab->keymap, parm);
+      switch (command) {
+        case CK_Up:
           table_add_offset(wtab->tab,-1);
           break;
-        case KEY_DOWN:
+        case CK_Down:
           table_add_offset(wtab->tab,1);
           break;
-        case KEY_PPAGE:
+        case CK_PageUp:
           /*Page Up*/
           /*Либо перемещаемся на треть таблицы к первой строке,
            * а если это смещение будет сильно большое, то сдвигаемся
            * на столько, что бы верхушка верхней строки была видна в верху таблицы*/
           table_add_offset(wtab->tab,-wtab->tab->lines/3);
           break;
-        case KEY_NPAGE:
+        case CK_PageDown:
           /*Page Down*/
           table_add_offset(wtab->tab,wtab->tab->lines/3);
           break;
-        case 'u':
+        case CK_MCGDB_Frame_up:
           mcgdb_cmd_frame_up ();
           break;
-        case 'd':
+        case CK_MCGDB_Frame_down:
           mcgdb_cmd_frame_down ();
           break;
-        case 's':
+        case CK_MCGDB_Step:
           mcgdb_cmd_step ();
           break;
-        case 'n':
+        case CK_MCGDB_Stepi:
+          mcgdb_shellcmd ("stepi");
+          break;
+        case CK_MCGDB_Next:
           mcgdb_cmd_next ();
           break;
-        case 'f':
+        case CK_MCGDB_Nexti:
+          mcgdb_shellcmd ("nexti");
+          break;
+        case CK_MCGDB_Finish:
           mcgdb_cmd_finish ();
           break;
-        case 'c':
+        case CK_MCGDB_Continue:
           mcgdb_cmd_continue ();
           break;
-        case KEY_F (10):
+        case CK_MCGDB_Exit:
           mcgdb_exit_confirm ();
           break;
+        case CK_MCGDB_Until:
+          mcgdb_shellcmd ("until");
+          break;
+
         default:
           break;
       }

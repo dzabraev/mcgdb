@@ -113,6 +113,10 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     if gdb_stopped():
       exec_cmd_in_gdb("finish")
 
+  def _editor_default(self,pkg):
+    if gdb_stopped():
+      exec_cmd_in_gdb(pkg['cmd'])
+
   def make_runwin_cmd(self):
     ''' Данный метод формирует shell-команду для запуска окна с editor.
         Команда формируется на основе self.listen_port
@@ -173,11 +177,8 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
       cmdname=pkg['cmdname']
       self.process_shellcmd(cmdname)
     else:
-      cb=self.window_event_handlers.get(cmd)
-      if cb==None:
-        debug("unknown `cmd`: `{}`".format(pkg))
-      else:
-        return cb(pkg)
+      cb=self.window_event_handlers.get(cmd,self._editor_default)
+      return cb(pkg)
 
   def terminate(self):
     try:

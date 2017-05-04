@@ -21,6 +21,7 @@
 #include "src/mcgdb.h"
 #include "lib/widget/wtable.h"
 #include "lib/widget/mcgdb_asm_widget.h"
+#include "src/keybind-defaults.h"
 
 #include "lib/tty/tty.h"
 #include "lib/skin.h"
@@ -127,7 +128,7 @@ mcgdb_asm_dlg(void) {
   //while(wait_gdb) {}
 
   wtasm = wtable_new (0,0,LINES,COLS);
-  wtable_add_table(wtasm,"asm",1);
+  wtable_add_table(wtasm,"asm",1,mcgdb_asm_map);
   wtable_set_current_table(wtasm, "asm");
   wtable_update_bound(wtasm);
 

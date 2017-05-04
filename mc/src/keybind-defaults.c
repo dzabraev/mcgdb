@@ -51,6 +51,8 @@ GArray *viewer_hex_keymap = NULL;
 #ifdef USE_DIFF_VIEW
 GArray *diff_keymap = NULL;
 #endif
+GArray *mcgdb_aux_keymap = NULL;
+GArray *mcgdb_asm_keymap = NULL;
 
 const global_keymap_t *main_map = NULL;
 const global_keymap_t *main_x_map = NULL;
@@ -67,6 +69,9 @@ const global_keymap_t *viewer_hex_map = NULL;
 #ifdef USE_DIFF_VIEW
 const global_keymap_t *diff_map = NULL;
 #endif
+
+const global_keymap_t *mcgdb_aux_map = NULL;
+const global_keymap_t *mcgdb_asm_map = NULL;
 
 /*** file scope macro definitions ****************************************************************/
 

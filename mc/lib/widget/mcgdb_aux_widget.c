@@ -21,6 +21,8 @@
 #include "src/mcgdb.h"
 #include "lib/widget/wtable.h"
 #include "lib/widget/mcgdb_aux_widget.h"
+#include "src/keybind-defaults.h"
+
 
 #include "lib/tty/tty.h"
 #include "lib/skin.h"
@@ -172,8 +174,8 @@ mcgdb_aux_dlg(void) {
     VARS_REGS_WIDGET_LINES,
     VARS_REGS_WIDGET_COLS
   );
-  wtable_add_table(vars_regs_table,"localvars",1);
-  wtable_add_table(vars_regs_table,"registers",1);
+  wtable_add_table(vars_regs_table,"localvars",1,mcgdb_aux_map);
+  wtable_add_table(vars_regs_table,"registers",1,mcgdb_aux_map);
   wtable_set_current_table(vars_regs_table, "localvars");
   wtable_update_bound(vars_regs_table);
 
@@ -183,8 +185,8 @@ mcgdb_aux_dlg(void) {
     BT_TH_WIDGET_LINES,
     BT_TH_WIDGET_COLS
   );
-  wtable_add_table (bt_th_table,"backtrace",1);
-  wtable_add_table (bt_th_table,"threads",1);
+  wtable_add_table (bt_th_table,"backtrace",1,mcgdb_aux_map);
+  wtable_add_table (bt_th_table,"threads",1,mcgdb_aux_map);
   wtable_set_current_table (bt_th_table,"backtrace");
   wtable_update_bound(bt_th_table);
 

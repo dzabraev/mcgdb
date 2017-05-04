@@ -468,3 +468,34 @@ Help = f1
 Quit = f10; q; shift-q; esc
 Shell = ctrl-o
 SelectCodepage = alt-e
+
+
+[mcgdb_asm]
+Mcgdb_frame_up = u
+Mcgdb_frame_down = d
+Mcgdb_stepi = s
+Mcgdb_nexti = n
+Mcgdb_finish = f
+Mcgdb_continue = c
+Mcgdb_exit = f10;
+PageDown = pgdn
+PageUp = pgup
+Up = up
+Down = down
+
+
+[mcgdb_aux]
+Mcgdb_frame_up = u
+Mcgdb_frame_down = d
+Mcgdb_step = s
+Mcgdb_next = n
+Mcgdb_finish = f
+Mcgdb_continue = c
+Mcgdb_exit = f10;
+PageDown = pgdn
+PageUp = pgup
+Up = up
+Down = down
+
+
+

@@ -131,6 +131,8 @@ void mcgdb_cmd_frame_up(void);
 void mcgdb_cmd_frame_down(void);
 void mcgdb_cmd_finish(void);
 
+void mcgdb_shellcmd(const char *cmd);
+
 void        mcgdb_gdbevt_read (void);
 gboolean    mcgdb_gdbevt_covertable_to_key (void);
 int         mcgdb_gdbevt_covert_to_key (void);
