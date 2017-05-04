@@ -141,10 +141,9 @@ void pkg_table_package (json_t *pkg, WTable *wtab, const char *tabname);
 
 void     wtable_update_bound (WTable *wtab);
 WTable  *wtable_new (int y, int x, int height, int width);
-void     wtable_add_table(WTable *wtab, const char *tabname, int ncols, global_keymap_t * keymap);
+void     wtable_add_table(WTable *wtab, const char *tabname, int ncols, const global_keymap_t * keymap);
 void     wtable_set_current_table(WTable *wtab, const char *tabname);
 void     wtable_set_colwidth_formula(WTable *wtab, const char *tabname, int (*formula)(const Table * tab, int ncol));
-
 
 #define WTABLE(x) ((WTable *)x)
 #define TABLE(x)  ((Table *)x)

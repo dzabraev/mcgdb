@@ -39,7 +39,7 @@ static cb_ret_t selbar_callback           (Widget * w, Widget * sender, widget_m
 static void wtable_mouse_callback           (Widget * w, mouse_msg_t msg, mouse_event_t * event);
 static void selbar_mouse_callback           (Widget * w, mouse_msg_t msg, mouse_event_t * event);
 
-size_t tty_print_utf8(const char *str);
+size_t tty_print_utf8(const char *str, gboolean blank);
 size_t charlength_utf8(const char *str);
 
 static table_row *  table_row_alloc(long ncols);
@@ -49,8 +49,8 @@ static Table *      table_new (long ncols);
 static int          table_add_row (Table * tab);
 static void         table_destroy(Table *tab);
 static void         table_clear_rows(Table * tab);
-static void         table_draw(Table * tab);
-static void         table_draw_row (Table * tab, table_row *r);
+static void         table_draw(Table * tab, gboolean blank);
+static void         table_draw_row (Table * tab, table_row *r, gboolean blank);
 static void         table_update_colwidth(Table * tab);
 static void         table_set_colwidth_formula(Table * tab, int (*formula)(const Table * tab, int ncol));
 //static void         table_setcolor(Table *tab, int nrow, int ncol, int color);
@@ -66,10 +66,10 @@ static void         table_add_offset(Table *tab, int off);
 WTable  *           find_wtable (WDialog *h);
 
 static int
-print_chunks (GNode *chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table *tab, int * rowcnt);
+print_chunks (GNode *chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table *tab, int * rowcnt, gboolean blank);
 
 static int
-print_str_chunk (cell_data_t *chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table * tab, int * rowcnt);
+print_str_chunk (cell_data_t *chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table * tab, int * rowcnt, gboolean blank);
 
 static int
 get_chunk_horiz_shift(cell_data_t * chunk);
@@ -122,13 +122,14 @@ insert_pkg_json_into_table (json_t *json_tab, Table *tab) {
   size_t size_rows = json_array_size (json_rows);
   json_t *json_selected_row = json_object_get (json_tab,"selected_row");
   json_t *draw;
+  int selected_row;
   if ((draw = json_object_get (json_tab,"draw_vline"))) {
     tab->draw_vline = json_boolean_value (draw);
   }
   if ((draw = json_object_get (json_tab,"draw_hline"))) {
     tab->draw_hline = json_boolean_value (draw);
   }
-  int selected_row =  json_selected_row ? json_integer_value (json_selected_row) : -1;
+  selected_row =  json_selected_row ? json_integer_value (json_selected_row) : -1;
   tab->selected_row = selected_row;
   for (size_t i=0;i<size_rows;i++) {
     json_t * row = json_array_get (json_rows,i);
@@ -147,6 +148,7 @@ pkg_table_package(json_t *pkg, WTable *wtab, const char *tabname) {
   Table *tab = wtable_get_table (wtab,tabname);
   table_clear_rows(tab);
   insert_pkg_json_into_table (json_object_get(pkg,"table"), tab);
+  table_draw (tab,TRUE);
 }
 
 
@@ -188,7 +190,7 @@ wtable_new (int y, int x, int height, int width)
 }
 
 void
-wtable_add_table(WTable *wtab, const char *tabname, int ncols, global_keymap_t * keymap) {
+wtable_add_table(WTable *wtab, const char *tabname, int ncols, const global_keymap_t * keymap) {
   Table *tab;
   tab = table_new(ncols);
   tab->wtab = wtab;
@@ -573,7 +575,7 @@ table_process_mouse_click(Table *tab, mouse_event_t * event) {
   }
 
   if (tab->redraw) {
-    table_draw (tab);
+    table_draw (tab,FALSE);
   }
 }
 
@@ -629,7 +631,7 @@ in_printable_area (int colcnt, int left_bound, int right_bound) {
 }
 
 static int
-print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int left_bound, int right_bound, Table * tab, int * rowcnt) {
+print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int left_bound, int right_bound, Table * tab, int * rowcnt, gboolean blank) {
   const char * p;
   int offset; //, offset_start;
   int colcnt=start_pos;
@@ -651,7 +653,8 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
   //offset_start = offset;
   g_array_append_val (coord, offset);
   g_array_append_val (coord, start_pos);
-  tty_gotoyx(offset,start_pos);
+  if (!blank)
+    tty_gotoyx(offset,start_pos);
   for(;;) {
     if(colcnt>=x2 || newline) {
       /*допечатали до правой границы столбца таблицы
@@ -660,7 +663,7 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
       g_array_append_val (coord, colcnt1);
       rowcnt[0]++;
       offset=ROW_OFFSET(tab,rowcnt[0]);
-      if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
+      if (!blank && offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
         tty_gotoyx(offset,x1);
       colcnt=x1;
       g_array_append_val (coord, offset);
@@ -675,7 +678,8 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
        * текущую позицию печати.
       */
       offset=ROW_OFFSET(tab,rowcnt[0]);
-      tty_gotoyx(offset,left_bound);
+      if (!blank)
+        tty_gotoyx(offset,left_bound);
     }
     newline=FALSE;
     if (!*p) {
@@ -692,16 +696,17 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
     default:
       offset=ROW_OFFSET(tab,rowcnt[0]);
       if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab) && in_printable_area(colcnt,left_bound,right_bound)) {
-        cell_data_setcolor (chunk_data);
-        p+=tty_print_utf8(p);
+        if (!blank)
+          cell_data_setcolor (chunk_data);
+        p+=tty_print_utf8(p,blank);
       }
       else {
         tty_setalloc_color ("brown", "blue", NULL, FALSE);
-        if (colcnt>=right_bound) {
+        if (!blank && colcnt>=right_bound) {
           tty_gotoyx(offset,right_bound);
           tty_print_char('>'); /*print on widget frame*/
         }
-        else if(colcnt<left_bound) {
+        else if(!blank && colcnt<left_bound) {
           tty_gotoyx(offset,left_bound-1);
           tty_print_char('<'); /*print on widget frame*/
         }
@@ -714,7 +719,7 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
   return colcnt;
 }
 
-
+/*
 static int
 print_str(const char * str, int x1, int x2, int start_pos, int left_bound, int right_bound, Table * tab, int * rowcnt) {
   int ret_start_pos;
@@ -725,7 +730,7 @@ print_str(const char * str, int x1, int x2, int start_pos, int left_bound, int r
   cell_data_free (cell_data);
   return ret_start_pos;
 }
-
+*/
 
 static int
 get_chunk_horiz_shift(cell_data_t * chunk_data) {
@@ -745,10 +750,10 @@ get_chunk_horiz_shift(cell_data_t * chunk_data) {
 }
 
 static int
-print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table *tab, int * rowcnt) {
+print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table *tab, int * rowcnt, gboolean blank) {
   message_assert (CHUNK(chunk)!=NULL);
   if (CHUNK(chunk)->str) {
-    return print_str_chunk (CHUNK(chunk),x1,x2,start_pos,left_bound,right_bound,tab,rowcnt);
+    return print_str_chunk (CHUNK(chunk),x1,x2,start_pos,left_bound,right_bound,tab,rowcnt, blank);
   }
   else {
     type_code_t type_code = CHUNK(chunk)->type_code;
@@ -781,7 +786,7 @@ print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int r
     */
     start_pos_1 = (type_code == TYPE_CODE_STRUCT || type_code == TYPE_CODE_ARRAY || type_code == TYPE_CODE_UNION) ? (x1+horiz_shift) : (start_pos);
     while (child) {
-      start_pos_1 = print_chunks (child,x1+horiz_shift,x2+horiz_shift,start_pos_1,left_bound,right_bound,tab,rowcnt);
+      start_pos_1 = print_chunks (child,x1+horiz_shift,x2+horiz_shift,start_pos_1,left_bound,right_bound,tab,rowcnt,blank);
       child = g_node_next_sibling (child);
     }
   //  if (str_end)
@@ -797,7 +802,7 @@ print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int r
 }
 
 static void
-table_draw_row (Table * tab, table_row *row) {
+table_draw_row (Table * tab, table_row *row, gboolean blank) {
   /* Переменные x1,x2 являются реальными координатами на экране.
    * row->y1, row->y2 есть реяльные координаты начала и конца строки таблицы.
    * В таблице tab есть параметр row_offset. При помощи данного параметра
@@ -824,7 +829,7 @@ table_draw_row (Table * tab, table_row *row) {
     x2 = colstart[i+1];
     rowcnt=0;
     offset=ROW_OFFSET(tab,rowcnt);
-    if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
+    if (!blank && offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
       tty_gotoyx(offset,x1);
     print_chunks (
       column,
@@ -834,7 +839,7 @@ table_draw_row (Table * tab, table_row *row) {
       x1, /*ограничитель на печать слева*/
       x2, /*ограничитель на печать справа*/
       tab,
-      &rowcnt);
+      &rowcnt,blank);
     rowcnt++;
     if(rowcnt>max_rowcnt)
       max_rowcnt=rowcnt;
@@ -843,37 +848,78 @@ table_draw_row (Table * tab, table_row *row) {
   row->y2 = ROW_OFFSET(tab,0);
 }
 
+static int
+get_row_topbottom(Table * tab, table_row *row, int *t, int *b) {
+  GNode ** columns = row->columns;
+  GNode  * column;
+  int top =0xffffff;
+  int bottom=-0xffffff;
+  int y_bottom,y_top;
+  for(int i=0;i<tab->ncols;i++) {
+    column = columns[i];
+    GArray *coord = CHUNK(column)->coord;
+    if (coord->len==4)
+      y_bottom=g_array_index(coord,int,2);
+    else
+      y_bottom=g_array_index(coord,int,coord->len-3);
+    y_top   =g_array_index(coord,int,0);
+    if (top>y_top)
+      top=y_top;
+    if (bottom<y_bottom)
+      bottom=y_bottom;
+  }
+  *t=top;
+  *b=bottom;
+}
 
 
 static void
-table_draw(Table * tab) {
+table_draw(Table * tab, gboolean blank) {
   GList *row = tab->rows;
   table_row *r;
   long offset;
   tty_fill_region(tab->y,tab->x,tab->lines,tab->cols,' ');
   tab->last_row_pos = tab->y - tab->row_offset;
+  int tt=TAB_TOP(tab),tb=TAB_BOTTOM(tab);
 
-  while(row) {
-    r = (table_row *)row->data;
-    tty_setcolor(EDITOR_NORMAL_COLOR);
-    table_draw_row (tab,r);
-    offset=ROW_OFFSET(tab,0);
-    if (offset>TAB_TOP(tab) && offset<=TAB_BOTTOM(tab)) {
-      tty_setcolor(EDITOR_NORMAL_COLOR);
-      if (tab->draw_hline) {
-        tty_draw_hline(offset,tab->x,mc_tty_frm[MC_TTY_FRM_HORIZ],tab->cols);
+  if (blank) {
+    /*ничего не рисуется, только высчитывается длина*/
+    while(row) {
+      r = TABROW(row);
+      table_draw_row (tab,r,blank);
+      offset=ROW_OFFSET(tab,0);
+      if (offset>TAB_TOP(tab) && offset<=TAB_BOTTOM(tab) && tab->draw_hline) {
         tab->last_row_pos++;
       }
+      row = g_list_next (row);
     }
-    /*Делаем проход до самой последней строки что бы
-     * вычислить координаты начала и конца каждой строки*/
-    row = g_list_next (row);
   }
-  tty_setcolor(EDITOR_NORMAL_COLOR);
-  if (tab->draw_vline) {
-    for(int i=1;i<tab->ncols;i++) {
-      tty_draw_vline(tab->y,tab->colstart[i],mc_tty_frm[MC_TTY_FRM_VERT],tab->lines);
+  else {
+    while(row) {
+      int top,bottom;
+      r = TABROW(row);
+      get_row_topbottom (tab,r,&top,&bottom);
+      if ((top>tt && top<tb) || (bottom>tt && bottom<tb) ) {
+        tab->last_row_pos=tb+1;
+        tty_setcolor(EDITOR_NORMAL_COLOR);
+        table_draw_row (tab,r,blank);
+        offset=ROW_OFFSET(tab,0);
+        if (offset>TAB_TOP(tab) && offset<=TAB_BOTTOM(tab) && tab->draw_hline) {
+          tty_setcolor(EDITOR_NORMAL_COLOR);
+          tty_draw_hline(offset,tab->x,mc_tty_frm[MC_TTY_FRM_HORIZ],tab->cols);
+          tab->last_row_pos++;
+        }
+      }
+      if (top>tb)
+        break;
+      row = g_list_next (row);
     }
+  }
+
+  if (!blank && tab->draw_vline) {
+    tty_setcolor(EDITOR_NORMAL_COLOR);
+    for(int i=1;i<tab->ncols;i++)
+      tty_draw_vline(tab->y,tab->colstart[i],mc_tty_frm[MC_TTY_FRM_VERT],tab->lines);
   }
 }
 
@@ -942,6 +988,45 @@ table_add_row (Table * tab) {
 
 
 static void
+node_update_coord(GNode *node, int off) {
+  GArray * coord = CHUNK(node)->coord;
+  if (CHUNK(node)->str) {
+    message_assert(coord->len>0);
+    message_assert(coord->len%3==0);
+    for (int idx=0;idx<coord->len;idx+=3) {
+      //int y1 = g_array_index(coord,int,idx) - off;
+      g_array_index(coord,int,idx) -= off;
+    }
+  }
+  else {
+    if (coord->len==4) {
+      //int y1 = g_array_index(coord,int,0) - off;
+      //int y2 = g_array_index(coord,int,2) - off;
+      //g_array_insert_val(coord,0,y1);
+      //g_array_insert_val(coord,2,y2);
+      g_array_index(coord,int,0) -= off;
+      g_array_index(coord,int,2) -= off;
+    }
+    GNode *child = g_node_first_child (node);
+    while (child) {
+      node_update_coord (child,off);
+      child = g_node_next_sibling (child);
+    }
+  }
+}
+
+static void
+table_update_coord(Table *tab, int off) {
+  for (GList *row = tab->rows;row;row=g_list_next(row)) {
+    GNode ** columns = TABROW(row)->columns;
+    for(int i=0;i<tab->ncols;i++) {
+      GNode *column = columns[i];
+      node_update_coord(column,off);
+    }
+  }
+}
+
+static void
 table_add_offset(Table *tab, int off) {
   int max_offset;
   int old_offset = tab->row_offset;
@@ -955,6 +1040,7 @@ table_add_offset(Table *tab, int off) {
   tab->row_offset = MIN(tab->row_offset, max_offset);
   if (tab->row_offset!=old_offset)
     tab->redraw |= REDRAW_TAB;
+  table_update_coord(tab,off);
 }
 
 static void
@@ -1044,7 +1130,7 @@ wtable_draw(WTable *wtab) {
   Table *tab = wtab->tab;
   tty_draw_box (WIDGET(wtab)->y+1, WIDGET(wtab)->x, WIDGET(wtab)->lines-1, WIDGET(wtab)->cols, FALSE);
   if (tab->rows && tab->selected_row>=0) {
-    table_draw (tab);
+    //table_draw (tab, FALSE);
     /* При первичной отрисовке таблицы, помимо прочего, будут посчитаны координаты
      * строк. На основе посчитанных координат вычисляется смещение.
      * Будем изменять смещение если и только если selected_row не видна
@@ -1073,16 +1159,16 @@ wtable_draw(WTable *wtab) {
     }
     if (changed_off) {
       table_add_offset (tab,off);
-      table_draw (tab);
+      table_draw (tab, FALSE);
     }
     tab->selected_row=-1;
   }
   else {
     int old_offset = tab->row_offset;
-    table_draw (tab);
+    //table_draw (tab);
     table_add_offset (tab,0); /*make offset valid*/
     if (old_offset!=tab->row_offset)
-      table_draw (tab);
+      table_draw (tab,FALSE);
   }
   tty_setcolor(EDITOR_NORMAL_COLOR);
   selbar_draw (wtab->selbar);
@@ -1372,26 +1458,29 @@ void selbar_add_button(Selbar *selbar, const char * text) {
 
 
 size_t
-tty_print_utf8(const char *str) {
+tty_print_utf8(const char *str, gboolean blank) {
   gunichar c;
   gchar *next_ch;
   if (!str || !*str)
     return 0;
   c = g_utf8_get_char_validated (str, -1);
   if (c == (gunichar) (-2) || c == (gunichar) (-1)) {
-    tty_print_anychar('.');
+    if (!blank)
+      tty_print_anychar('.');
     return 1;
   }
   if ((mc_global.utf8_display && g_unichar_isprint (c)) ||
       (!mc_global.utf8_display && is_printable (c)))
   {
-      tty_print_anychar(c);
+      if (!blank)
+        tty_print_anychar(c);
       next_ch = g_utf8_next_char (str);
       return next_ch - str;
   }
   else
   {
-      tty_print_anychar('.');
+      if (!blank)
+        tty_print_anychar('.');
       return 1;
   }
 }
