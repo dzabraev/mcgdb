@@ -302,6 +302,12 @@ get_command_num(json_t *pkg) {
     else if (compare_cmd("error_message")) {
       return MCGDB_ERROR_MESSAGE;
     }
+    else if (compare_cmd("update_node")) {
+      return MCGDB_UPDATE_NODE;
+    }
+    else if (compare_cmd("do_row_visible")) {
+      return MCGDB_DO_ROW_VISIBLE;
+    }
     else {
       return MCGDB_UNKNOWN;
     }
@@ -798,10 +804,11 @@ mcgdb_cmd_finish(void) {
 
 void
 mcgdb_shellcmd (const char *cmd) {
-  /*execute `cmd` if gdb shell */
+  /*execute `cmd` in gdb shell */
   char *json_cmd;
-  asprintf(&json_cmd,"{\"cmd\":\"%s\"}",cmd);
+  asprintf(&json_cmd,"{\"cmd\":\"exec_in_gdb\", \"exec_in_gdb\":\"%s\"}",cmd);
   send_pkg_to_gdb (json_cmd);
+  free (json_cmd);
 }
 
 void

@@ -106,6 +106,7 @@ class AsmWin(mcgdb.basewin.BaseWin):
     try:
       return self.asm_to_chunks_1()
     except gdb.error as e:
+      self.selected_asm_op_id = None
       return self.tablemsg(str(e)),-1
 
   @exec_main
@@ -131,16 +132,19 @@ class AsmWin(mcgdb.basewin.BaseWin):
     rows=[]
     pc=frame.pc()
     selected_row=None
+    self.addr_to_row={}
     for idx,row in enumerate(disas):
       asm=row['asm'].split()
       cmd=asm[0]
       code=' '.join(asm[1:])
       addr=row['addr']
       spaces=' '*(10-len(cmd))
-      kw={}
+      kw={'id':addr}
       if addr==pc:
         kw['selected']=True
         selected_row=idx
+        self.selected_asm_op_id = addr
+      self.addr_to_row[addr]=idx
       cols={'columns':[
         {'chunks':[
           self.text_chunk('0x{:016x}'.format(addr)),
@@ -166,12 +170,13 @@ class AsmWin(mcgdb.basewin.BaseWin):
       frame=gdb.selected_frame()
     except gdb.error:
       frame=None
-    need_update_cur_pos=frame and self.pc!=frame.pc
+    need_update_current_op=frame and self.pc!=frame.pc()
     if self.location:
       need_update_asm_code=self.need_redisplay_asm
     else:
       need_update_asm_code=self.need_redisplay_asm or self.start_addr!=start_addr or self.end_addr!=end_addr
     if need_update_asm_code:
+      self.need_redisplay_asm=False
       selected_row=None
       if not frame:
         asm_rows = self.text_chunk('not frame selected')
@@ -182,8 +187,23 @@ class AsmWin(mcgdb.basewin.BaseWin):
         table['selected_row']=selected_row
       pkg={'cmd':'table_asm','table':table,}
       self.send(pkg)
-    if need_update_cur_pos:
-      pass
+    elif need_update_current_op:
+      if self.selected_asm_op_id!=None:
+        node_data={'id':self.selected_asm_op_id,'selected':False}
+        pkg={'cmd':'update_node','table':'asm', 'node_data':node_data}
+        self.send(pkg)
+      self.selected_asm_op_id = frame.pc()
+      node_data={'id':frame.pc(),'selected':True}
+      pkg={'cmd':'update_node','table':'asm', 'node_data':node_data}
+      self.send(pkg)
+      pkg={'cmd':'do_row_visible','table':'asm', 'nrow':self.addr_to_row[self.selected_asm_op_id]}
+      self.send(pkg)
+    self.start_addr=start_addr
+    self.end_addr=end_addr
+    if frame:
+      self.pc=frame.pc()
+    else:
+      self.pc=None
 
   def gdbevt_stop(self,evt):
     self.update_asm_code()

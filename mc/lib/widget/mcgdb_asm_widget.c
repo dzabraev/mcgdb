@@ -50,15 +50,23 @@ mcgdb_asm_dialog_mouse_callback (__attribute__((unused)) Widget *  w,
 
 static void
 mcgdb_asm_dialog_gdbevt (WDialog *h) {
-  WTable *wtab;
+  WTable *wtab = (WTable *)dlg_find_by_id(h,asmtab_id);
   struct gdb_action * act = event_from_gdb;
   json_t *pkg = act->pkg;
   event_from_gdb=NULL;
+  const char *tabname;
+  int nrow;
 
   switch(act->command) {
     case MCGDB_TABLE_ASM:
-      wtab = (WTable *)dlg_find_by_id(h,asmtab_id);
       pkg_table_package (pkg,wtab,"asm");
+      break;
+    case MCGDB_UPDATE_NODE:
+      wtable_update_node(wtab,pkg);
+      wtable_draw(wtab);
+      break;
+    case MCGDB_DO_ROW_VISIBLE:
+      wtable_do_row_visible_json(wtab,pkg);
       break;
     default:
       break;

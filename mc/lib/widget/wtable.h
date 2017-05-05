@@ -98,6 +98,7 @@ typedef struct celldata {
   gboolean selected;
   json_t *onclick_data;
   gboolean onclick_user_input;
+  gint64 id;
 } cell_data_t;
 
 typedef struct Table {
@@ -124,6 +125,7 @@ typedef struct Table {
   gboolean draw_vline;
   gboolean draw_hline;
   const global_keymap_t * keymap;
+  GHashTable *hnodes;
 } Table;
 
 
@@ -144,6 +146,10 @@ WTable  *wtable_new (int y, int x, int height, int width);
 void     wtable_add_table(WTable *wtab, const char *tabname, int ncols, const global_keymap_t * keymap);
 void     wtable_set_current_table(WTable *wtab, const char *tabname);
 void     wtable_set_colwidth_formula(WTable *wtab, const char *tabname, int (*formula)(const Table * tab, int ncol));
+void     wtable_update_node(WTable *wtab, json_t *pkg);
+void     wtable_draw(WTable *wtab);
+void     wtable_do_row_visible(WTable *wtab, const char *tabname, int nrow);
+void     wtable_do_row_visible_json(WTable *wtab, json_t *pkg);
 
 #define WTABLE(x) ((WTable *)x)
 #define TABLE(x)  ((Table *)x)

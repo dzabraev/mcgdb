@@ -114,9 +114,9 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     if gdb_stopped():
       exec_cmd_in_gdb("finish")
 
-  def _editor_default(self,pkg):
+  def exec_in_gdb(self,exec_cmd):
     if gdb_stopped():
-      exec_cmd_in_gdb(pkg['cmd'])
+      exec_cmd_in_gdb(exec_cmd)
 
   def make_runwin_cmd(self):
     ''' Данный метод формирует shell-команду для запуска окна с editor.
@@ -177,8 +177,10 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     if cmd=='shellcmd':
       cmdname=pkg['cmdname']
       self.process_shellcmd(cmdname)
+    elif cmd=='exec_in_gdb':
+      self.exec_in_gdb(pkg['exec_in_gdb'])
     else:
-      cb=self.window_event_handlers.get(cmd,self._editor_default)
+      cb=self.window_event_handlers[cmd]
       return cb(pkg)
 
   def terminate(self):

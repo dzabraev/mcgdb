@@ -42,6 +42,8 @@ enum gdb_cmd {
   MCGDB_THREADS,
   MCGDB_TABLE_ASM,
 
+  MCGDB_UPDATE_NODE,
+  MCGDB_DO_ROW_VISIBLE,
 };
 
 enum window_type {
