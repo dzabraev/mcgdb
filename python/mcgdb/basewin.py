@@ -59,6 +59,7 @@ class BaseWin(object):
       'frame'       : self.shellcmd_frame,
       'frame_up'    : self.shellcmd_frame_up,
       'frame_down'  : self.shellcmd_frame_down,
+      'thread'      : self.shellcmd_thread,
     }
 
     mcgdb._dw[self.type]=self #debug
@@ -246,7 +247,7 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
   def shellcmd_frame(self): pass
   def shellcmd_frame_up(self): pass
   def shellcmd_frame_down(self): pass
-
+  def shellcmd_thread(self): pass
 
   def text_chunk(self,string,**kwargs):
     d=kwargs

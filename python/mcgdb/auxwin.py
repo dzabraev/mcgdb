@@ -32,7 +32,8 @@ class AuxWin(BaseWin):
       'collapse_variable':self._collapse_variable,
     }
     self.converters={
-      'bin_to_long' : self.bin_to_long
+      'bin_to_long' : self.bin_to_long,
+      'hex_to_long' : lambda x: long(x,16),
     }
     self.regex_split = re.compile('\s*([^\s]+)\s+([^\s+]+)\s+(.*)')
     self.slice_regex=re.compile('^(-?\d+)([:, ](-?\d+))?$')
@@ -160,7 +161,7 @@ class AuxWin(BaseWin):
     if res!=None:
       self.send_error(res)
     else:
-      # эмитируем, что пользователь вызвал в шелле команду, и оповещаем
+      # имитируем, что пользователь вызвал в шелле команду, и оповещаем
       # об этом остальные сущности
       return [{'cmd':'shellcmd','cmdname':'thread'}]
 
@@ -973,7 +974,7 @@ class AuxWin(BaseWin):
     data_chunks += self.changable_value_to_chunks(value,name, integer_mode='dec')
     data_chunks += [{'str':'\n'}]
     data_chunks += self.name_to_chunks('hex')
-    data_chunks += self.changable_value_to_chunks(value,name, integer_mode='hex')
+    data_chunks += self.changable_value_to_chunks(value,name, integer_mode='hex',converter='hex_to_long')
     data_chunks += [{'str':'\n'}]
     data_chunks += self.name_to_chunks('bin')
     data_chunks += self.changable_value_to_chunks(value,name, integer_mode='bin',converter='bin_to_long')
@@ -1097,5 +1098,5 @@ class AuxWin(BaseWin):
     self.update_all()
   def shellcmd_thread(self):
     self.update_all()
-
-
+  def shellcmd_thread(self):
+    self.update_all()
