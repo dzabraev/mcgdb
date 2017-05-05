@@ -159,6 +159,7 @@ ghfunc_table_update_bounds(__attribute__((unused)) gpointer key, gpointer value,
   Widget * w = WIDGET(wtab);
   Table  * tab  = TABLE(value);
   table_update_bounds(tab, w->y+2,w->x+1,w->lines-3,w->cols-2);
+  table_draw (tab,TRUE);
 }
 
 void
@@ -509,7 +510,9 @@ process_cell_tree_mouse_callbacks (Table *tab, GNode *root, int y, int x) {
       send_pkg_to_gdb (json_dumps (msg_obj,0));
       json_decref (msg_obj);
       if (insert_wait_text) {
-        free (CHUNK(node)->str);
+        //message_assert (CHUNK(node)->str);
+        if (CHUNK(node)->str)
+          free (CHUNK(node)->str);
         asprintf(&CHUNK(node)->str,"<Wait change: %s>", f);
         json_decref (CHUNK(node)->onclick_data);
         CHUNK(node)->onclick_data=NULL;
@@ -575,7 +578,8 @@ table_process_mouse_click(Table *tab, mouse_event_t * event) {
   }
 
   if (tab->redraw) {
-    table_draw (tab,FALSE);
+    table_draw (tab, TRUE);
+    table_draw (tab, FALSE);
   }
 }
 
@@ -644,15 +648,17 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
    * `x_start`, `x_stop` есть координаты начала и конца строки.
    */
   GArray * coord = chunk_data->coord;
-  if (coord->len)
+  if (blank && coord->len)
     g_array_remove_range (coord, 0, coord->len);
   p = chunk_data->str;
   if (!p)
     p="???";
   offset=ROW_OFFSET(tab,rowcnt[0]);
   //offset_start = offset;
-  g_array_append_val (coord, offset);
-  g_array_append_val (coord, start_pos);
+  if (blank) {
+    g_array_append_val (coord, offset);
+    g_array_append_val (coord, start_pos);
+  }
   if (!blank)
     tty_gotoyx(offset,start_pos);
   for(;;) {
@@ -660,14 +666,17 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
       /*допечатали до правой границы столбца таблицы
        *делаем перенос строки.*/
       int colcnt1 = MIN (colcnt,x2);
-      g_array_append_val (coord, colcnt1);
+      if (blank)
+        g_array_append_val (coord, colcnt1);
       rowcnt[0]++;
       offset=ROW_OFFSET(tab,rowcnt[0]);
       if (!blank && offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
         tty_gotoyx(offset,x1);
       colcnt=x1;
-      g_array_append_val (coord, offset);
-      g_array_append_val (coord, colcnt);
+      if (blank) {
+        g_array_append_val (coord, offset);
+        g_array_append_val (coord, colcnt);
+      }
     }
     else if (
       in_printable_area(colcnt,left_bound,right_bound) &&
@@ -683,7 +692,8 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
     }
     newline=FALSE;
     if (!*p) {
-      g_array_append_val (coord, colcnt);
+      if (blank)
+        g_array_append_val (coord, colcnt);
       break;
     }
     switch(*p) {
@@ -772,11 +782,13 @@ print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int r
 //      str_begin="[\n";
 //      str_end="]\n";
 //    }
-    if (coord->len>0)
+    if (blank && coord->len>0)
       g_array_remove_range (coord, 0, coord->len);
     offset=ROW_OFFSET(tab,rowcnt[0]);
-    g_array_append_val (coord, offset);
-    g_array_append_val (coord, start_pos);
+    if (blank) {
+      g_array_append_val (coord, offset);
+      g_array_append_val (coord, start_pos);
+    }
 //    if (str_begin) {
 //      start_pos = print_str(str_begin,x1,x2,start_pos,left_bound,right_bound,tab,rowcnt);
 //    }
@@ -793,9 +805,10 @@ print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int r
   //    start_pos_1 = print_str(str_end,x1,x2,x1,left_bound,right_bound,tab,rowcnt);
     offset=ROW_OFFSET(tab,rowcnt[0]);
     start_pos = (type_code == TYPE_CODE_STRUCT || type_code == TYPE_CODE_ARRAY || type_code == TYPE_CODE_UNION) ? (x1) : (start_pos_1);
-    g_array_append_val (coord, offset);
-    g_array_append_val (coord, start_pos);
-
+    if (blank) {
+      g_array_append_val (coord, offset);
+      g_array_append_val (coord, start_pos);
+    }
   }
 
   return start_pos;
@@ -822,7 +835,8 @@ table_draw_row (Table * tab, table_row *row, gboolean blank) {
   int rowcnt;
   long max_rowcnt=1, x1, x2;
   long offset;
-  row->y1 = ROW_OFFSET(tab,0);
+  if (blank)
+    row->y1 = ROW_OFFSET(tab,0); /*y-коорд. последней строки + 1*/
   for(int i=0;i<tab->ncols;i++) {
     column = columns[i];
     x1 = i==0?colstart[i]:colstart[i]+1;
@@ -844,10 +858,12 @@ table_draw_row (Table * tab, table_row *row, gboolean blank) {
     if(rowcnt>max_rowcnt)
       max_rowcnt=rowcnt;
   }
-  tab->last_row_pos += max_rowcnt;
-  row->y2 = ROW_OFFSET(tab,0);
+  if (blank) {
+    tab->last_row_pos += max_rowcnt;
+    row->y2 = ROW_OFFSET(tab,0);
+  }
 }
-
+/*
 static int
 get_row_topbottom(Table * tab, table_row *row, int *t, int *b) {
   GNode ** columns = row->columns;
@@ -871,7 +887,7 @@ get_row_topbottom(Table * tab, table_row *row, int *t, int *b) {
   *t=top;
   *b=bottom;
 }
-
+*/
 
 static void
 table_draw(Table * tab, gboolean blank) {
@@ -881,6 +897,7 @@ table_draw(Table * tab, gboolean blank) {
   tty_fill_region(tab->y,tab->x,tab->lines,tab->cols,' ');
   tab->last_row_pos = tab->y - tab->row_offset;
   int tt=TAB_TOP(tab),tb=TAB_BOTTOM(tab);
+  int rtop,rbottom;
 
   if (blank) {
     /*ничего не рисуется, только высчитывается длина*/
@@ -888,7 +905,7 @@ table_draw(Table * tab, gboolean blank) {
       r = TABROW(row);
       table_draw_row (tab,r,blank);
       offset=ROW_OFFSET(tab,0);
-      if (offset>TAB_TOP(tab) && offset<=TAB_BOTTOM(tab) && tab->draw_hline) {
+      if (tab->draw_hline) {
         tab->last_row_pos++;
       }
       row = g_list_next (row);
@@ -896,21 +913,23 @@ table_draw(Table * tab, gboolean blank) {
   }
   else {
     while(row) {
-      int top,bottom;
       r = TABROW(row);
-      get_row_topbottom (tab,r,&top,&bottom);
-      if ((top>tt && top<tb) || (bottom>tt && bottom<tb) ) {
-        tab->last_row_pos=tb+1;
+      rtop=r->y1;
+      rbottom=r->y2-1;
+      //get_row_topbottom (tab,r,&top,&bottom);
+      if ((rtop>=tt && rtop<=tb) || (rbottom>=tt && rbottom<=tb) ) {
+        tab->last_row_pos=r->y1;
         tty_setcolor(EDITOR_NORMAL_COLOR);
         table_draw_row (tab,r,blank);
+        tab->last_row_pos=r->y2;
         offset=ROW_OFFSET(tab,0);
         if (offset>TAB_TOP(tab) && offset<=TAB_BOTTOM(tab) && tab->draw_hline) {
           tty_setcolor(EDITOR_NORMAL_COLOR);
           tty_draw_hline(offset,tab->x,mc_tty_frm[MC_TTY_FRM_HORIZ],tab->cols);
-          tab->last_row_pos++;
+          //tab->last_row_pos++;
         }
       }
-      if (top>tb)
+      if (rtop>tb)
         break;
       row = g_list_next (row);
     }
@@ -1019,6 +1038,8 @@ static void
 table_update_coord(Table *tab, int off) {
   for (GList *row = tab->rows;row;row=g_list_next(row)) {
     GNode ** columns = TABROW(row)->columns;
+    TABROW(row)->y1-=off;
+    TABROW(row)->y2-=off;
     for(int i=0;i<tab->ncols;i++) {
       GNode *column = columns[i];
       node_update_coord(column,off);
@@ -1030,17 +1051,20 @@ static void
 table_add_offset(Table *tab, int off) {
   int max_offset;
   int old_offset = tab->row_offset;
+  int delta;
   if ( !TAB_FIRST_ROW(tab) ) {
     /*empty table*/
     return;
   }
+  delta = tab->row_offset;
   max_offset = MAX(0,((TAB_LAST_ROW(tab)->y2 - TAB_FIRST_ROW(tab)->y1) - (TAB_BOTTOM(tab)-TAB_TOP(tab))));
   tab->row_offset += off;
   tab->row_offset = MAX(tab->row_offset, 0);
   tab->row_offset = MIN(tab->row_offset, max_offset);
-  if (tab->row_offset!=old_offset)
+  delta=tab->row_offset - old_offset;
+  if (delta!=0)
     tab->redraw |= REDRAW_TAB;
-  table_update_coord(tab,off);
+  table_update_coord(tab,delta);
 }
 
 static void
@@ -1128,6 +1152,9 @@ wtable_callback (Widget * w, __attribute__((unused)) Widget * sender, widget_msg
 static void
 wtable_draw(WTable *wtab) {
   Table *tab = wtab->tab;
+  int old_offset = tab->row_offset;
+  table_add_offset (tab,0); /*make offset valid*/
+
   tty_draw_box (WIDGET(wtab)->y+1, WIDGET(wtab)->x, WIDGET(wtab)->lines-1, WIDGET(wtab)->cols, FALSE);
   if (tab->rows && tab->selected_row>=0) {
     //table_draw (tab, FALSE);
@@ -1137,7 +1164,6 @@ wtable_draw(WTable *wtab) {
     */
     table_row * selrow;
     int off;
-    gboolean changed_off=FALSE;
     message_assert (tab->selected_row < tab->nrows);
     selrow = TABROW(g_list_nth (tab->rows, tab->selected_row));
     if (selrow->y1 <= TAB_TOP(tab) &&  selrow->y2 >= TAB_TOP(tab)) {
@@ -1145,30 +1171,23 @@ wtable_draw(WTable *wtab) {
        * Делаем, что бы верхняя была видна
        */
       off = selrow->y1 - (TAB_TOP(tab) + 1);
-      changed_off = TRUE;
     }
     else if (selrow->y1 <= TAB_BOTTOM(tab) &&  selrow->y2 >= TAB_BOTTOM(tab)) {
       /*нижняя не видна, верхняя видна*/
       off = selrow->y2 - (TAB_BOTTOM(tab) - 1);
-      changed_off = TRUE;
     }
-    else if (TAB_BOTTOM(tab)<=selrow->y1 || TAB_TOP(tab)>=selrow->y2) {
+    //else if (TAB_BOTTOM(tab)<=selrow->y1 || TAB_TOP(tab)>=selrow->y2) {
+    else {
      /*ничего не видно, перемещаем ячейку в центр*/
      off = (selrow->y2 + selrow->y1)/2 - (TAB_BOTTOM(tab)+TAB_TOP(tab))/2;
-     changed_off = TRUE;
     }
-    if (changed_off) {
-      table_add_offset (tab,off);
-      table_draw (tab, FALSE);
-    }
+    table_add_offset (tab,off);
+    table_draw (tab, FALSE);
     tab->selected_row=-1;
   }
   else {
-    int old_offset = tab->row_offset;
-    //table_draw (tab);
-    table_add_offset (tab,0); /*make offset valid*/
-    if (old_offset!=tab->row_offset)
-      table_draw (tab,FALSE);
+    //if (old_offset!=tab->row_offset)
+    table_draw (tab,FALSE);
   }
   tty_setcolor(EDITOR_NORMAL_COLOR);
   selbar_draw (wtab->selbar);
