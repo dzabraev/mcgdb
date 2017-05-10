@@ -768,41 +768,6 @@ mcgdb_available_key (int c) {
 }
 
 void
-mcgdb_cmd_next(void) {
-  send_pkg_to_gdb ("{\"cmd\":\"editor_next\"}");
-}
-
-void
-mcgdb_cmd_step(void) {
-  send_pkg_to_gdb ("{\"cmd\":\"editor_step\"}");
-}
-
-void
-mcgdb_cmd_until(void) {
-  send_pkg_to_gdb ("{\"cmd\":\"editor_until\"}");
-}
-
-void
-mcgdb_cmd_continue(void) {
-  send_pkg_to_gdb ("{\"cmd\":\"editor_continue\"}");
-}
-
-void
-mcgdb_cmd_frame_up(void) {
-  send_pkg_to_gdb ("{\"cmd\":\"editor_frame_up\"}");
-}
-
-void
-mcgdb_cmd_frame_down(void) {
-  send_pkg_to_gdb ("{\"cmd\":\"editor_frame_down\"}");
-}
-
-void
-mcgdb_cmd_finish(void) {
-  send_pkg_to_gdb ("{\"cmd\":\"editor_finish\"}");
-}
-
-void
 mcgdb_shellcmd (const char *cmd) {
   /*execute `cmd` in gdb shell */
   char *json_cmd;

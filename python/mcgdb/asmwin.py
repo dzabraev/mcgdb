@@ -218,9 +218,12 @@ class AsmWin(mcgdb.basewin.BaseWin):
   def shellcmd_frame_down(self):
     self.update_asm_code()
 
-  def shellcmd_frame(self):
-    self.update_asm_code()
-
   def shellcmd_thread(self):
     self.update_asm_code()
+
+  def mcgdbevt_frame(self,data):
+    rc = self.update_asm_code()
+    super(AsmWin,self).mcgdbevt_frame(data)
+    return rc
+
 

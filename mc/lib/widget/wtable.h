@@ -149,6 +149,8 @@ void     wtable_set_colwidth_formula(WTable *wtab, const char *tabname, int (*fo
 void     wtable_update_node(WTable *wtab, json_t *pkg);
 void     wtable_draw(WTable *wtab);
 void     wtable_do_row_visible(WTable *wtab, const char *tabname, int nrow);
+/*перемотать содержимое таблицы tabname так, что бы строка с номером nrow
+стала видимой*/
 void     wtable_do_row_visible_json(WTable *wtab, json_t *pkg);
 
 #define WTABLE(x) ((WTable *)x)

@@ -449,11 +449,16 @@ class GEThread(object):
         win=self.fte[fd]
         win.process_gdbevt(name,evt)
       breakpoint_queue.process()
-    elif cmd=='shellcmd':
+    elif cmd =='shellcmd':
       cmdname=pkg['cmdname']
       for fd in self.fte:
         win=self.fte[fd]
         win.process_shellcmd(cmdname)
+#    elif cmd=='mcgdbevt':
+#      cmdname=pkg['cmdname']
+#      for fd in self.fte:
+#        win=self.fte[fd]
+#        win.process_mcgdbevt(cmd,pkg['data'])
     ####mcgdb events
     elif   cmd=='open_window':
       self.__open_window(pkg)

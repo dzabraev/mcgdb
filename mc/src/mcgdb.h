@@ -121,17 +121,10 @@ void mcgdb_init(void);
 
 gboolean mcgdb_available_key(int c);
 
-void mcgdb_cmd_breakpoint(WEdit * e);
-void mcgdb_cmd_disableenable_bp(WEdit * e);
-void mcgdb_cmd_goto_eline(void);
-void mcgdb_cmd_next(void);
-void mcgdb_cmd_step(void);
-void mcgdb_cmd_until(void);
-void mcgdb_cmd_continue(void);
 void mcgdb_cmd_print(void);
-void mcgdb_cmd_frame_up(void);
-void mcgdb_cmd_frame_down(void);
-void mcgdb_cmd_finish(void);
+void mcgdb_cmd_goto_eline (void);
+void mcgdb_cmd_disableenable_bp (WEdit * e);
+void mcgdb_cmd_breakpoint (WEdit * e);
 
 void mcgdb_shellcmd(const char *cmd);
 

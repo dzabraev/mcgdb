@@ -1195,31 +1195,31 @@ wtable_callback (Widget * w, __attribute__((unused)) Widget * sender, widget_msg
           table_add_offset(wtab->tab,wtab->tab->lines/3);
           break;
         case CK_MCGDB_Frame_up:
-          mcgdb_cmd_frame_up ();
+          mcgdb_shellcmd ("up");
           break;
         case CK_MCGDB_Frame_down:
-          mcgdb_cmd_frame_down ();
+          mcgdb_shellcmd ("down");
           break;
         case CK_MCGDB_Step:
-          mcgdb_cmd_step ();
+          mcgdb_shellcmd ("step");
           break;
         case CK_MCGDB_Stepi:
           mcgdb_shellcmd ("stepi");
           break;
         case CK_MCGDB_Next:
-          mcgdb_cmd_next ();
+          mcgdb_shellcmd ("next");
           break;
         case CK_MCGDB_Nexti:
           mcgdb_shellcmd ("nexti");
           break;
         case CK_MCGDB_Finish:
-          mcgdb_cmd_finish ();
+          mcgdb_shellcmd ("finish");
           break;
         case CK_MCGDB_Continue:
-          mcgdb_cmd_continue ();
+          mcgdb_shellcmd ("continue");
           break;
         case CK_MCGDB_Exit:
-          mcgdb_exit_confirm ();
+          mcgdb_shellcmd ("exit");
           break;
         case CK_MCGDB_Until:
           mcgdb_shellcmd ("until");

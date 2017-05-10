@@ -4,249 +4,16 @@ import gdb
 
 import re,sys,ctypes
 
-from mcgdb.basewin import BaseWin
+from mcgdb.basewin import BaseWin, StubEvents
 from mcgdb.common  import exec_in_main_pythread,gdb_stopped,inferior_alive,gdb_print
 from mcgdb.basewin import stringify_value,valueaddress_to_ulong,stringify_value_safe, \
                           is_incomplete_type_ptr,check_chunks
+from mcgdb.common import exec_main
 
-
-class AuxWin(BaseWin):
-  ''' Representation of window with localvars of current frame
-  '''
-
-  type='auxwin'
-  startcmd='mcgdb open aux'
-
-  def __init__(self, **kwargs):
-    self.clear_caches()
-    super(AuxWin,self).__init__(**kwargs)
-    self.window_event_handlers.update({
-      'onclick_data'    : self._onclick_data,
-    })
-    self.click_cmd_cbs={
-      'select_frame'    : self._select_frame,
-      'select_thread'   : self._select_thread,
-      'change_variable' : self._change_variable,
-      'change_slice'    : self._change_slice,
-      'expand_variable' : self._expand_variable,
-      'collapse_variable':self._collapse_variable,
-    }
-    self.converters={
-      'bin_to_long' : self.bin_to_long,
-      'hex_to_long' : lambda x: long(x,16),
-    }
-    self.regex_split = re.compile('\s*([^\s]+)\s+([^\s+]+)\s+(.*)')
-    self.slice_regex=re.compile('^(-?\d+)([:, ](-?\d+))?$')
-
-    self.regnames=[]
-    self.user_slice={}
-    self.expand_variable={}
-    #grab register names
-    regtab = gdb.execute('maint print registers',False,True).split('\n')[1:]
-    for reg in regtab:
-      if reg=="*1: Register type's name NULL.":
-        continue
-      reg=reg.split()
-      if len(reg)>0 and reg[0] and reg[0]!="''" and len(reg[0])>0:
-        self.regnames.append('$'+reg[0])
-
-  def bin_to_long(self,str_bin):
-    '''converst string-binary-representation of number to long'''
-    return long(str_bin,2)
-
+class ValueToChunks(StubEvents):
   def clear_caches(self):
     self.value_cache={}
     self.value_str_cache={}
-
-  def process_connection(self):
-    rc=super(AuxWin,self).process_connection()
-    if rc:
-      self.update_all()
-    return rc
-
-
-  def _onclick_data(self,pkg):
-    click_cmd = pkg['data']['click_cmd']
-    cb=self.click_cmd_cbs.get(click_cmd)
-    if cb==None:
-      return
-    return cb(pkg)
-
-  def _expand_variable(self,pkg):
-    path=pkg['data']['path']
-    funcname=pkg['data']['funcname']
-    self.expand_variable[(funcname,path)]=True
-    self.update_localvars()
-
-  def _collapse_variable(self,pkg):
-    path=pkg['data']['path']
-    funcname=pkg['data']['funcname']
-    self.expand_variable[(funcname,path)]=False
-    self.update_localvars()
-
-
-
-  def _change_slice_1(self,pkg):
-    path=pkg['data']['path']
-    funcname=pkg['data']['funcname']
-    user_input = pkg['user_input']
-    match=self.slice_regex.match(user_input)
-    if match:
-      grps=match.groups()
-      n1=int(grps[0])
-      if grps[2]!=None:
-        n2=int(grps[2])
-      else:
-        n2=None
-      if n2!=None and n1>=n2:
-        self.send_error('bad input: right bound must be greater than left')
-        return
-      self.user_slice[(funcname,path)] = (n1,n2)
-    else:
-      self.send_error('bad input: {}'.format(user_input))
-      return
-    self.update_localvars()
-    self.update_backtrace()
-
-  def _change_slice(self,pkg):
-    return self._change_slice_1(pkg)
-
-  def _change_variable_1(self,pkg):
-    if not gdb_stopped():
-      self.send_error('inferior running')
-      return None
-    if not inferior_alive ():
-      self.send_error('inferior not alive')
-      return None
-    data=pkg['data']
-    path=data['path']
-    user_input = pkg['user_input']
-    value=self.valcache(path)
-    if 'converter' in data:
-      new_value = self.converters.get(data['converter'])(user_input)
-    elif value.type.strip_typedefs().code in (gdb.TYPE_CODE_INT,gdb.TYPE_CODE_PTR):
-      try:
-        new_value=long(gdb.parse_and_eval(user_input))
-      except Exception as e:
-        self.send_error(str(e))
-        return None
-    else:
-      new_value = user_input
-    gdb_cmd='set variable {path}={new_value}'.format(path=path,new_value=new_value)
-    try:
-      exec_in_main_pythread(gdb.execute, (gdb_cmd,))
-    except Exception as e:
-      self.send_error(str(e))
-      return None
-    self.update_all()
-
-  def _change_variable(self,pkg):
-    res=exec_in_main_pythread(self._change_variable_1, (pkg,))
-    self.update_all() #обновление будет осуществлятсья всегда, даже в случае
-    #некорректно введенных данных. Поскольку после введения данных у пользователя
-    #отображается <Wait change: ... >, и это сообщение надо заменить предыдущим значением.
-    return res
-
-
-  def _select_thread_1(self,nthread):
-    threads=gdb.selected_inferior().threads()
-    if len(threads)<nthread+1:
-      return 'thread #{} not exists'.format(nthread)
-    threads[nthread].switch()
-    self.update_all()
-
-  def _select_thread(self,pkg):
-    nthread = pkg['data']['nthread']
-    res=exec_in_main_pythread(self._select_thread_1, (nthread,))
-    if res!=None:
-      self.send_error(res)
-    else:
-      # имитируем, что пользователь вызвал в шелле команду, и оповещаем
-      # об этом остальные сущности
-      return [{'cmd':'shellcmd','cmdname':'thread'}]
-
-  def _select_frame_1(self,nframe):
-    if not gdb_stopped():
-      return 'inferior running'
-    if not inferior_alive ():
-      return 'inferior not alive'
-    n_cur_frame=0
-    frame = gdb.newest_frame ()
-    while frame:
-      if n_cur_frame==nframe:
-        frame.select()
-        self.update_all()
-        return
-      n_cur_frame+=1
-      frame = frame.older()
-    return "can't find frame #{}".format(nframe)
-
-  def _select_frame(self,pkg):
-    nframe = pkg['data']['nframe']
-    res=exec_in_main_pythread(self._select_frame_1, (nframe,))
-    if res!=None:
-      self.send_error(res)
-    else:
-      return [{'cmd':'shellcmd','cmdname':'frame'}]
-
-  def update_localvars(self):
-    lvars=self._get_local_vars()
-    pkg={'cmd':'localvars','table':lvars}
-    self.send(pkg)
-
-  def update_backtrace(self):
-    try:
-      backtrace = self.get_stack()
-    except gdb.error:
-      return
-    pkg={
-      'cmd':'backtrace',
-      'table':backtrace,
-    }
-    self.send(pkg)
-  def update_registers(self):
-    try:
-      regs = self.get_registers()
-    except gdb.error as e:
-      if e.message=="No registers.":
-        return
-      else:
-        exc_type, exc_value, exc_traceback = sys.exc_info()
-        raise exc_type, exc_value, exc_traceback
-    pkg={
-      'cmd':'registers',
-      'table':regs,
-    }
-    self.send(pkg)
-  def update_threads(self):
-    try:
-      self.send({
-        'cmd':'threads',
-        'table':self.get_threads(),
-      })
-    except:
-      return
-  def gdb_check_breakpoint(self):
-    pass
-  def set_color(self,pkg):
-    pass
-
-  def _get_local_vars(self):
-    #try:
-    res=exec_in_main_pythread( self._get_local_vars_chunks, ())
-    #except (gdb.error,RuntimeError):
-      #import traceback
-      #traceback.print_exc()
-    #  res=[]
-    return res
-
-  def add_valcache_byaddr(self,value):
-    addr=valueaddress_to_ulong(value.address)
-    if addr==None:
-      return False
-    key=(addr,str(value.type))
-    self.value_cache[key]=value
-    return True
 
   def get_this_frame_num(self):
     frame=gdb.selected_frame()
@@ -262,6 +29,13 @@ class AuxWin(BaseWin):
         #then frame can be invalid.
         return None
     return cnt
+
+  def base_onclick_data(self,cmdname,**kwargs):
+    onclick_data = {
+      'click_cmd':cmdname,
+    }
+    onclick_data.update(kwargs)
+    return onclick_data
 
   def cached_stringify_value(self,value,path,**kwargs):
     frnum=self.get_this_frame_num()
@@ -302,6 +76,14 @@ class AuxWin(BaseWin):
         self.add_valcache_byaddr(value)
         valcache1=value
     return valcache1
+
+  def add_valcache_byaddr(self,value):
+    addr=valueaddress_to_ulong(value.address)
+    if addr==None:
+      return False
+    key=(addr,str(value.type))
+    self.value_cache[key]=value
+    return True
 
   def make_subarray_name(self,value,valuepath,**kwargs):
     funcname = kwargs.get('funcname')
@@ -440,27 +222,6 @@ class AuxWin(BaseWin):
       chunks.append({'str':'[CantAccsMem]'})
     return chunks
 
-  def base_onclick_data(self,cmdname,**kwargs):
-    onclick_data = {
-      'click_cmd':cmdname,
-    }
-    onclick_data.update(kwargs)
-    return onclick_data
-
-  def collapsed_struct_to_chunks(self,path, **kwargs):
-    return self.collapsed_item_to_chunks(path,'{<Expand>}', **kwargs)
-
-  def collapsed_array_to_chunks(self,path, **kwargs):
-    return self.collapsed_item_to_chunks(path,'[<Expand>]', **kwargs)
-
-
-  def collapsed_item_to_chunks(self,path,collapsed_str,**kwargs):
-    return [{
-        'str':collapsed_str,
-        'onclick_data':self.base_onclick_data('expand_variable',path=path,funcname=kwargs.get('funcname')),
-      }]
-
-
   def pointer_data_to_chunks (self,value,name,path,deref_depth, **kwargs):
     str_type = str(value.type.strip_typedefs())
     assert not re.match('.*void \*$',str_type)
@@ -504,6 +265,20 @@ class AuxWin(BaseWin):
       if with_equal:
         chunks+=[{'str':' = '}]
     return chunks
+
+
+  def collapsed_struct_to_chunks(self,path, **kwargs):
+    return self.collapsed_item_to_chunks(path,'{<Expand>}', **kwargs)
+
+  def collapsed_array_to_chunks(self,path, **kwargs):
+    return self.collapsed_item_to_chunks(path,'[<Expand>]', **kwargs)
+
+
+  def collapsed_item_to_chunks(self,path,collapsed_str,**kwargs):
+    return [{
+        'str':collapsed_str,
+        'onclick_data':self.base_onclick_data('expand_variable',path=path,funcname=kwargs.get('funcname')),
+      }]
 
   def changable_value_to_chunks(self,value,path,**kwargs):
     if kwargs.get('enable_additional_text',False)==True:
@@ -623,25 +398,6 @@ class AuxWin(BaseWin):
     chunks.append({'str':self.cached_stringify_value(value,path,enable_additional_text=True), 'name':'varvalue'})
     #chunks+=self.value_to_str_chunks(value,path,enable_additional_text=True,**kwargs)
     return chunks
-
-  def possible_read_memory_ptr(self,value,**kwargs):
-    assert value.type.strip_typedefs().code==gdb.TYPE_CODE_PTR
-    n1=kwargs.get('n1',0)
-    addr=ctypes.c_ulong(long(value)).value
-    size=value.dereference().type.strip_typedefs().sizeof
-    return self.possible_read_memory(addr+n1*size,size)
-
-  def possible_read_memory(self,addr,size):
-    if addr<0:
-      return False
-    infer = gdb.selected_inferior ()
-    if infer==None:
-      return False
-    try:
-      infer.read_memory (addr,size)
-      return True
-    except gdb.MemoryError:
-      return False
 
   def ptrval_to_ulong(self,value):
     return ctypes.c_ulong(long(value)).value
@@ -833,45 +589,32 @@ class AuxWin(BaseWin):
     }
     return slice_chunk
 
-  def _get_local_vars_chunks(self):
-    variables = self._get_local_vars_1 ()
-    if len(variables)==0:
-      return []
-    lvars=[]
-    funcname=self._get_frame_funcname(gdb.selected_frame())
-    for name,value in variables.iteritems():
-      chunks = self.value_to_chunks(value,name,funcname=funcname)
-      check_chunks(chunks)
-      col = {'chunks':chunks}
-      row = {'columns':[col]}
-      lvars.append(row)
-    #lvars.sort( cmp = lambda x,y: 1 if x[''][0][0]['str']>y[0][0]['str'] else -1 )
-    return {'rows':lvars}
+  def integer_as_struct_chunks(self,value,name,**kwargs):
+    '''Данная функция предназначается для печати целочисленного
+        регистра, как структуру с полями dec,hex,bin
+    '''
+    chunks=[]
+    if kwargs.get('print_typename',True):
+      chunks+=self.value_type_to_chunks(value)
+      chunks.append({'str':' '})
+    chunks+=self.name_to_chunks(name)
+    data_chunks=[]
+    data_chunks += self.name_to_chunks('dec')
+    data_chunks += self.changable_value_to_chunks(value,name, integer_mode='dec')
+    data_chunks += [{'str':'\n'}]
+    data_chunks += self.name_to_chunks('hex')
+    data_chunks += self.changable_value_to_chunks(value,name, integer_mode='hex',converter='hex_to_long')
+    data_chunks += [{'str':'\n'}]
+    data_chunks += self.name_to_chunks('bin')
+    data_chunks += self.changable_value_to_chunks(value,name, integer_mode='bin',converter='bin_to_long')
+    data_chunks += [{'str':'\n'}]
+    data_chunks += [{'str':'\n'}]
+    chunks.append({'str':'{\n',})
+    chunks+=[{'chunks':data_chunks,'type_code':'TYPE_CODE_STRUCT'}]
+    chunks.append({'str':'}\n',})
+    return chunks
 
-  def _get_local_vars_1(self):
-    try:
-      frame = gdb.selected_frame()
-    except gdb.error:
-      return []
-    if not frame:
-      return []
-    try:
-      block = frame.block()
-    except RuntimeError:
-      return []
-    variables = {}
-    while block:
-      for symbol in block:
-        if (symbol.is_argument or symbol.is_variable):
-            name = symbol.name
-            if name not in variables:
-              variables[name] = self.valcache(symbol.value(frame))
-      if block.function:
-        break
-      block = block.superblock
-    return variables
-
-
+class FrameCommon(ValueToChunks):
   def _get_frame_func_args(self,frame):
       args=[]
       try:
@@ -923,7 +666,45 @@ class AuxWin(BaseWin):
       {'str':str(frame_line),'name':'frame_line'},
     ]
 
-  def _get_stack_1(self):
+
+
+class BacktraceTable(FrameCommon):
+  def __init__(self,**kwargs):
+    self.register_onclick_action('select_frame',self._select_frame)
+    super(BacktraceTable,self).__init__(**kwargs)
+
+  def process_connection(self):
+    rc=super(BacktraceTable,self).process_connection()
+    self.update_backtrace()
+    return rc
+
+  @exec_main
+  def _select_frame_1(self,nframe):
+    if not gdb_stopped():
+      return 'inferior running'
+    if not inferior_alive ():
+      return 'inferior not alive'
+    n_cur_frame=0
+    frame = gdb.newest_frame ()
+    while frame:
+      if n_cur_frame==nframe:
+        frame.select()
+        return
+      n_cur_frame+=1
+      frame = frame.older()
+    return "can't find frame #{}".format(nframe)
+
+  def _select_frame(self,pkg):
+    nframe = pkg['data']['nframe']
+    res=self._select_frame_1(nframe)
+    if res!=None:
+      self.send_error(res)
+    else:
+      return [{'cmd':'mcgdbevt','cmdname':'frame', 'data':{}}]
+
+
+  @exec_main
+  def get_stack(self):
     frame = gdb.newest_frame ()
     nframe=0
     frames=[]
@@ -957,35 +738,109 @@ class AuxWin(BaseWin):
       table['selected_row'] = selected_row
     return table
 
-  def get_stack(self):
-    return exec_in_main_pythread (self._get_stack_1,())
+  def update_backtrace(self):
+    try:
+      backtrace = self.get_stack()
+    except gdb.error:
+      return
+    pkg={
+      'cmd':'backtrace',
+      'table':backtrace,
+    }
+    self.send(pkg)
 
-  def integer_as_struct_chunks(self,value,name,**kwargs):
-    '''Данная функция предназначается для печати целочисленного
-        регистра, как структуру с полями dec,hex,bin
-    '''
-    chunks=[]
-    if kwargs.get('print_typename',True):
-      chunks+=self.value_type_to_chunks(value)
-      chunks.append({'str':' '})
-    chunks+=self.name_to_chunks(name)
-    data_chunks=[]
-    data_chunks += self.name_to_chunks('dec')
-    data_chunks += self.changable_value_to_chunks(value,name, integer_mode='dec')
-    data_chunks += [{'str':'\n'}]
-    data_chunks += self.name_to_chunks('hex')
-    data_chunks += self.changable_value_to_chunks(value,name, integer_mode='hex',converter='hex_to_long')
-    data_chunks += [{'str':'\n'}]
-    data_chunks += self.name_to_chunks('bin')
-    data_chunks += self.changable_value_to_chunks(value,name, integer_mode='bin',converter='bin_to_long')
-    data_chunks += [{'str':'\n'}]
-    data_chunks += [{'str':'\n'}]
-    chunks.append({'str':'{\n',})
-    chunks+=[{'chunks':data_chunks,'type_code':'TYPE_CODE_STRUCT'}]
-    chunks.append({'str':'}\n',})
-    return chunks
 
-  def _get_regs_1(self):
+
+  def gdbevt_exited(self,evt):
+    self.update_backtrace()
+    super(BacktraceTable,self).gdbevt_exited(evt)
+
+  def gdbevt_stop(self,evt):
+    self.update_backtrace()
+    super(BacktraceTable,self).gdbevt_stop(evt)
+
+  def gdbevt_new_objfile(self,evt):
+    self.update_backtrace()
+    super(BacktraceTable,self).gdbevt_new_objfile(evt)
+
+  def gdbevt_clear_objfiles(self,evt):
+    self.update_backtrace()
+    super(BacktraceTable,self).gdbevt_clear_objfiles(evt)
+
+  def gdbevt_memory_changed(self,evt):
+    self.update_backtrace()
+    super(BacktraceTable,self).gdbevt_memory_changed(evt)
+
+  def gdbevt_register_changed(self,evt):
+    self.update_backtrace()
+    super(BacktraceTable,self).gdbevt_register_changed(evt)
+
+  def shellcmd_frame_up(self):
+    self.update_backtrace()
+    super(BacktraceTable,self).shellcmd_frame_up()
+
+  def shellcmd_frame_down(self):
+    self.update_backtrace()
+    super(BacktraceTable,self).shellcmd_frame_down()
+
+  def shellcmd_thread(self):
+    self.update_backtrace()
+    super(BacktraceTable,self).shellcmd_thread()
+
+  def mcgdbevt_frame(self,data):
+    self.update_backtrace()
+    super(BacktraceTable,self).mcgdbevt_frame(data)
+
+  def mcgdbevt_thread(self,data):
+    self.update_backtrace()
+    super(BacktraceTable,self).mcgdbevt_frame(data)
+
+
+
+
+class RegistersTable(ValueToChunks):
+  def __init__(self, **kwargs):
+    self.regnames=[]
+    self.converters['bin_to_long'] = lambda x: long(x,2)
+    self.converters['hex_to_long'] = lambda x: long(x,16)
+    self.regex_split = re.compile('\s*([^\s]+)\s+([^\s+]+)\s+(.*)')
+    regtab = gdb.execute('maint print registers',False,True).split('\n')[1:]
+    for reg in regtab:
+      if reg=="*1: Register type's name NULL.":
+        continue
+      reg=reg.split()
+      if len(reg)>0 and reg[0] and reg[0]!="''" and len(reg[0])>0:
+        self.regnames.append('$'+reg[0])
+    super(RegistersTable,self).__init__(**kwargs)
+
+
+  def process_connection(self):
+    rc=super(RegistersTable,self).process_connection()
+    self.update_registers()
+    return rc
+
+  def update_registers(self):
+    try:
+      regs = self.get_registers()
+    except gdb.error as e:
+      if e.message=="No registers.":
+        return
+      else:
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        raise exc_type, exc_value, exc_traceback
+    pkg={
+      'cmd':'registers',
+      'table':regs,
+    }
+    self.send(pkg)
+
+  @exec_main
+  def get_registers(self):
+    if not gdb_stopped() or not inferior_alive ():
+      return
+    return self._get_registers()
+
+  def _get_registers(self):
     rows_regs=[]
     for regname in self.regnames:
       regvalue = self.valcache(regname)
@@ -1003,12 +858,80 @@ class AuxWin(BaseWin):
       rows_regs.append(row)
     return {'rows' : rows_regs}
 
-  def get_registers(self):
-    if not gdb_stopped() or not inferior_alive ():
-      return
-    return exec_in_main_pythread (self._get_regs_1,())
 
-  def _get_threads_1(self):
+  def gdbevt_exited(self,evt):
+    self.update_registers()
+    return super(RegistersTable,self).gdbevt_exited(evt)
+
+  def gdbevt_stop(self,evt):
+    self.update_registers()
+    return super(RegistersTable,self).gdbevt_stop(evt)
+
+  def gdbevt_register_changed(self,evt):
+    self.update_registers()
+    return super(RegistersTable,self).gdbevt_register_changed(evt)
+
+  def shellcmd_frame_up(self):
+    self.update_registers()
+    return super(RegistersTable,self).shellcmd_frame_up()
+
+  def shellcmd_frame_down(self):
+    self.update_registers()
+    return super(RegistersTable,self).shellcmd_frame_down()
+
+  def shellcmd_thread(self):
+    self.update_registers()
+    return super(RegistersTable,self).shellcmd_thread()
+
+  def mcgdbevt_frame(self,data):
+    self.update_registers()
+    super(RegistersTable,self).mcgdbevt_frame(data)
+
+  def mcgdbevt_thread(self,data):
+    self.update_registers()
+    super(RegistersTable,self).mcgdbevt_frame(data)
+
+
+
+class ThreadsTable(FrameCommon):
+  def __init__(self, **kwargs):
+    self.click_cmd_cbs['select_thread'] = self._select_thread
+    super(ThreadsTable,self).__init__(**kwargs)
+
+  def process_connection(self):
+    rc=super(ThreadsTable,self).process_connection()
+    self.update_threads()
+    return rc
+
+  @exec_main
+  def _select_thread_1(self,nthread):
+    threads=gdb.selected_inferior().threads()
+    if len(threads)<nthread+1:
+      return 'thread #{} not exists'.format(nthread)
+    threads[nthread].switch()
+
+  def _select_thread(self,pkg):
+    nthread = pkg['data']['nthread']
+    res=self._select_thread_1(nthread)
+    if res!=None:
+      self.send_error(res)
+    else:
+      # имитируем, что пользователь вызвал в шелле команду, и оповещаем
+      # об этом остальные сущности
+      return [{'cmd':'mcgdbevt','cmdname':'thread', 'data':{}}]
+
+  def update_threads(self):
+    try:
+      self.send({
+        'cmd':'threads',
+        'table':self.get_threads(),
+      })
+    except:
+      return
+
+
+  @exec_main
+  def get_threads(self):
     selected_thread = gdb.selected_thread()
     throws=[]
     threads=gdb.selected_inferior().threads()
@@ -1055,48 +978,263 @@ class AuxWin(BaseWin):
       table['selected_row'] = selected_row
     return table
 
-  def get_threads(self):
-    return exec_in_main_pythread (self._get_threads_1,())
-
-  def update_all(self):
-    self.update_localvars()
-    self.update_backtrace()
-    self.update_registers()
+  def gdbevt_exited(self,evt):
     self.update_threads()
+    super(ThreadsTable,self).gdbevt_exited(evt)
+  def gdbevt_stop(self,evt):
+    self.update_threads()
+    super(ThreadsTable,self).gdbevt_stop(evt)
+  def gdbevt_new_objfile(self,evt):
+    self.update_threads()
+    super(ThreadsTable,self).gdbevt_new_objfile(evt)
+  def gdbevt_clear_objfiles(self,evt):
+    self.update_threads()
+    super(ThreadsTable,self).gdbevt_clear_objfiles(evt)
+  def gdbevt_memory_changed(self,evt):
+    self.update_threads()
+    super(ThreadsTable,self).gdbevt_memory_changed(evt)
+  def gdbevt_register_changed(self,evt):
+    self.update_threads()
+    super(ThreadsTable,self).gdbevt_register_changed(evt)
 
+  def shellcmd_frame_up(self):
+    self.update_threads()
+    super(ThreadsTable,self).shellcmd_frame_up()
+  def shellcmd_frame_down(self):
+    self.update_threads()
+    super(ThreadsTable,self).shellcmd_frame_down()
+  def shellcmd_thread(self):
+    self.update_threads()
+    super(ThreadsTable,self).shellcmd_thread()
+
+  def mcgdbevt_frame(self,data):
+    self.update_threads()
+    super(ThreadsTable,self).mcgdbevt_frame(data)
+
+  def mcgdbevt_thread(self,data):
+    self.update_threads()
+    super(ThreadsTable,self).mcgdbevt_frame(data)
+
+
+
+
+class LocalvarsTable(ValueToChunks):
+  def __init__(self, **kwargs):
+    self.register_onclick_action('change_variable',   self._change_variable)
+    self.register_onclick_action('change_slice',      self._change_slice)
+    self.register_onclick_action('expand_variable',   self._expand_variable)
+    self.register_onclick_action('collapse_variable', self._collapse_variable)
+    self.slice_regex=re.compile('^(-?\d+)([:, ](-?\d+))?$')
+    self.user_slice={}
+    self.expand_variable={}
+
+    super(LocalvarsTable,self).__init__(**kwargs)
+
+  def process_connection(self):
+    rc=super(LocalvarsTable,self).process_connection()
+    self.update_localvars()
+    return rc
+
+  def _expand_variable(self,pkg):
+    path=pkg['data']['path']
+    funcname=pkg['data']['funcname']
+    self.expand_variable[(funcname,path)]=True
+    self.update_localvars()
+
+  def _collapse_variable(self,pkg):
+    path=pkg['data']['path']
+    funcname=pkg['data']['funcname']
+    self.expand_variable[(funcname,path)]=False
+    self.update_localvars()
+
+
+
+  def _change_slice_1(self,pkg):
+    path=pkg['data']['path']
+    funcname=pkg['data']['funcname']
+    user_input = pkg['user_input']
+    match=self.slice_regex.match(user_input)
+    if match:
+      grps=match.groups()
+      n1=int(grps[0])
+      if grps[2]!=None:
+        n2=int(grps[2])
+      else:
+        n2=None
+      if n2!=None and n1>=n2:
+        self.send_error('bad input: right bound must be greater than left')
+        return
+      self.user_slice[(funcname,path)] = (n1,n2)
+    else:
+      self.send_error('bad input: {}'.format(user_input))
+      return
+    self.update_localvars()
+    #self.update_backtrace()
+
+  def _change_slice(self,pkg):
+    return self._change_slice_1(pkg)
+
+  @exec_main
+  def _change_variable(self,pkg):
+    #В случае некорректно введенных данных будет осуществляться обновл. переменных.
+    #Поскольку после введения данных у пользователя
+    #отображается <Wait change: ... >, и это сообщение надо заменить предыдущим значением.
+    if not gdb_stopped():
+      self.send_error('inferior running')
+      return None
+    if not inferior_alive ():
+      self.send_error('inferior not alive')
+      return None
+    data=pkg['data']
+    path=data['path']
+    user_input = pkg['user_input']
+    value=self.valcache(path)
+    if 'converter' in data:
+      new_value = self.converters.get(data['converter'])(user_input)
+    elif value.type.strip_typedefs().code in (gdb.TYPE_CODE_INT,gdb.TYPE_CODE_PTR):
+      try:
+        new_value=long(gdb.parse_and_eval(user_input))
+      except Exception as e:
+        self.send_error(str(e))
+        self.update_localvars()
+        return None
+    else:
+      new_value = user_input
+    gdb_cmd='set variable {path}={new_value}'.format(path=path,new_value=new_value)
+    try:
+      exec_in_main_pythread(gdb.execute, (gdb_cmd,))
+    except Exception as e:
+      self.send_error(str(e))
+      self.update_localvars()
+      return None
+    #при изменении переменной будет сгенерировано событие
+    #gdb.events.memory_changed. При обработке данного события
+    #должны быть обновлены переменные.
+
+
+  def update_localvars(self):
+    lvars=self._get_local_vars()
+    pkg={'cmd':'localvars','table':lvars}
+    self.send(pkg)
+
+  @exec_main
+  def _get_local_vars(self):
+    variables = self._get_local_vars_1 ()
+    if len(variables)==0:
+      return []
+    lvars=[]
+    funcname=self._get_frame_funcname(gdb.selected_frame())
+    for name,value in variables.iteritems():
+      chunks = self.value_to_chunks(value,name,funcname=funcname)
+      check_chunks(chunks)
+      col = {'chunks':chunks}
+      row = {'columns':[col]}
+      lvars.append(row)
+    return {'rows':lvars}
+
+  def _get_local_vars_1(self):
+    try:
+      frame = gdb.selected_frame()
+    except gdb.error:
+      return []
+    if not frame:
+      return []
+    try:
+      block = frame.block()
+    except RuntimeError:
+      return []
+    variables = {}
+    while block:
+      for symbol in block:
+        if (symbol.is_argument or symbol.is_variable):
+            name = symbol.name
+            if name not in variables:
+              variables[name] = self.valcache(symbol.value(frame))
+      if block.function:
+        break
+      block = block.superblock
+    return variables
 
   def gdbevt_exited(self,evt):
-    self.update_all()
+    self.update_localvars()
+    super(LocalvarsTable,self).gdbevt_exited(evt)
+  def gdbevt_stop(self,evt):
+    self.update_localvars()
+    super(LocalvarsTable,self).gdbevt_stop(evt)
+  def gdbevt_new_objfile(self,evt):
+    self.update_localvars()
+    super(LocalvarsTable,self).gdbevt_new_objfile(evt)
+  def gdbevt_clear_objfiles(self,evt):
+    self.update_localvars()
+    super(LocalvarsTable,self).gdbevt_clear_objfiles(evt)
+  def gdbevt_memory_changed(self,evt):
+    self.update_localvars()
+    super(LocalvarsTable,self).gdbevt_memory_changed(evt)
+  def gdbevt_register_changed(self,evt):
+    self.update_localvars()
+    super(LocalvarsTable,self).gdbevt_register_changed(evt)
+
+  def shellcmd_frame_up(self):
+    self.update_localvars()
+    super(LocalvarsTable,self).shellcmd_frame_up()
+  def shellcmd_frame_down(self):
+    self.update_localvars()
+    super(LocalvarsTable,self).shellcmd_frame_down()
+  def shellcmd_thread(self):
+    self.update_localvars()
+    super(LocalvarsTable,self).shellcmd_thread()
+
+  def mcgdbevt_frame(self,data):
+    self.update_localvars()
+    super(LocalvarsTable,self).mcgdbevt_frame(data)
+
+  def mcgdbevt_thread(self,data):
+    self.update_localvars()
+    super(LocalvarsTable,self).mcgdbevt_frame(data)
+
+
+
+
+class AuxWin(BaseWin,RegistersTable,BacktraceTable,ThreadsTable,LocalvarsTable,ValueToChunks):
+  ''' Representation of window with localvars of current frame
+  '''
+
+  type='auxwin'
+  startcmd='mcgdb open aux'
+
+  def __init__(self, **kwargs):
+    self.clear_caches()
+    self.converters={}
+    super(AuxWin,self).__init__(**kwargs)
+
+
+  def process_connection(self):
+    return super(AuxWin,self).process_connection()
+
+
+
+  def gdb_check_breakpoint(self):
+    pass
+  def set_color(self,pkg):
+    pass
+
 
   def gdbevt_stop(self,evt):
     self.clear_caches()
-    self.update_all()
+    super(AuxWin,self).gdbevt_stop(evt)
 
   def gdbevt_new_objfile(self,evt):
     self.clear_caches()
-    self.update_all()
+    super(AuxWin,self).gdbevt_new_objfile(evt)
 
-  def gdbevt_clear_objfiles(self,evt):
-    self.update_all()
 
   def gdbevt_memory_changed(self,evt):
     self.clear_caches()
-    self.update_localvars()
-    self.update_registers()
+    super(AuxWin,self).gdbevt_memory_changed(evt)
 
   def gdbevt_register_changed(self,evt):
     self.clear_caches()
-    self.update_localvars()
-    self.update_registers()
+    super(AuxWin,self).gdbevt_register_changed(evt)
 
 
-  def shellcmd_frame_up(self):
-    self.update_all()
-  def shellcmd_frame_down(self):
-    self.update_all()
-  def shellcmd_frame(self):
-    self.update_all()
-  def shellcmd_thread(self):
-    self.update_all()
-  def shellcmd_thread(self):
-    self.update_all()
+

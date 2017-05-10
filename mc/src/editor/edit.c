@@ -3923,27 +3923,26 @@ edit_execute_cmd (WEdit * edit, long command, int char_for_insertion)
       mcgdb_cmd_goto_eline();
       break;
     case CK_MCGDB_Next:
-      mcgdb_cmd_next();
+      mcgdb_shellcmd ("next");
       break;
     case CK_MCGDB_Finish:
-      mcgdb_cmd_finish();
+      mcgdb_shellcmd ("finish");
     case CK_MCGDB_Step:
-      mcgdb_cmd_step();
+      mcgdb_shellcmd ("step");
       break;
     case CK_MCGDB_Until:
-      mcgdb_cmd_until();
+      mcgdb_shellcmd ("until");
       break;
     case CK_MCGDB_Continue:
-      mcgdb_cmd_continue();
+      mcgdb_shellcmd ("continue");
       break;
     case CK_MCGDB_Print:
-      mcgdb_cmd_print();
       break;
     case CK_MCGDB_Frame_up:
-      mcgdb_cmd_frame_up();
+      mcgdb_shellcmd ("up");
       break;
     case CK_MCGDB_Frame_down:
-      mcgdb_cmd_frame_down();
+      mcgdb_shellcmd ("down");
       break;
     case CK_MCGDB_Exit:
       mcgdb_exit_confirm();

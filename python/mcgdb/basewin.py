@@ -9,8 +9,37 @@ from mcgdb.common import  pkgsend,pkgrecv,gdb_print,exec_cmd_in_gdb,gdb_stopped,
                           error,get_prompt,debug,is_main_thread,exec_in_main_pythread
 
 
-class BaseWin(object):
 
+class StubEvents(object):
+  def gdbevt_cont(self,evt):                pass
+  def gdbevt_exited(self,evt):              pass
+  def gdbevt_stop(self,evt):                pass
+  def gdbevt_new_objfile(self,evt):         pass
+  def gdbevt_clear_objfiles(self,evt):      pass
+  def gdbevt_inferior_call_pre(self,evt):   pass
+  def gdbevt_inferior_call_post(self,evt):  pass
+  def gdbevt_memory_changed(self,evt):      pass
+  def gdbevt_register_changed(self,evt):    pass
+  def gdbevt_breakpoint_created(self,evt):  pass
+  def gdbevt_breakpoint_modified(self,evt): pass
+  def gdbevt_breakpoint_deleted(self,evt):  pass
+
+
+  def shellcmd_quit(self):          pass
+  def shellcmd_bp_disable(self):    pass
+  def shellcmd_bp_enable(self):     pass
+  def shellcmd_frame(self):         pass
+  def shellcmd_frame_up(self):      pass
+  def shellcmd_frame_down(self):    pass
+  def shellcmd_thread(self):        pass
+
+  def mcgdbevt_frame(self,data):    pass
+  def mcgdbevt_thread(self,data):    pass
+
+
+  def process_connection(self): pass
+
+class BaseWin(StubEvents):
   def __init__(self, **kwargs):
     '''
         Args:
@@ -27,17 +56,22 @@ class BaseWin(object):
     '''
     if not hasattr(self,'window_event_handlers'):
       self.window_event_handlers={}
-    self.window_event_handlers.update({
-      'editor_next'             :  self._editor_next,
-      'editor_step'             :  self._editor_step,
-      'editor_until'            :  self._editor_until,
-      'editor_continue'         :  self._editor_continue,
-      'editor_frame_up'         :  self._editor_frame_up,
-      'editor_frame_down'       :  self._editor_frame_down,
-      'editor_finish'           :  self._editor_finish,
-    })
+    base_window_event_handlers={
+#      'editor_next'             :  self._editor_next,
+#      'editor_step'             :  self._editor_step,
+#      'editor_until'            :  self._editor_until,
+#      'editor_continue'         :  self._editor_continue,
+#      'editor_frame_up'         :  self._editor_frame_up,
+#      'editor_frame_down'       :  self._editor_frame_down,
+#      'editor_finish'           :  self._editor_finish,
+      'onclick_data'            :  self._onclick_data,
+    }
+    base_window_event_handlers.update(self.window_event_handlers)
+    self.window_event_handlers=base_window_event_handlers
 
-    self.gdb_event_cbs = {
+    if not hasattr(self,'gdb_event_cbs'):
+      self.gdb_event_cbs={}
+    gdb_event_cbs = {
       'cont'                :   self.gdbevt_cont,
       'exited'              :   self.gdbevt_exited,
       'stop'                :   self.gdbevt_stop,
@@ -51,8 +85,13 @@ class BaseWin(object):
       'breakpoint_modified' :   self.gdbevt_breakpoint_modified,
       'breakpoint_deleted'  :   self.gdbevt_breakpoint_deleted,
     }
+    gdb_event_cbs.update(self.gdb_event_cbs)
+    self.gdb_event_cbs = gdb_event_cbs
 
-    self.shellcmd_cbs = {
+
+    if not hasattr(self,'shellcmd_cbs'):
+      self.shellcmd_cbs={}
+    shellcmd_cbs = {
       'quit'        : self.shellcmd_quit,
       'bp_disable'  : self.shellcmd_bp_disable,
       'bp_enable'   : self.shellcmd_bp_enable,
@@ -61,6 +100,21 @@ class BaseWin(object):
       'frame_down'  : self.shellcmd_frame_down,
       'thread'      : self.shellcmd_thread,
     }
+    shellcmd_cbs.update(self.shellcmd_cbs)
+    self.shellcmd_cbs = shellcmd_cbs
+
+    if not hasattr(self,'click_cmd_cbs'):
+      click_cmd_cbs={}
+
+    if not hasattr(self,'mcgdbevt_cbs'):
+      self.mcgdbevt_cbs={}
+    mcgdbevt_cbs = {
+      'frame'       : self.mcgdbevt_frame,
+      'thread'      : self.mcgdbevt_thread,
+    }
+    mcgdbevt_cbs.update(self.mcgdbevt_cbs)
+    self.mcgdbevt_cbs = mcgdbevt_cbs
+
 
     mcgdb._dw[self.type]=self #debug
     if os.path.exists(os.path.abspath('~/tmp/mcgdb-debug/core')):
@@ -73,7 +127,7 @@ class BaseWin(object):
     self.lsock.listen(1)
     self.listen_port=self.lsock.getsockname()[1]
     self.listen_fd=self.lsock.fileno()
-    manually=kwargs.get('manually',False)
+    manually=kwargs.pop('manually',False)
     cmd=self.make_runwin_cmd()
     complete_cmd=self.gui_window_cmd.format(cmd=cmd)
     if manually:
@@ -89,30 +143,37 @@ You can try execute this command manually from another terminal.
 stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
   complete_cmd=complete_cmd,rc=rc,stdout=out,stderr=err))
         gdb_print('''\nCan't open gui window({type}). execute manually: `{cmd}`\n'''.format(cmd=cmd,type=self.type))
+    super(BaseWin,self).__init__(**kwargs)
+
+  def _onclick_data(self,pkg):
+    click_cmd = pkg['data']['click_cmd']
+    cb=self.click_cmd_cbs.get(click_cmd)
+    if cb==None:
+      return
+    return cb(pkg)
 
 
-
-  def _editor_next(self,pkg):
-    if gdb_stopped():
-      exec_cmd_in_gdb("next")
-  def _editor_step(self,pkg):
-    if gdb_stopped():
-      exec_cmd_in_gdb("step")
-  def _editor_until(self,pkg):
-    if gdb_stopped():
-      exec_cmd_in_gdb("until")
-  def _editor_continue(self,pkg):
-    if gdb_stopped():
-      exec_cmd_in_gdb("continue")
-  def _editor_frame_up(self,pkg):
-    if gdb_stopped():
-      exec_cmd_in_gdb("up")
-  def _editor_frame_down(self,pkg):
-    if gdb_stopped():
-      exec_cmd_in_gdb("down")
-  def _editor_finish(self,pkg):
-    if gdb_stopped():
-      exec_cmd_in_gdb("finish")
+#  def _editor_next(self,pkg):
+#    if gdb_stopped():
+#      exec_cmd_in_gdb("next")
+#  def _editor_step(self,pkg):
+#    if gdb_stopped():
+#      exec_cmd_in_gdb("step")
+#  def _editor_until(self,pkg):
+#    if gdb_stopped():
+#      exec_cmd_in_gdb("until")
+#  def _editor_continue(self,pkg):
+#    if gdb_stopped():
+#      exec_cmd_in_gdb("continue")
+#  def _editor_frame_up(self,pkg):
+#    if gdb_stopped():
+#      exec_cmd_in_gdb("up")
+#  def _editor_frame_down(self,pkg):
+#    if gdb_stopped():
+#      exec_cmd_in_gdb("down")
+#  def _editor_finish(self,pkg):
+#    if gdb_stopped():
+#      exec_cmd_in_gdb("finish")
 
   def exec_in_gdb(self,exec_cmd):
     if gdb_stopped():
@@ -144,6 +205,7 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
       'cmd' :'set_window_type',
       'type':self.type,
     })
+    super(BaseWin,self).process_connection()
     return True
 
   @abstractproperty
@@ -175,8 +237,9 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
       pkg=self.recv()
     cmd=pkg['cmd']
     if cmd=='shellcmd':
-      cmdname=pkg['cmdname']
-      self.process_shellcmd(cmdname)
+      self.process_shellcmd(pkg['cmdname'])
+    elif cmd=='mcgdbevt':
+      self.process_mcgdbevt(pkg['cmdname'],pkg['data'])
     elif cmd=='exec_in_gdb':
       self.exec_in_gdb(pkg['exec_in_gdb'])
     else:
@@ -203,6 +266,12 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
       line=None
     return filename,line
 
+  def register_onclick_action(self,action_name,rtn):
+    if not hasattr(self,'click_cmd_cbs'):
+      self.click_cmd_cbs={}
+    self.click_cmd_cbs[action_name] = rtn
+
+
   def get_current_position(self):
     '''Возвращает текущую позицию исполнения.
 
@@ -226,30 +295,37 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     return cb(evt)
 
 
-  def gdbevt_cont(self,evt):pass
-  def gdbevt_exited(self,evt):pass
-  def gdbevt_stop(self,evt):pass
-  def gdbevt_new_objfile(self,evt):pass
-  def gdbevt_clear_objfiles(self,evt):pass
-  def gdbevt_inferior_call_pre(self,evt):pass
-  def gdbevt_inferior_call_post(self,evt):pass
-  def gdbevt_memory_changed(self,evt):pass
-  def gdbevt_register_changed(self,evt):pass
-  def gdbevt_breakpoint_created(self,evt):pass
-  def gdbevt_breakpoint_modified(self,evt):pass
-  def gdbevt_breakpoint_deleted(self,evt):pass
+  def gdbevt_cont(self,evt):                super(BaseWin,self).gdbevt_cont(evt)
+  def gdbevt_exited(self,evt):              super(BaseWin,self).gdbevt_exited(evt)
+  def gdbevt_stop(self,evt):                super(BaseWin,self).gdbevt_stop(evt)
+  def gdbevt_new_objfile(self,evt):         super(BaseWin,self).gdbevt_new_objfile(evt)
+  def gdbevt_clear_objfiles(self,evt):      super(BaseWin,self).gdbevt_clear_objfiles(evt)
+  def gdbevt_inferior_call_pre(self,evt):   super(BaseWin,self).gdbevt_inferior_call_pre(evt)
+  def gdbevt_inferior_call_post(self,evt):  super(BaseWin,self).gdbevt_inferior_call_post(evt)
+  def gdbevt_memory_changed(self,evt):      super(BaseWin,self).gdbevt_memory_changed(evt)
+  def gdbevt_register_changed(self,evt):    super(BaseWin,self).gdbevt_register_changed(evt)
+  def gdbevt_breakpoint_created(self,evt):  super(BaseWin,self).gdbevt_breakpoint_created(evt)
+  def gdbevt_breakpoint_modified(self,evt): super(BaseWin,self).gdbevt_breakpoint_modified(evt)
+  def gdbevt_breakpoint_deleted(self,evt):  super(BaseWin,self).gdbevt_breakpoint_deleted(evt)
 
 
   def process_shellcmd(self,cmdname):
     return self.shellcmd_cbs[cmdname]()
 
-  def shellcmd_quit(self): pass
-  def shellcmd_bp_disable(self): pass
-  def shellcmd_bp_enable(self): pass
-  def shellcmd_frame(self): pass
-  def shellcmd_frame_up(self): pass
-  def shellcmd_frame_down(self): pass
-  def shellcmd_thread(self): pass
+  def process_mcgdbevt(self,cmdname,data):
+    return self.mcgdbevt_cbs[cmdname](data)
+
+
+  def shellcmd_quit(self):          super(BaseWin,self).shellcmd_quit()
+  def shellcmd_bp_disable(self):    super(BaseWin,self).shellcmd_bp_disable()
+  def shellcmd_bp_enable(self):     super(BaseWin,self).shellcmd_bp_enable()
+  def shellcmd_frame(self):         super(BaseWin,self).shellcmd_frame()
+  def shellcmd_frame_up(self):      super(BaseWin,self).shellcmd_frame_up()
+  def shellcmd_frame_down(self):    super(BaseWin,self).shellcmd_frame_down()
+  def shellcmd_thread(self):        super(BaseWin,self).shellcmd_thread()
+
+  def mcgdbevt_frame(self,data):    super(BaseWin,self).mcgdbevt_frame(data)
+  def mcgdbevt_thread(self,data):    super(BaseWin,self).mcgdbevt_thread(data)
 
   def text_chunk(self,string,**kwargs):
     d=kwargs
@@ -326,5 +402,10 @@ def stringify_value_safe(*args,**kwargs):
     return stringify_value(*args,**kwargs)
   except gdb.MemoryError:
     return 'Cannot access memory'
+
+
+
+
+
 
 
