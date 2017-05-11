@@ -59,29 +59,58 @@ static void mcgdb_aux_dialog_mouse_callback (Widget * w, mouse_msg_t msg, mouse_
 
 static void
 mcgdb_aux_dialog_gdbevt (WDialog *h) {
-  WTable *wtab;
+  WTable *wtab_vars_regs = (WTable *)dlg_find_by_id(h, VARS_REGS_TABLE_ID),
+         *wtab_bt_th = (WTable *)dlg_find_by_id(h, BT_TH_TABLE_ID),
+         *wtab=NULL;
   struct gdb_action * act = event_from_gdb;
   json_t *pkg = act->pkg;
   event_from_gdb=NULL;
+  const char *tabname;
 
   switch(act->command) {
     case MCGDB_LOCALVARS:
-      wtab = (WTable *)dlg_find_by_id(h, VARS_REGS_TABLE_ID);
+    case MCGDB_REGISTERS:
+      wtab = wtab_vars_regs;
+      break;
+    case MCGDB_BACKTRACE:
+    case MCGDB_THREADS:
+      wtab = wtab_bt_th;
+      break;
+    case MCGDB_UPDATE_NODE:
+    case MCGDB_DO_ROW_VISIBLE:
+      tabname = json_string_value (json_object_get (pkg,"table"));
+      if (wtable_get_table(wtab_vars_regs,tabname)) {
+        wtab=wtab_vars_regs;
+      }
+      else if (wtable_get_table(wtab_bt_th,tabname)) {
+        wtab=wtab_bt_th;
+      }
+      message_assert (wtab!=NULL);
+      break;
+    default:
+      break;
+  }
+
+  switch(act->command) {
+    case MCGDB_LOCALVARS:
       pkg_table_package (pkg,wtab,"localvars");
       break;
     case MCGDB_REGISTERS:
-      wtab = (WTable *) dlg_find_by_id (h, VARS_REGS_TABLE_ID);
       pkg_table_package (pkg,wtab,"registers");
       break;
     case MCGDB_BACKTRACE:
-      wtab = (WTable *)dlg_find_by_id(h, BT_TH_TABLE_ID);
       pkg_table_package (pkg,wtab,"backtrace");
       break;
     case MCGDB_THREADS:
-      wtab = (WTable *)dlg_find_by_id(h, BT_TH_TABLE_ID);
       pkg_table_package (pkg,wtab,"threads");
       break;
-
+    case MCGDB_UPDATE_NODE:
+      wtable_update_node(wtab,pkg);
+      wtable_draw(wtab);
+      break;
+    case MCGDB_DO_ROW_VISIBLE:
+      wtable_do_row_visible_json(wtab,pkg);
+      break;
     default:
       break;
   }

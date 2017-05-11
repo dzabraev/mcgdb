@@ -29,6 +29,12 @@ struct mystruct {
 };
 
 int f1(int x) {
+  int y=10;
+  {
+    int z=15;
+    z+=y;
+    x+=z;
+  }
   return x+1;
 }
 

@@ -57,14 +57,10 @@ class BaseWin(StubEvents):
     if not hasattr(self,'window_event_handlers'):
       self.window_event_handlers={}
     base_window_event_handlers={
-#      'editor_next'             :  self._editor_next,
-#      'editor_step'             :  self._editor_step,
-#      'editor_until'            :  self._editor_until,
-#      'editor_continue'         :  self._editor_continue,
-#      'editor_frame_up'         :  self._editor_frame_up,
-#      'editor_frame_down'       :  self._editor_frame_down,
-#      'editor_finish'           :  self._editor_finish,
-      'onclick_data'            :  self._onclick_data,
+      'onclick_data'    : self.onclick_data,
+      'shellcmd'        : self.process_shellcmd,
+      'mcgdbevt'        : self.process_mcgdbevt,
+      'exec_in_gdb'     : self.exec_in_gdb,
     }
     base_window_event_handlers.update(self.window_event_handlers)
     self.window_event_handlers=base_window_event_handlers
@@ -115,6 +111,14 @@ class BaseWin(StubEvents):
     mcgdbevt_cbs.update(self.mcgdbevt_cbs)
     self.mcgdbevt_cbs = mcgdbevt_cbs
 
+    if not hasattr(self,'chunk_value_index'):
+      self.chunk_value_index_cnt=0
+      self.chunk_value_index={}
+
+    if not hasattr(self,'cache_table_exemplar'):
+      self.cache_table_exemplar={}
+      self.cache_table_counter=0
+
 
     mcgdb._dw[self.type]=self #debug
     if os.path.exists(os.path.abspath('~/tmp/mcgdb-debug/core')):
@@ -152,28 +156,32 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
       return
     return cb(pkg)
 
+  def name_index(self,name):
+    #gdb_print(name+'\n')
+    idx=self.chunk_value_index.get(name)
+    if idx!=None:
+      return idx
+    idx = self.chunk_value_index_cnt
+    self.chunk_value_index_cnt+=1
+    self.chunk_value_index[name]=idx
+    return idx
 
-#  def _editor_next(self,pkg):
-#    if gdb_stopped():
-#      exec_cmd_in_gdb("next")
-#  def _editor_step(self,pkg):
-#    if gdb_stopped():
-#      exec_cmd_in_gdb("step")
-#  def _editor_until(self,pkg):
-#    if gdb_stopped():
-#      exec_cmd_in_gdb("until")
-#  def _editor_continue(self,pkg):
-#    if gdb_stopped():
-#      exec_cmd_in_gdb("continue")
-#  def _editor_frame_up(self,pkg):
-#    if gdb_stopped():
-#      exec_cmd_in_gdb("up")
-#  def _editor_frame_down(self,pkg):
-#    if gdb_stopped():
-#      exec_cmd_in_gdb("down")
-#  def _editor_finish(self,pkg):
-#    if gdb_stopped():
-#      exec_cmd_in_gdb("finish")
+  def insert_data(self,key,tabdata):
+    old = self.cache_table_exemplar.get(key)
+    if old==None:
+      idx=self.cache_table_counter
+      self.cache_table_counter+=1
+    else:
+      idx,_ = old
+    self.cache_table_exemplar[key] = (idx,tabdata)
+    return idx
+
+  def get_data(self,key):
+    cv=self.cache_table_exemplar.get((tabname,tabkey))
+    if cv==None:
+      return None,None
+    else:
+      return cv
 
   def exec_in_gdb(self,exec_cmd):
     if gdb_stopped():
@@ -205,7 +213,6 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
       'cmd' :'set_window_type',
       'type':self.type,
     })
-    super(BaseWin,self).process_connection()
     return True
 
   @abstractproperty
@@ -221,9 +228,72 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
   def type(self):
     pass
 
-  @abstractmethod
-  def process_shellcmd(self,cmd):
-    pass
+  def process_common(self,evttype,pkg):
+    cmd=pkg[evttype]
+    method=evttype+'_'+cmd
+    rets=[]
+      if hasattr(self,method):
+        cb=getattr(self,method)
+        ret=cb(self)
+        if ret:
+          rets.append(ret)
+    for tabname,table in self.tables.items():
+      if hasattr(table,method):
+        cb=getattr(table,method)
+        ret=cb(table)
+        if ret:
+          rets.append(ret)
+    return rets
+
+  def process_shellcmd(self,pkg):
+    '''
+      def shellcmd_quit(self):pass
+      def shellcmd_bp_disable(self):pass
+      def shellcmd_bp_enable(self):pass
+      def shellcmd_frame(self):pass
+      def shellcmd_frame_up(self):pass
+      def shellcmd_frame_down(self): pass
+      def shellcmd_thread(self):pass
+    '''
+    return self.process_common(self,'shellcmd',pkg)
+
+  def process_mcgdbevt(self,pkg):
+    '''
+      def mcgdbevt_frame(self,data):pass
+      def mcgdbevt_thread(self,data):pass
+    '''
+    return self.process_common(self,'mcgdbevt',pkg)
+
+  def onclick(self,pkg):
+    '''
+        onclick_change_variab,
+        onclick_change_slice,
+        onclick_expand_variable,
+        onclick_collapse_variable
+    '''
+    table = self.tables[pkg['tabname']]
+    method = 'onclick_'+pkg['onclick']
+    return getattr(table,method)(pkg['onclick_data'])
+
+  def process_gdbevt(self,name,evt):
+    '''
+      Если в таблице или дочернем классе будет определена одна из этих функций,
+      то она будет вызвана автоматически при получении события
+      def gdbevt_cont(self,evt):pass
+      def gdbevt_exited(self,evt):pass
+      def gdbevt_stop(self,evt):pass
+      def gdbevt_new_objfile(self,evt):pass
+      def gdbevt_clear_objfiles(self,evt):pass
+      def gdbevt_inferior_call_pre(self,evt):pass
+      def gdbevt_inferior_call_post(self,evt):pass
+      def gdbevt_memory_changed(self,evt):pass
+      def gdbevt_register_changed(self,evt):pass
+      def gdbevt_breakpoint_created(self,evt):pass
+      def gdbevt_breakpoint_modified(self,evt):pass
+      def gdbevt_breakpoint_deleted(self,evt):pass
+    '''
+    return self.process_common(self,'gdbevt',pkg)
+
 
   def send(self,msg):
     pkgsend(self.fd,msg)
@@ -236,15 +306,8 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     if pkg==None:
       pkg=self.recv()
     cmd=pkg['cmd']
-    if cmd=='shellcmd':
-      self.process_shellcmd(pkg['cmdname'])
-    elif cmd=='mcgdbevt':
-      self.process_mcgdbevt(pkg['cmdname'],pkg['data'])
-    elif cmd=='exec_in_gdb':
-      self.exec_in_gdb(pkg['exec_in_gdb'])
-    else:
-      cb=self.window_event_handlers[cmd]
-      return cb(pkg)
+    cb=self.window_event_handlers[cmd]
+    return cb(pkg)
 
   def terminate(self):
     try:
@@ -252,10 +315,13 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     except:
       pass
 
-  def __get_current_position_1(self):
-    assert is_main_thread()
-    #Данную функцию можно вызывать только из main pythread или
-    #через функцию exec_in_main_pythread
+  @exec_main
+  def get_current_position(self):
+    '''Возвращает текущую позицию исполнения.
+
+        return:
+        (filename,line)
+    '''
     try:
       frame=gdb.selected_frame ()
       filename=frame.find_sal().symtab.fullname()
@@ -266,20 +332,6 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
       line=None
     return filename,line
 
-  def register_onclick_action(self,action_name,rtn):
-    if not hasattr(self,'click_cmd_cbs'):
-      self.click_cmd_cbs={}
-    self.click_cmd_cbs[action_name] = rtn
-
-
-  def get_current_position(self):
-    '''Возвращает текущую позицию исполнения.
-
-        return:
-        (filename,line)
-    '''
-    return exec_in_main_pythread(self.__get_current_position_1,())
-
   def send_error(self,message):
     '''Вывести пользователю ошибку в граф. окне.
     '''
@@ -288,120 +340,11 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     except:
       pass
 
-  def process_gdbevt(self,name,evt):
-    cb = self.gdb_event_cbs.get(name)
-    if not cb:
-      return None
-    return cb(evt)
-
-
-  def gdbevt_cont(self,evt):                super(BaseWin,self).gdbevt_cont(evt)
-  def gdbevt_exited(self,evt):              super(BaseWin,self).gdbevt_exited(evt)
-  def gdbevt_stop(self,evt):                super(BaseWin,self).gdbevt_stop(evt)
-  def gdbevt_new_objfile(self,evt):         super(BaseWin,self).gdbevt_new_objfile(evt)
-  def gdbevt_clear_objfiles(self,evt):      super(BaseWin,self).gdbevt_clear_objfiles(evt)
-  def gdbevt_inferior_call_pre(self,evt):   super(BaseWin,self).gdbevt_inferior_call_pre(evt)
-  def gdbevt_inferior_call_post(self,evt):  super(BaseWin,self).gdbevt_inferior_call_post(evt)
-  def gdbevt_memory_changed(self,evt):      super(BaseWin,self).gdbevt_memory_changed(evt)
-  def gdbevt_register_changed(self,evt):    super(BaseWin,self).gdbevt_register_changed(evt)
-  def gdbevt_breakpoint_created(self,evt):  super(BaseWin,self).gdbevt_breakpoint_created(evt)
-  def gdbevt_breakpoint_modified(self,evt): super(BaseWin,self).gdbevt_breakpoint_modified(evt)
-  def gdbevt_breakpoint_deleted(self,evt):  super(BaseWin,self).gdbevt_breakpoint_deleted(evt)
-
-
-  def process_shellcmd(self,cmdname):
-    return self.shellcmd_cbs[cmdname]()
-
-  def process_mcgdbevt(self,cmdname,data):
-    return self.mcgdbevt_cbs[cmdname](data)
-
-
-  def shellcmd_quit(self):          super(BaseWin,self).shellcmd_quit()
-  def shellcmd_bp_disable(self):    super(BaseWin,self).shellcmd_bp_disable()
-  def shellcmd_bp_enable(self):     super(BaseWin,self).shellcmd_bp_enable()
-  def shellcmd_frame(self):         super(BaseWin,self).shellcmd_frame()
-  def shellcmd_frame_up(self):      super(BaseWin,self).shellcmd_frame_up()
-  def shellcmd_frame_down(self):    super(BaseWin,self).shellcmd_frame_down()
-  def shellcmd_thread(self):        super(BaseWin,self).shellcmd_thread()
-
-  def mcgdbevt_frame(self,data):    super(BaseWin,self).mcgdbevt_frame(data)
-  def mcgdbevt_thread(self,data):    super(BaseWin,self).mcgdbevt_thread(data)
-
-  def text_chunk(self,string,**kwargs):
-    d=kwargs
-    d.update({'str':string})
-    return d
 
 
 
 
-def check_chunks(chunks):
-  if type(chunks) not in (dict,list):
-    gdb_print ('bad chunks: `{}`\n'.format(chunks))
-    return
-  if type(chunks) is dict:
-    if 'str' in chunks:
-      return
-    elif 'chunks' in chunks:
-      check_chunks(chunks['chunks'])
-    else:
-      gdb_print ('bad chunks: {}'.format(chunks))
-      return
-  else:
-    for child in chunks:
-      check_chunks(child)
 
-
-
-def is_incomplete_type_ptr(value):
-  return  value.type.strip_typedefs().code==gdb.TYPE_CODE_PTR and \
-          value.type.strip_typedefs().target().strip_typedefs().code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION) and \
-          len(value.type.strip_typedefs().target().strip_typedefs().fields())==0
-
-def valueaddress_to_ulong(value):
-  if value==None:
-    return None
-  return ctypes.c_ulong(long(value)).value
-
-def stringify_value(value,**kwargs):
-  '''Конвертация gdb.Value в строку
-    Args:
-      **enable_additional_text (bool):
-        Если True, то будет печататься нечто вроде 
-        0x1 <error: Cannot access memory at address 0x1>
-        Если False,
-        то 0x1
-  '''
-  if value.is_optimized_out:
-    return '<OptimizedOut>'
-  type_code = value.type.strip_typedefs().code
-  enable_additional_text=kwargs.get('enable_additional_text',False)
-  try:
-    if type_code==gdb.TYPE_CODE_INT and kwargs.get('integer_mode') in ('dec','hex','bin') and value.type.strip_typedefs().sizeof<=8:
-      mode=kwargs.get('integer_mode')
-      bitsz=value.type.sizeof*8
-      #gdb can't conver value to python-long if sizeof(value) > 8
-      if mode=='dec':
-        return str(long(value))
-      elif mode=='hex':
-        pattern='0x{{:0{hexlen}x}}'.format(hexlen=bitsz/4)
-        return pattern.format(ctypes.c_ulong(long(value)).value)
-      elif mode=='bin':
-        pattern='{{:0{bitlen}b}}'.format(bitlen=bitsz)
-        return pattern.format(ctypes.c_ulong(long(value)).value)
-    if type_code in (gdb.TYPE_CODE_PTR,) and not enable_additional_text:
-      return hex(ctypes.c_ulong(long(value)).value)[:-1]
-    else:
-      #например, если делать unicode или str для `.*char *`, то память будет читаться дважды.
-      return unicode(value)
-  except gdb.error:
-    return "unavailable"
-
-def stringify_value_safe(*args,**kwargs):
-  try:
-    return stringify_value(*args,**kwargs)
-  except gdb.MemoryError:
-    return 'Cannot access memory'
 
 
 

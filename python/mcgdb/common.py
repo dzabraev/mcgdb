@@ -77,10 +77,14 @@ def is_python_version_correct():
     return True
 
 
-def pkgsend(fd,msg):
-  debug('SEND: {}'.format(str(msg)))
-  jmsg=json.dumps(msg)
-  smsg='{len};{data}'.format(len=len(jmsg),data=jmsg)
+def pkgsend(fd,msgs):
+  debug('SEND: {}'.format(str(msgs)))
+  smsg=''
+  if not type(msgs) in (list,tuple):
+    msgs=[msgs]
+  for msg in msgs:
+    jmsg=json.dumps(msg)
+    smsg+='{len};{data}'.format(len=len(jmsg),data=jmsg)
   n=0
   total=len(smsg)
   while n<total:
@@ -518,6 +522,7 @@ class GEThread(object):
             self.fte[entity.fd]=entity
             #entity.gdb_update_current_frame(self.exec_filename,self.exec_line)
         else:
+          #обработка пакета из удаленного окна
           entity=self.fte[fd]
           try:
             res=entity.process_pkg ()

@@ -87,7 +87,6 @@ void    ghfunc_table_update_bounds(__attribute__((unused)) gpointer key, gpointe
 static void     selbar_set_current_button(Selbar *selbar, const char *tabname);
 static void     selbar_draw (Selbar *bar);
 static void     reset_selected (gpointer data, gpointer user_data);
-static Table *  wtable_get_table(WTable *wtab, const char *tabname);
 
 
 static table_row *
@@ -219,7 +218,7 @@ wtable_set_current_table(WTable *wtab, const char *tabname) {
   selbar_set_current_button(wtab->selbar,tabname);
 }
 
-static Table *
+Table *
 wtable_get_table(WTable *wtab, const char *tabname) {
   return g_hash_table_lookup (wtab->tables, tabname);
 }
@@ -432,12 +431,11 @@ table_add_node(Table *tab, GNode * parent, json_t *json_data) {
     g_hash_table_insert ( tab->hnodes, &(data->id), node);
   return node;
 }
-
+/*
 static void
 table_update_node_json_1 (Table *tab, GNode *root, json_t *json_chunk) {
   gint64 node_id = json_integer_value (json_object_get (json_chunk, "id"));
   GNode *node = table_get_node_by_id (tab, node_id);
-  message_assert (node!=NULL);
   if (node) {
     update_chunk(CHUNK(node),json_chunk);
   }
@@ -452,12 +450,20 @@ table_update_node_json_1 (Table *tab, GNode *root, json_t *json_chunk) {
     table_update_node_json_1 (tab,node,json_node_data);
   }
 }
-
+*/
 
 static void
 table_update_node_json (Table *tab, json_t *json_chunk) {
-  message_assert (json_object_get (json_chunk, "id")!=NULL);
-  table_update_node_json_1 (tab,NULL,json_chunk);
+  json_t *json_id;
+  gint64 node_id;
+  GNode *node;
+  json_id = json_object_get (json_chunk, "id");
+  message_assert (json_id!=NULL);
+  node_id = json_integer_value (json_id);
+  node = table_get_node_by_id (tab, node_id);
+  message_assert (node!=NULL);
+  update_chunk(CHUNK(node),json_chunk);
+  //table_update_node_json_1 (tab,NULL,json_chunk);
 }
 
 static void
