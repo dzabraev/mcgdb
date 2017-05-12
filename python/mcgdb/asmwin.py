@@ -4,10 +4,12 @@ import gdb
 
 import mcgdb.basewin
 from mcgdb.common import exec_main
+from mcgdb.basewin import BaseWin
+from mcgdb.valuetochunks import ValueToChunks
 
 import re
 
-class AsmWin(mcgdb.basewin.BaseWin):
+class AsmWin(BaseWin,ValueToChunks):
   '''Окно для отображение ассемблерного кода.
   '''
 
@@ -24,13 +26,8 @@ class AsmWin(mcgdb.basewin.BaseWin):
     self.need_redisplay_asm=True
     self.reg_disas_line_addr = re.compile('(=>)?\s+(0x[0-9a-fA-F]+)')
     self.reg_find_addr = re.compile('\s0x[0-9a-fA-F]+\s')
-    self.click_cmd_cbs={
-      'breakpoint_insert' : self.click_breakpoint_insert,
-      'breakpoint_remove' : self.click_breakpoint_remove,
-    }
 
-  def click_breakpoint_insert(self,pkg): pass
-  def click_breakpoint_remove(self,pkg): pass
+  def onclick_breakpoint(self,pkg): pass
 
   @exec_main
   def get_selected_frame_pc(self):
@@ -222,8 +219,6 @@ class AsmWin(mcgdb.basewin.BaseWin):
     self.update_asm_code()
 
   def mcgdbevt_frame(self,data):
-    rc = self.update_asm_code()
-    super(AsmWin,self).mcgdbevt_frame(data)
-    return rc
+    return self.update_asm_code()
 
 

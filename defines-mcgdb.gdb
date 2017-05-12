@@ -8,14 +8,14 @@ end
 define hook-disable
 python
 from mcgdb.common import McgdbMain
-McgdbMain().notify_shellcmd('bp_disable')
+McgdbMain().notify_shellcmd('disable')
 end
 end
 
 define hook-enable
 python
 from mcgdb.common import McgdbMain
-McgdbMain().notify_shellcmd('bp_enable')
+McgdbMain().notify_shellcmd('enable')
 end
 end
 
@@ -23,7 +23,7 @@ end
 define hookpost-up
 python
 from mcgdb.common import McgdbMain
-McgdbMain().notify_shellcmd('frame_up')
+McgdbMain().notify_shellcmd('up')
 end
 end
 
@@ -31,7 +31,7 @@ end
 define hookpost-down
 python
 from mcgdb.common import McgdbMain
-McgdbMain().notify_shellcmd('frame_down')
+McgdbMain().notify_shellcmd('down')
 end
 end
 

@@ -1,45 +1,17 @@
 #coding=utf8
 
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import abstractmethod, abstractproperty
 import os,socket,ctypes,subprocess
 import gdb
 
 import mcgdb
 from mcgdb.common import  pkgsend,pkgrecv,gdb_print,exec_cmd_in_gdb,gdb_stopped,\
-                          error,get_prompt,debug,is_main_thread,exec_in_main_pythread
+                          error,get_prompt,debug,is_main_thread,exec_main
 
 
 
-class StubEvents(object):
-  def gdbevt_cont(self,evt):                pass
-  def gdbevt_exited(self,evt):              pass
-  def gdbevt_stop(self,evt):                pass
-  def gdbevt_new_objfile(self,evt):         pass
-  def gdbevt_clear_objfiles(self,evt):      pass
-  def gdbevt_inferior_call_pre(self,evt):   pass
-  def gdbevt_inferior_call_post(self,evt):  pass
-  def gdbevt_memory_changed(self,evt):      pass
-  def gdbevt_register_changed(self,evt):    pass
-  def gdbevt_breakpoint_created(self,evt):  pass
-  def gdbevt_breakpoint_modified(self,evt): pass
-  def gdbevt_breakpoint_deleted(self,evt):  pass
 
-
-  def shellcmd_quit(self):          pass
-  def shellcmd_bp_disable(self):    pass
-  def shellcmd_bp_enable(self):     pass
-  def shellcmd_frame(self):         pass
-  def shellcmd_frame_up(self):      pass
-  def shellcmd_frame_down(self):    pass
-  def shellcmd_thread(self):        pass
-
-  def mcgdbevt_frame(self,data):    pass
-  def mcgdbevt_thread(self,data):    pass
-
-
-  def process_connection(self): pass
-
-class BaseWin(StubEvents):
+class BaseWin(object):
   def __init__(self, **kwargs):
     '''
         Args:
@@ -54,71 +26,6 @@ class BaseWin(StubEvents):
         Графическое окно будет устанавливать соединение с этим портом на адрес 127.0.0.1
         Данное соединение должно приниматься методом `process_connection`.
     '''
-    if not hasattr(self,'window_event_handlers'):
-      self.window_event_handlers={}
-    base_window_event_handlers={
-      'onclick_data'    : self.onclick_data,
-      'shellcmd'        : self.process_shellcmd,
-      'mcgdbevt'        : self.process_mcgdbevt,
-      'exec_in_gdb'     : self.exec_in_gdb,
-    }
-    base_window_event_handlers.update(self.window_event_handlers)
-    self.window_event_handlers=base_window_event_handlers
-
-    if not hasattr(self,'gdb_event_cbs'):
-      self.gdb_event_cbs={}
-    gdb_event_cbs = {
-      'cont'                :   self.gdbevt_cont,
-      'exited'              :   self.gdbevt_exited,
-      'stop'                :   self.gdbevt_stop,
-      'new_objfile'         :   self.gdbevt_new_objfile,
-      'clear_objfiles'      :   self.gdbevt_clear_objfiles,
-      'inferior_call_pre'   :   self.gdbevt_inferior_call_pre,
-      'inferior_call_post'  :   self.gdbevt_inferior_call_post,
-      'memory_changed'      :   self.gdbevt_memory_changed,
-      'register_changed'    :   self.gdbevt_register_changed,
-      'breakpoint_created'  :   self.gdbevt_breakpoint_created,
-      'breakpoint_modified' :   self.gdbevt_breakpoint_modified,
-      'breakpoint_deleted'  :   self.gdbevt_breakpoint_deleted,
-    }
-    gdb_event_cbs.update(self.gdb_event_cbs)
-    self.gdb_event_cbs = gdb_event_cbs
-
-
-    if not hasattr(self,'shellcmd_cbs'):
-      self.shellcmd_cbs={}
-    shellcmd_cbs = {
-      'quit'        : self.shellcmd_quit,
-      'bp_disable'  : self.shellcmd_bp_disable,
-      'bp_enable'   : self.shellcmd_bp_enable,
-      'frame'       : self.shellcmd_frame,
-      'frame_up'    : self.shellcmd_frame_up,
-      'frame_down'  : self.shellcmd_frame_down,
-      'thread'      : self.shellcmd_thread,
-    }
-    shellcmd_cbs.update(self.shellcmd_cbs)
-    self.shellcmd_cbs = shellcmd_cbs
-
-    if not hasattr(self,'click_cmd_cbs'):
-      click_cmd_cbs={}
-
-    if not hasattr(self,'mcgdbevt_cbs'):
-      self.mcgdbevt_cbs={}
-    mcgdbevt_cbs = {
-      'frame'       : self.mcgdbevt_frame,
-      'thread'      : self.mcgdbevt_thread,
-    }
-    mcgdbevt_cbs.update(self.mcgdbevt_cbs)
-    self.mcgdbevt_cbs = mcgdbevt_cbs
-
-    if not hasattr(self,'chunk_value_index'):
-      self.chunk_value_index_cnt=0
-      self.chunk_value_index={}
-
-    if not hasattr(self,'cache_table_exemplar'):
-      self.cache_table_exemplar={}
-      self.cache_table_counter=0
-
 
     mcgdb._dw[self.type]=self #debug
     if os.path.exists(os.path.abspath('~/tmp/mcgdb-debug/core')):
@@ -147,45 +54,13 @@ You can try execute this command manually from another terminal.
 stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
   complete_cmd=complete_cmd,rc=rc,stdout=out,stderr=err))
         gdb_print('''\nCan't open gui window({type}). execute manually: `{cmd}`\n'''.format(cmd=cmd,type=self.type))
+    if not hasattr(self,'subentities'):
+      self.subentities={}
     super(BaseWin,self).__init__(**kwargs)
 
-  def _onclick_data(self,pkg):
-    click_cmd = pkg['data']['click_cmd']
-    cb=self.click_cmd_cbs.get(click_cmd)
-    if cb==None:
-      return
-    return cb(pkg)
-
-  def name_index(self,name):
-    #gdb_print(name+'\n')
-    idx=self.chunk_value_index.get(name)
-    if idx!=None:
-      return idx
-    idx = self.chunk_value_index_cnt
-    self.chunk_value_index_cnt+=1
-    self.chunk_value_index[name]=idx
-    return idx
-
-  def insert_data(self,key,tabdata):
-    old = self.cache_table_exemplar.get(key)
-    if old==None:
-      idx=self.cache_table_counter
-      self.cache_table_counter+=1
-    else:
-      idx,_ = old
-    self.cache_table_exemplar[key] = (idx,tabdata)
-    return idx
-
-  def get_data(self,key):
-    cv=self.cache_table_exemplar.get((tabname,tabkey))
-    if cv==None:
-      return None,None
-    else:
-      return cv
-
-  def exec_in_gdb(self,exec_cmd):
-    if gdb_stopped():
-      exec_cmd_in_gdb(exec_cmd)
+  #@abstractproperty
+  #def subentities(self):
+  #  pass
 
   def make_runwin_cmd(self):
     ''' Данный метод формирует shell-команду для запуска окна с editor.
@@ -213,6 +88,8 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
       'cmd' :'set_window_type',
       'type':self.type,
     })
+    for subentity in self.subentities.values():
+      subentity.process_connection()
     return True
 
   @abstractproperty
@@ -228,86 +105,84 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
   def type(self):
     pass
 
-  def process_common(self,evttype,pkg):
-    cmd=pkg[evttype]
-    method=evttype+'_'+cmd
-    rets=[]
-      if hasattr(self,method):
-        cb=getattr(self,method)
-        ret=cb(self)
-        if ret:
-          rets.append(ret)
-    for tabname,table in self.tables.items():
-      if hasattr(table,method):
-        cb=getattr(table,method)
-        ret=cb(table)
-        if ret:
-          rets.append(ret)
-    return rets
-
-  def process_shellcmd(self,pkg):
-    '''
-      def shellcmd_quit(self):pass
-      def shellcmd_bp_disable(self):pass
-      def shellcmd_bp_enable(self):pass
-      def shellcmd_frame(self):pass
-      def shellcmd_frame_up(self):pass
-      def shellcmd_frame_down(self): pass
-      def shellcmd_thread(self):pass
-    '''
-    return self.process_common(self,'shellcmd',pkg)
-
-  def process_mcgdbevt(self,pkg):
-    '''
-      def mcgdbevt_frame(self,data):pass
-      def mcgdbevt_thread(self,data):pass
-    '''
-    return self.process_common(self,'mcgdbevt',pkg)
-
-  def onclick(self,pkg):
-    '''
-        onclick_change_variab,
-        onclick_change_slice,
-        onclick_expand_variable,
-        onclick_collapse_variable
-    '''
-    table = self.tables[pkg['tabname']]
-    method = 'onclick_'+pkg['onclick']
-    return getattr(table,method)(pkg['onclick_data'])
-
-  def process_gdbevt(self,name,evt):
-    '''
-      Если в таблице или дочернем классе будет определена одна из этих функций,
-      то она будет вызвана автоматически при получении события
-      def gdbevt_cont(self,evt):pass
-      def gdbevt_exited(self,evt):pass
-      def gdbevt_stop(self,evt):pass
-      def gdbevt_new_objfile(self,evt):pass
-      def gdbevt_clear_objfiles(self,evt):pass
-      def gdbevt_inferior_call_pre(self,evt):pass
-      def gdbevt_inferior_call_post(self,evt):pass
-      def gdbevt_memory_changed(self,evt):pass
-      def gdbevt_register_changed(self,evt):pass
-      def gdbevt_breakpoint_created(self,evt):pass
-      def gdbevt_breakpoint_modified(self,evt):pass
-      def gdbevt_breakpoint_deleted(self,evt):pass
-    '''
-    return self.process_common(self,'gdbevt',pkg)
-
-
   def send(self,msg):
     pkgsend(self.fd,msg)
 
   def recv(self):
     return pkgrecv(self.fd)
 
-  def process_pkg(self,pkg=None):
-    '''Обработать сообщение из графического окна или от другой сущности'''
-    if pkg==None:
-      pkg=self.recv()
+  def process_pkg(self,pkg):
+    '''Обработать сообщение из графического окна, GDB, или класса, который
+        соответствует графическому окну.
+
+      В сущностях типа AuxWin и subentities типа RegistersTable допускается
+      определять следующие методы для обработки событий. Данные методы будут вызываться
+      автоматически.
+
+      1. Методы для обработки событий из gdb
+      gdbevt_cont(self,pkg)
+      gdbevt_exited(self,pkg)
+      gdbevt_stop(self,pkg)
+      gdbevt_new_objfile(self,pkg)
+      gdbevt_clear_objfiles(self,pkg)
+      gdbevt_inferior_call_pre(self,pkg)
+      gdbevt_inferior_call_post(self,pkg)
+      gdbevt_memory_changed(self,pkg)
+      gdbevt_register_changed(self,pkg)
+      gdbevt_breakpoint_created(self,pkg)
+      gdbevt_breakpoint_modified(self,pkg)
+      gdbevt_breakpoint_deleted(self,pkg)
+
+      2. Методы, которые будут вызываться, когда пользователь
+          выполнил команду в shell'е. Назначение данных методов заключается в том, что
+          GDB не генерирует события, при помощи которых представляется возможным отслеживать,
+          например, изменение текущего фрейма или потока.
+      shellcmd_bp_disable(self,pkg)
+      shellcmd_bp_enable(self,pkg)
+      shellcmd_frame(self,pkg)
+      shellcmd_frame_up(self,pkg)
+      shellcmd_frame_down(self,pkg)
+      shellcmd_thread(self,pkg)
+
+      3. Методы, которые используются для обработки событий,
+      которые генерируются сущностями или подсущностями.
+      mcgdbevt_frame(self,data)     Данное событие генерируется, при изменении текущего фрейма из Python API.
+                                    При изменении из Python API события типа shellcmd генерироваться не будет.
+
+      mcgdbevt_thread(self,data)    Данное событие генерируется, при изменении текущего потока из Python API.
+
+      4. Пакеты типа onclick. Виджет типа wtable.c способен генерировать событие onclick. Для генерации события
+      на кликабельный объект помещается пара "onclick_data":PKG. При клике по объекту PKG будет отправлен
+      сущености. PKG должен удовлетворять структуре пакета, которая описана в п.5
+
+      5. Принцип соответствия названия метода пакету. Каждый пакет, который будет доставляться до сущностей
+      содержит, как минимум, следующие поля {'cmd':cmd_group, cmd_group:command }
+      На основе данного пакета будет сформировано название метода method_name='{cmd_group}_{cmd}'.format(cmd_group=cmd_group,command=command)
+      Если сущность обладает методом method_name, то данный метод будет вызван на сущности, при этом методу будет передан пакет pkg.
+
+      Если пакет содержит поле subentity_dst, то будет вызвана только подсущность.
+
+      Порядок вызова методов.
+      Сначала метод вызывается у Entity, далее у subentities
+    '''
+    subentity_name=pkg.get('subentity_dst')
+    destinations=[self]
+    if subentity_name:
+      destinations+=[self.subentities[subentity_name]]
+    else:
+      destinations+=self.subentities.values()
     cmd=pkg['cmd']
-    cb=self.window_event_handlers[cmd]
-    return cb(pkg)
+    cmd_name=pkg[cmd]
+    method_name = '{}_{}'.format(cmd,cmd_name)
+    ret_pkgs=[]
+    for subsentity in destinations:
+      if hasattr(subsentity,method_name):
+        cb=getattr(subsentity,method_name)
+        ret=cb(pkg)
+        if ret:
+          assert type(ret) in (list,tuple)
+          ret_pkgs+=ret
+    return ret_pkgs
 
   def terminate(self):
     try:

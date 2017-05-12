@@ -5,84 +5,25 @@ import gdb
 import re,sys,ctypes
 
 from mcgdb.basewin import BaseWin
-from mcgdb.common  import exec_in_main_pythread,gdb_stopped,inferior_alive,gdb_print
-from mcgdb.basewin import stringify_value,valueaddress_to_ulong,stringify_value_safe, \
-                          is_incomplete_type_ptr,check_chunks
-from mcgdb.common import exec_main
+from mcgdb.common  import gdb_stopped,inferior_alive,gdb_print
+from mcgdb.valuetochunks import check_chunks, ValueToChunks
+from mcgdb.common  import exec_main, valcache, INDEX
 
 
-class FrameCommon(ValueToChunks):
-  def _get_frame_func_args(self,frame):
-      args=[]
-      try:
-        block=frame.block()
-      except RuntimeError:
-        return []
-      while block:
-        for sym in block:
-          if sym.is_argument:
-            value = self.valcache(sym.value(frame))
-            args.append(
-              (sym.name,stringify_value(value))
-            )
-        if block.function:
-          break
-        block=block.superblock
-        if (not block):
-          break
-      return args
-
-  def _get_frame_funcname(self,frame):
-    frame_func_name = frame.name()
-    return frame_func_name
-
-  def _get_frame_funcname_with_args(self,frame):
-    frame_func_name = {'str':self._get_frame_funcname(frame),'name':'frame_func_name'}
-    frame_func_args = []
-    func_args = self._get_frame_func_args(frame)
-    for argname,argval in func_args:
-      frame_func_args.append({'str':'\n  '})
-      frame_func_args.append({'str':argname,'name':'varname'})
-      frame_func_args.append({'str':'='})
-      frame_func_args.append({'str':argval, 'name':'varvalue'})
-    res = [frame_func_name, {'str':'('}] + frame_func_args
-    if len(func_args) > 0:
-      res.append ({'str':'\n)'})
-    else :
-      res.append ({'str':')'})
-    return res
-
-
-  def _get_frame_fileline(self,frame):
-    frame_line      = frame.find_sal().line
-    symtab = frame.find_sal().symtab
-    frame_filename  = symtab.filename if symtab else 'unknown'
-    return [
-      {'str':frame_filename,'name':'frame_filename'},
-      {'str':':', 'name':'frame_fileline_delimiter'},
-      {'str':str(frame_line),'name':'frame_line'},
-    ]
-
-  def filter_chunks_with_id(self,chunks):
-    ok=[]
-    for chunk in chunks:
-      if 'id' in chunk:
-        ok.append(chunk)
-      if 'chunks' in chunk:
-        ok+=self.filter_chunks_with_id(chunk['chunks'])
-    return ok
-
-
-
-class BacktraceTable(FrameCommon):
+class BaseSubentity(ValueToChunks):
   def __init__(self,**kwargs):
-    self.register_onclick_action('select_frame',self._select_frame)
+    self.send = kwargs['send']
+    self.send_error = kwargs['send_error']
+    super(BaseSubentity,self).__init__(**kwargs)
+
+class BacktraceTable(BaseSubentity):
+  subentity_name='backtrace'
+
+  def __init__(self,**kwargs):
     super(BacktraceTable,self).__init__(**kwargs)
 
   def process_connection(self):
-    rc=super(BacktraceTable,self).process_connection()
-    self.update_backtrace()
-    return rc
+    return self.update_backtrace()
 
   @exec_main
   def _select_frame_1(self,nframe):
@@ -100,13 +41,13 @@ class BacktraceTable(FrameCommon):
       frame = frame.older()
     return "can't find frame #{}".format(nframe)
 
-  def _select_frame(self,pkg):
-    nframe = pkg['data']['nframe']
+  def onclick_select_frame(self,pkg):
+    nframe = pkg['nframe']
     res=self._select_frame_1(nframe)
     if res!=None:
       self.send_error(res)
     else:
-      return [{'cmd':'mcgdbevt','cmdname':'frame', 'data':{}}]
+      return [{'cmd':'mcgdbevt','mcgdbevt':'frame', 'data':{}}]
 
 
   @exec_main
@@ -122,7 +63,8 @@ class BacktraceTable(FrameCommon):
         framenumber['selected']=True
         selected_row=nframe
       col['onclick_data']={
-          'click_cmd':'select_frame',
+          'cmd':'onclick',
+          'onclick':'select_frame',
           'nframe' : nframe,
         }
       chunks = [
@@ -157,59 +99,47 @@ class BacktraceTable(FrameCommon):
 
 
 
-  def gdbevt_exited(self,evt):
+  def gdbevt_exited(self,pkg):
     self.update_backtrace()
-    super(BacktraceTable,self).gdbevt_exited(evt)
 
-  def gdbevt_stop(self,evt):
+  def gdbevt_stop(self,pkg):
     self.update_backtrace()
-    super(BacktraceTable,self).gdbevt_stop(evt)
 
-  def gdbevt_new_objfile(self,evt):
+  def gdbevt_new_objfile(self,pkg):
     self.update_backtrace()
-    super(BacktraceTable,self).gdbevt_new_objfile(evt)
 
-  def gdbevt_clear_objfiles(self,evt):
+  def gdbevt_clear_objfiles(self,pkg):
     self.update_backtrace()
-    super(BacktraceTable,self).gdbevt_clear_objfiles(evt)
 
-  def gdbevt_memory_changed(self,evt):
+  def gdbevt_memory_changed(self,pkg):
     self.update_backtrace()
-    super(BacktraceTable,self).gdbevt_memory_changed(evt)
 
-  def gdbevt_register_changed(self,evt):
+  def gdbevt_register_changed(self,pkg):
     self.update_backtrace()
-    super(BacktraceTable,self).gdbevt_register_changed(evt)
 
-  def shellcmd_frame_up(self):
+  def shellcmd_frame_up(self,pkg):
     self.update_backtrace()
-    super(BacktraceTable,self).shellcmd_frame_up()
 
-  def shellcmd_frame_down(self):
+  def shellcmd_frame_down(self,pkg):
     self.update_backtrace()
-    super(BacktraceTable,self).shellcmd_frame_down()
 
-  def shellcmd_thread(self):
+  def shellcmd_thread(self,pkg):
     self.update_backtrace()
-    super(BacktraceTable,self).shellcmd_thread()
 
-  def mcgdbevt_frame(self,data):
+  def mcgdbevt_frame(self,pkg):
     self.update_backtrace()
-    super(BacktraceTable,self).mcgdbevt_frame(data)
 
-  def mcgdbevt_thread(self,data):
+  def mcgdbevt_thread(self,pkg):
     self.update_backtrace()
-    super(BacktraceTable,self).mcgdbevt_frame(data)
 
 
 
 
-class RegistersTable(ValueToChunks):
-  __tabname='registers'
+class RegistersTable(BaseSubentity):
+  subentity_name='registers'
+
   def __init__(self, **kwargs):
     self.regnames=[]
-    self.converters['bin_to_long'] = lambda x: long(x,2)
-    self.converters['hex_to_long'] = lambda x: long(x,16)
     self.regex_split = re.compile('\s*([^\s]+)\s+([^\s+]+)\s+(.*)')
     self.registers_drawn=False
     regtab = gdb.execute('maint print registers',False,True).split('\n')[1:]
@@ -224,9 +154,7 @@ class RegistersTable(ValueToChunks):
 
 
   def process_connection(self):
-    rc=super(RegistersTable,self).process_connection()
-    self.update_registers_initial()
-    return rc
+    return self.update_registers_initial()
 
   @exec_main
   def update_registers_initial(self):
@@ -248,11 +176,11 @@ class RegistersTable(ValueToChunks):
     tabdata={}
     for regname in self.regnames:
       try:
-        regval = self.valcache(regname)
+        regval = valcache(regname)
       except gdb.error:
         regval = None
       tabdata[regname]=regval
-    self.insert_table_exemplar(self.__tabname,None,tabdata)
+    INDEX(self.subentity_name,tabdata)
 
   @exec_main
   def get_registers(self):
@@ -261,7 +189,7 @@ class RegistersTable(ValueToChunks):
     return self._get_registers()
 
   def get_register_chunks(self,regname):
-    regvalue = self.valcache(regname)
+    regvalue = valcache(regname)
     chunks=[]
     try:
       if regvalue.type.strip_typedefs().code==gdb.TYPE_CODE_INT:
@@ -320,57 +248,68 @@ class RegistersTable(ValueToChunks):
       self.update_registers_initial()
       return
     packages=[]
-    tabidx,tabdata=self.get_table_exemplar(self.__tabname,None)
+    tabidx,tabdata=INDEX.get(self.subentity_name)
     for regname in self.regnames:
-      regvalue = self.valcache(regname)
+      regvalue = valcache(regname)
       if tabdata[regname]!=regvalue:
         packages+=self.pkgs_update_register(regname)
         tabdata[regname]=regvalue
     self.send(packages)
 
-  def gdbevt_exited(self,evt):
+  #GDB EVENTS
+  def gdbevt_exited(self,pkg):
+    return self.update_registers()
+
+  def gdbevt_stop(self,pkg):
+    return self.update_registers()
+
+  def gdbevt_register_changed(self,pkg):
+    return self.update_registers()
+
+  #SHELL COMMANDS
+  def shellcmd_frame_up(self,pkg):
+    return self.update_registers()
+
+  def shellcmd_frame_down(self,pkg):
+    return self.update_registers()
+
+  def shellcmd_thread(self,pkg):
+    return self.update_registers()
+
+  #MCGDB EVENTS
+  def mcgdbevt_frame(self,pkg):
+    return self.update_registers()
+
+  def mcgdbevt_thread(self,pkg):
+    return self.update_registers()
+
+  def onclick_expand_variable(self,pkg):
+    super(RegistersTable,self).onclick_expand_variable(pkg)
     self.update_registers()
-    return super(RegistersTable,self).gdbevt_exited(evt)
 
-  def gdbevt_stop(self,evt):
+  def onclick_collapse_variable(self,pkg):
+    super(RegistersTable,self).onclick_collapse_variable(pkg)
     self.update_registers()
-    return super(RegistersTable,self).gdbevt_stop(evt)
 
-  def gdbevt_register_changed(self,evt):
+  def onclick_change_slice(self,pkg):
+    super(RegistersTable,self).onclick_change_slice(pkg)
     self.update_registers()
-    return super(RegistersTable,self).gdbevt_register_changed(evt)
 
-  def shellcmd_frame_up(self):
+  def onclick_change_variable(self,pkg):
+    super(RegistersTable,self).onclick_change_variable(pkg)
     self.update_registers()
-    return super(RegistersTable,self).shellcmd_frame_up()
-
-  def shellcmd_frame_down(self):
-    self.update_registers()
-    return super(RegistersTable,self).shellcmd_frame_down()
-
-  def shellcmd_thread(self):
-    self.update_registers()
-    return super(RegistersTable,self).shellcmd_thread()
-
-  def mcgdbevt_frame(self,data):
-    self.update_registers()
-    super(RegistersTable,self).mcgdbevt_frame(data)
-
-  def mcgdbevt_thread(self,data):
-    self.update_registers()
-    super(RegistersTable,self).mcgdbevt_frame(data)
 
 
 
-class ThreadsTable(FrameCommon):
+
+class ThreadsTable(BaseSubentity):
+  subentity_name='threads'
+
   def __init__(self, **kwargs):
-    self.click_cmd_cbs['select_thread'] = self._select_thread
     super(ThreadsTable,self).__init__(**kwargs)
 
   def process_connection(self):
-    rc=super(ThreadsTable,self).process_connection()
-    self.update_threads()
-    return rc
+    return self.update_threads()
 
   @exec_main
   def _select_thread_1(self,nthread):
@@ -379,15 +318,14 @@ class ThreadsTable(FrameCommon):
       return 'thread #{} not exists'.format(nthread)
     threads[nthread].switch()
 
-  def _select_thread(self,pkg):
-    nthread = pkg['data']['nthread']
+  def onclick_select_thread(self,pkg):
+    nthread = pkg['nthread']
     res=self._select_thread_1(nthread)
     if res!=None:
       self.send_error(res)
     else:
-      # имитируем, что пользователь вызвал в шелле команду, и оповещаем
-      # об этом остальные сущности
-      return [{'cmd':'mcgdbevt','cmdname':'thread', 'data':{}}]
+      # об этом остальные сущности о смене потока
+      return [{'cmd':'mcgdbevt','mcgdbevt':'thread', 'data':{}}]
 
   def update_threads(self):
     try:
@@ -420,7 +358,8 @@ class ThreadsTable(FrameCommon):
         global_num_chunk['selected']=True
         selected_row=nrow
       column['onclick_data'] = {
-          'click_cmd':'select_thread',
+          'cmd' : 'onclick',
+          'onclick':'select_thread',
           'nthread' : nrow,
         }
       chunks = [ global_num_chunk,
@@ -447,51 +386,50 @@ class ThreadsTable(FrameCommon):
       table['selected_row'] = selected_row
     return table
 
+  #GDB EVENTS
   def gdbevt_exited(self,evt):
     self.update_threads()
-    super(ThreadsTable,self).gdbevt_exited(evt)
+
   def gdbevt_stop(self,evt):
     self.update_threads()
-    super(ThreadsTable,self).gdbevt_stop(evt)
+
   def gdbevt_new_objfile(self,evt):
     self.update_threads()
-    super(ThreadsTable,self).gdbevt_new_objfile(evt)
+
   def gdbevt_clear_objfiles(self,evt):
     self.update_threads()
-    super(ThreadsTable,self).gdbevt_clear_objfiles(evt)
+
   def gdbevt_memory_changed(self,evt):
     self.update_threads()
-    super(ThreadsTable,self).gdbevt_memory_changed(evt)
+
   def gdbevt_register_changed(self,evt):
     self.update_threads()
-    super(ThreadsTable,self).gdbevt_register_changed(evt)
 
-  def shellcmd_frame_up(self):
+  #SHELL COMMANDS
+  def shellcmd_frame_up(self,data=None):
     self.update_threads()
-    super(ThreadsTable,self).shellcmd_frame_up()
-  def shellcmd_frame_down(self):
-    self.update_threads()
-    super(ThreadsTable,self).shellcmd_frame_down()
-  def shellcmd_thread(self):
-    self.update_threads()
-    super(ThreadsTable,self).shellcmd_thread()
 
+  def shellcmd_frame_down(self,data=None):
+    self.update_threads()
+
+  def shellcmd_thread(self,data=None):
+    self.update_threads()
+
+  #MCGDB EVENTS
   def mcgdbevt_frame(self,data):
     self.update_threads()
-    super(ThreadsTable,self).mcgdbevt_frame(data)
 
   def mcgdbevt_thread(self,data):
     self.update_threads()
-    super(ThreadsTable,self).mcgdbevt_frame(data)
 
 
 
 
-class LocalvarsTable(ValueToChunks):
-  def __init__(**kwargs):
-    self.on_expand_variable(self.update_localvars)
-    self.on_collapse_variable(self.update_localvars)
-    self.on_change_slice(self.update_localvars)
+class LocalvarsTable(BaseSubentity):
+  subentity_name='localvars'
+
+  def __init__(self,**kwargs):
+    super(LocalvarsTable,self).__init__(**kwargs)
 
   def process_connection(self):
     self.update_localvars()
@@ -533,36 +471,52 @@ class LocalvarsTable(ValueToChunks):
         if (symbol.is_argument or symbol.is_variable):
             name = symbol.name
             if name not in variables:
-              variables[name] = self.valcache(symbol.value(frame))
+              variables[name] = valcache(symbol.value(frame))
       if block.function:
         break
       block = block.superblock
     return variables
 
-  def gdbevt_exited(self,evt):
-    self.update_localvars()
-  def gdbevt_stop(self,evt):
-    self.update_localvars()
-  def gdbevt_new_objfile(self,evt):
-    self.update_localvars()
-  def gdbevt_clear_objfiles(self,evt):
-    self.update_localvars()
-  def gdbevt_memory_changed(self,evt):
-    self.update_localvars()
-  def gdbevt_register_changed(self,evt):
+  def onclick_expand_variable(self,pkg):
+    super(LocalvarsTable,self).onclick_expand_variable(pkg)
     self.update_localvars()
 
-  def shellcmd_frame_up(self):
-    self.update_localvars()
-  def shellcmd_frame_down(self):
-    self.update_localvars()
-  def shellcmd_thread(self):
+  def onclick_collapse_variable(self,pkg):
+    super(LocalvarsTable,self).onclick_collapse_variable(pkg)
     self.update_localvars()
 
-  def mcgdbevt_frame(self,data):
+  def onclick_change_slice(self,pkg):
+    super(LocalvarsTable,self).onclick_change_slice(pkg)
     self.update_localvars()
 
-  def mcgdbevt_thread(self,data):
+  def onclick_change_variable(self,pkg):
+    super(LocalvarsTable,self).onclick_change_variable(pkg)
+    self.update_localvars()
+
+  def gdbevt_exited(self,pkg):
+    self.update_localvars()
+  def gdbevt_stop(self,pkg):
+    self.update_localvars()
+  def gdbevt_new_objfile(self,pkg):
+    self.update_localvars()
+  def gdbevt_clear_objfiles(self,pkg):
+    self.update_localvars()
+  def gdbevt_memory_changed(self,pkg):
+    self.update_localvars()
+  def gdbevt_register_changed(self,pkg):
+    self.update_localvars()
+
+  def shellcmd_frame_up(self,pkg):
+    self.update_localvars()
+  def shellcmd_frame_down(self,pkg):
+    self.update_localvars()
+  def shellcmd_thread(self,pkg):
+    self.update_localvars()
+
+  def mcgdbevt_frame(self,pkg):
+    self.update_localvars()
+
+  def mcgdbevt_thread(self,pkg):
     self.update_localvars()
 
 
@@ -576,9 +530,11 @@ class AuxWin(BaseWin):
   startcmd='mcgdb open aux'
 
   def __init__(self, **kwargs):
-    self.clear_caches()
-    kwtab={'value_cache':self.value_cache, 'value_str_cache':self.value_str_cache}
-    self.tables={
+    kwtab={
+      'send'        :   self.send,
+      'send_error'  :   self.send_error,
+    }
+    self.subentities={
       'registers' : RegistersTable(**kwtab),
       'localvars' : LocalvarsTable(**kwtab),
       'backtrace' : BacktraceTable(**kwtab),
@@ -586,32 +542,9 @@ class AuxWin(BaseWin):
     }
     super(AuxWin,self).__init__(**kwargs)
 
-  def clear_caches(self):
-    self.value_cache={}
-    self.value_str_cache()
-
   def process_connection(self):
     return super(AuxWin,self).process_connection()
 
-
-
-  def gdb_check_breakpoint(self):
-    pass
-  def set_color(self,pkg):
-    pass
-
-
-  def gdbevt_stop(self,evt):
-    self.clear_caches()
-
-  def gdbevt_new_objfile(self,evt):
-    self.clear_caches()
-
-  def gdbevt_memory_changed(self,evt):
-    self.clear_caches()
-
-  def gdbevt_register_changed(self,evt):
-    self.clear_caches()
 
 
 

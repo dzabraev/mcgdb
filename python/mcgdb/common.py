@@ -23,10 +23,186 @@ logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(
 
 
 
+def exec_main(f):
+  def decorated(*args,**kwargs):
+    return exec_in_main_pythread (f,args,kwargs)
+  return decorated
+
+
+import mcgdb.gdb2 as gdb2
+
+
 
 class MCGDB_VERSION(object):
   major=1
   minor=1
+
+class Index(object):
+  def __init__(self):
+    self.index_data={}
+    self.counter=1
+
+  def insert(self,key,data=None):
+    old = self.index_data.get(key)
+    if old==None:
+      idx=self.counter
+      self.counter+=1
+    else:
+      idx,_ = old
+    self.index_data[key] = (idx,data)
+    return idx
+
+  def get(self,key):
+    cv=self.index_data.get(key)
+    if cv==None:
+      return None,None
+    else:
+      return cv
+  def __call__(self,*args,**kwargs):
+    return self.insert(*args,**kwargs)
+
+INDEX=Index()
+
+def valueaddress_to_ulong(value):
+  if value==None:
+    return None
+  return ctypes.c_ulong(long(value)).value
+
+
+def get_this_frame_num():
+  frame=gdb.selected_frame()
+  if frame==None:
+    return None
+  cnt=0
+  while frame:
+    cnt+=1
+    try:
+      frame=frame.newer()
+    except gdb.error:
+      #if gdb reached remote protocol timeout and can't read registers
+      #then frame can be invalid.
+      return None
+  return cnt
+
+def get_this_thread_num():
+  thread = gdb.selected_thread()
+  if thread:
+    return thread.ptid[1]
+  else:
+    return None
+
+def stringify_value(value,**kwargs):
+  '''Конвертация gdb.Value в строку
+    Args:
+      **enable_additional_text (bool):
+        Если True, то будет печататься нечто вроде 
+        0x1 <error: Cannot access memory at address 0x1>
+        Если False,
+        то 0x1
+  '''
+  if value.is_optimized_out:
+    return '<OptimizedOut>'
+  type_code = value.type.strip_typedefs().code
+  enable_additional_text=kwargs.get('enable_additional_text',False)
+  try:
+    if type_code==gdb.TYPE_CODE_INT and kwargs.get('integer_mode') in ('dec','hex','bin') and value.type.strip_typedefs().sizeof<=8:
+      mode=kwargs.get('integer_mode')
+      bitsz=value.type.sizeof*8
+      #gdb can't conver value to python-long if sizeof(value) > 8
+      if mode=='dec':
+        return str(long(value))
+      elif mode=='hex':
+        pattern='0x{{:0{hexlen}x}}'.format(hexlen=bitsz/4)
+        return pattern.format(ctypes.c_ulong(long(value)).value)
+      elif mode=='bin':
+        pattern='{{:0{bitlen}b}}'.format(bitlen=bitsz)
+        return pattern.format(ctypes.c_ulong(long(value)).value)
+    if type_code in (gdb.TYPE_CODE_PTR,) and not enable_additional_text:
+      return hex(ctypes.c_ulong(long(value)).value)[:-1]
+    else:
+      #например, если делать unicode или str для `.*char *`, то память будет читаться дважды.
+      return unicode(value)
+  except gdb.error:
+    return "unavailable"
+
+def stringify_value_safe(*args,**kwargs):
+  try:
+    return stringify_value(*args,**kwargs)
+  except gdb.MemoryError:
+    return 'Cannot access memory'
+
+
+
+
+class GdbValueCache(object):
+  def __init__(self):
+    self.drop()
+
+  def drop(self):
+    ''' Drop all cache layers
+    '''
+    self.value_cache = {}
+    self.value_str_cache = {}
+
+  def cached_stringify_value(self,value,path,**kwargs):
+    frnum=get_this_frame_num()
+    if frnum==None:
+      valcache=None
+    else:
+      key=(frnum,path)
+      valcache=self.value_str_cache.get(key)
+    if valcache==None:
+      valcache=stringify_value_safe(value,**kwargs)
+      self.value_str_cache[key]=valcache
+    return valcache
+
+
+  def valcache(self,value_or_path,**kwargs):
+    '''return value from cache if exists else return argument value'''
+    if type(value_or_path) in (str,unicode):
+      path=value_or_path
+      frnum=get_this_frame_num()
+      th=gdb.selected_thread()
+      if frnum==None or th==None:
+        valcache1=None
+      else:
+        key=(frnum,path,th.global_num)
+        valcache1=self.value_str_cache.get(key)
+      if valcache1==None:
+        valcache1=gdb.parse_and_eval(path)
+        self.value_cache[key]=valcache1
+        self.add_valcache_byaddr(valcache1)
+    else:
+      value=value_or_path
+      addr=valueaddress_to_ulong(value.address)
+      if addr==None:
+        return value
+      key=(addr,str(value.type))
+      valcache1=self.value_cache.get(key)
+      if valcache1==None:
+        self.add_valcache_byaddr(value)
+        valcache1=value
+    return valcache1
+
+  def add_valcache_byaddr(self,value):
+    addr=valueaddress_to_ulong(value.address)
+    if addr==None:
+      return False
+    key=(addr,str(value.type))
+    self.value_cache[key]=value
+    return True
+
+
+
+value_cache = GdbValueCache()
+cached_stringify_value = value_cache.cached_stringify_value
+valcache = value_cache.valcache
+
+
+
+
+
+
 
 
 def gdb_print(msg):
@@ -147,10 +323,6 @@ def error(msg):
   exec_in_main_pythread (logging.error,(msg,))
 
 
-def exec_main(f):
-  def decorated(*args,**kwargs):
-    return exec_in_main_pythread (f,args,kwargs)
-  return decorated
 
 def gdb_stopped_1():
   try:
@@ -439,46 +611,45 @@ class GEThread(object):
       window=WinClsConstr(manually=manually)
       self.wait_connection[window.listen_fd] = window
 
-  def __set_color(self,pkg):
-    for fd in self.fte:
-      win=self.fte[fd]
-      win.set_color(pkg)
+  def get_pkg_from_gdb(self):
+    ''' Прием пакета от gdb.
 
-  def __process_pkg_from_gdb(self):
+        Если пакет предназначается только для GEThread, то пакет будет обработан и
+        будет возвращен None.
+        Если пакет предназначается для классов, которые представляют окна, то будет
+        возвращен пакет.
+    '''
     pkg=pkgrecv(self.gdb_rfd)
     cmd=pkg['cmd']
-    if cmd=='gdbevt':
-      name,evt=gdbevt_queue.pop()
-      for fd in self.fte:
-        win=self.fte[fd]
-        win.process_gdbevt(name,evt)
-      breakpoint_queue.process()
-    elif cmd =='shellcmd':
-      cmdname=pkg['cmdname']
-      for fd in self.fte:
-        win=self.fte[fd]
-        win.process_shellcmd(cmdname)
-#    elif cmd=='mcgdbevt':
-#      cmdname=pkg['cmdname']
-#      for fd in self.fte:
-#        win=self.fte[fd]
-#        win.process_mcgdbevt(cmd,pkg['data'])
-    ####mcgdb events
-    elif   cmd=='open_window':
+    if cmd=='open_window':
       self.__open_window(pkg)
-    elif cmd=='color':
-      self.__set_color(pkg)
+      return
+    elif cmd=='gdbevt':
+      evtname,evt=gdbevt_queue.pop()
+      new_pkg={'cmd':'gdbevt','gdbevt':evtname,'evt':evt}
+      if evtname in ('exited','stop','new_objfile','clear_objfiles','memory_changed','register_changed'):
+        value_cache.drop()
+      return new_pkg
     elif cmd=='stop_event_loop':
       for fd,win in self.fte.iteritems():
         win.terminate()
       sys.exit(0)
     else:
-      debug('unrecognized package: `{}`'.format(pkg))
-      return
+      return pkg
 
-  def __process_pkg_from_entity (self):
-    pkg=self.entities_evt_queue.pop(0)
-    gdb_print (pkg)
+  def get_pkg_from_remote(self,fd):
+    pkg = pkgrecv(fd)
+    #gdb_print(str(pkg)+'\n')
+    cmd=pkg['cmd']
+    if cmd=='exec_in_gdb':
+      if gdb_stopped():
+        command_for_exec_in_gdbshell=pkg['exec_in_gdb']
+        gdb2.execute(command_for_exec_in_gdbshell)
+      return None
+    return pkg
+
+
+  def send_pkg_to_entities (self, pkg):
     cmd=pkg['cmd']
     if cmd=='check_breakpoint':
       breakpoint_queue.process()
@@ -489,7 +660,6 @@ class GEThread(object):
         if res:
           self.entities_evt_queue+=res
 
-
   def __call__(self):
     assert not self.WasCalled
     self.WasCalled=True
@@ -498,7 +668,9 @@ class GEThread(object):
     #должен вернуть пакет(ы), которые будут обрабатываться в классах, которые соотв. окнам
     while True:
       if len(self.entities_evt_queue)>0:
-        self.__process_pkg_from_entity ()
+        #self.__process_pkg_from_entity ()
+        pkg = self.entities_evt_queue.pop(0)
+        self.send_pkg_to_entities(pkg)
         continue
       rfds=self.fte.keys()
       rfds+=self.wait_connection.keys()
@@ -512,9 +684,7 @@ class GEThread(object):
           raise
       ready_rfds=fds[0]
       for fd in ready_rfds:
-        if fd==self.gdb_rfd:
-          self.__process_pkg_from_gdb()
-        elif fd in self.wait_connection.keys():
+        if fd in self.wait_connection.keys():
           entity=self.wait_connection[fd]
           ok=entity.process_connection()
           del self.wait_connection[fd]
@@ -522,20 +692,28 @@ class GEThread(object):
             self.fte[entity.fd]=entity
             #entity.gdb_update_current_frame(self.exec_filename,self.exec_line)
         else:
-          #обработка пакета из удаленного окна
-          entity=self.fte[fd]
-          try:
-            res=entity.process_pkg ()
-            if res:
-              self.entities_evt_queue+=res
-          except IOFailure:
-            #возможно удаленное окно было закрыто =>
-            #уничтожаем объект, который соответствует
-            #потерянному окну.
-            del self.fte[fd]
-            debug('connection type={} was closed'.format(entity.type))
-            entity.byemsg()
-            entity=None #forgot reference to object
+          if fd==self.gdb_rfd:
+            #обработка пакета из gdb
+            pkg = self.get_pkg_from_gdb()
+            if pkg:
+              self.send_pkg_to_entities(pkg)
+          else:
+            #обработка пакета из удаленного (графического) окна
+            entity = self.fte[fd]
+            try:
+              pkg=self.get_pkg_from_remote(fd)
+              if pkg:
+                ret_pkgs = entity.process_pkg(pkg)
+                if ret_pkgs:
+                  self.entities_evt_queue += ret_pkgs
+            except IOFailure:
+              #возможно удаленное окно было закрыто =>
+              #уничтожаем объект, который соответствует
+              #потерянному окну.
+              del self.fte[fd]
+              debug('connection type={} was closed'.format(entity.type))
+              entity.byemsg()
+              entity=None #forgot reference to object
     debug('event_loop stopped\n')
 
 
@@ -590,13 +768,13 @@ class McgdbMain(object):
 
   def notify_shellcmd(self,cmdname):
     if cmdname!='quit':
-      pkgsend(self.gdb_wfd,{'cmd':'shellcmd','cmdname':cmdname})
+      pkgsend(self.gdb_wfd,{'cmd':'shellcmd','shellcmd':cmdname})
     else:
       pkgsend(self.gdb_wfd,{'cmd':'stop_event_loop'})
 
   def notify_gdbevt(self,evt,name):
     gdbevt_queue.append((name,evt))
-    pkgsend(self.gdb_wfd,{'cmd':'gdbevt'})
+    pkgsend(self.gdb_wfd,{'cmd':'gdbevt','gdbevt':name})
 
   def notify_gdb_cont (self, evt):
     self.notify_gdbevt(evt,'cont')

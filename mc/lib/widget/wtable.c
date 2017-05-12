@@ -598,12 +598,19 @@ process_cell_tree_mouse_callbacks (Table *tab, GNode *root, int y, int x) {
         }
         insert_wait_text=TRUE;
       }
+      msg_obj = json_deep_copy (onclick_data);
+      json_object_set_new (msg_obj, "user_input", json_string (f));
+      send_pkg_to_gdb (json_dumps (msg_obj,0));
+      json_decref (msg_obj);
+
+/*
       msg_obj = json_object();
-      json_object_set_new (msg_obj, "cmd", json_string ("onclick_data"));
+      json_object_set_new (msg_obj, "cmd", json_string ("onclick"));
       json_object_set (msg_obj, "data", onclick_data);
       json_object_set_new (msg_obj, "user_input", json_string (f));
       send_pkg_to_gdb (json_dumps (msg_obj,0));
       json_decref (msg_obj);
+*/
       if (insert_wait_text) {
         //message_assert (CHUNK(node)->str);
         if (CHUNK(node)->str)

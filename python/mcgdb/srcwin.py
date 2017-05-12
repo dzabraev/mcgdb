@@ -16,10 +16,6 @@ class SrcWin(BaseWin):
 
   def __init__(self, **kwargs):
     super(SrcWin,self).__init__(**kwargs)
-    self.window_event_handlers.update({
-      'editor_breakpoint'       :  self.__editor_breakpoint,
-      'editor_breakpoint_de'    :  self.__editor_breakpoint_de,
-    })
     self.exec_filename=None #текущему фрейму соответствует это имя файла с исходным кодом
     self.exec_line=None     #номер строки текущей позиции исполнения программы
     self.edit_filename=None #Файл, который открыт в редакторе. Отличие от self.exec_filename в
@@ -34,38 +30,36 @@ class SrcWin(BaseWin):
 
 
 
-  def gdbevt_exited(self,evt):
+  def gdbevt_exited(self,pkg):
     self.update_current_frame()
 
-  def gdbevt_stop(self,evt):
+  def gdbevt_stop(self,pkg):
     self.update_current_frame()
     self.update_breakpoints()
 
-  def gdbevt_new_objfile(self,evt):
+  def gdbevt_new_objfile(self,pkg):
     self.update_current_frame()
 
-  def gdbevt_clear_objfiles(self,evt):
+  def gdbevt_clear_objfiles(self,pkg):
     self.update_current_frame()
 
-  def gdbevt_breakpoint_created(self,evt):
+  def gdbevt_breakpoint_created(self,pkg):
     self.update_breakpoints()
 
-  def gdbevt_breakpoint_modified(self,evt):
+  def gdbevt_breakpoint_modified(self,pkg):
     self.update_breakpoints()
 
-  def gdbevt_breakpoint_deleted(self,evt):
+  def gdbevt_breakpoint_deleted(self,pkg):
     self.update_breakpoints()
 
 
-  def shellcmd_frame_up(self):
+  def shellcmd_up(self,pkg):
     return self.update_current_frame()
-  def shellcmd_frame_down(self):
+  def shellcmd_down(self,pkg):
     return self.update_current_frame()
 
-  def mcgdbevt_frame(self,data):
-    rc = self.update_current_frame()
-    super(SrcWin,self).mcgdbevt_frame(data)
-    return rc
+  def mcgdbevt_frame(self,pkg):
+    return self.update_current_frame()
 
 
 
@@ -131,7 +125,7 @@ class SrcWin(BaseWin):
     self.send(pkg)
 
   #commands from editor
-  def __editor_breakpoint(self,pkg):
+  def onclick_breakpoint(self,pkg):
     line=pkg['line']
     if self.edit_filename==TMP_FILE_NAME:
       #в редакторе открыт файл-заглушка.
@@ -140,7 +134,8 @@ class SrcWin(BaseWin):
     breakpoint_queue.insert_or_delete(self.edit_filename,line)
     breakpoint_queue.process()
     return [{'cmd':'check_breakpoint'}]
-  def __editor_breakpoint_de(self,pkg):
+
+  def onclick_breakpoint_de(self,pkg):
     ''' Disable/enable breakpoint'''
     raise NotImplementedError
     breakpoint_queue.process()

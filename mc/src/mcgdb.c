@@ -476,7 +476,7 @@ mcgdb_send_mouse_event_to_gdb (WEdit * edit, mouse_event_t * event) {
   click_col  = event->x     - edit->start_col;
   click_line = event->y + 1 + edit->start_line;
   if (event->msg==MSG_MOUSE_DOWN && click_col<=7) {
-    asprintf (&pkg,"{\"cmd\":\"editor_breakpoint\",\"line\": %ld}",click_line);
+    asprintf (&pkg,"{\"cmd\":\"onclick\",\"onclick\":\"breakpoint\",\"line\": %ld}",click_line);
   }
   if (pkg)
     send_pkg_to_gdb (pkg);
@@ -738,7 +738,7 @@ void
 mcgdb_cmd_breakpoint (WEdit * e) {
   char *pkg;
   long curline = e->buffer.curs_line+1;
-  asprintf (&pkg,"{\"cmd\":\"editor_breakpoint\",\"line\": %ld}",curline);
+  asprintf (&pkg,"{\"cmd\":\"onclick\",\"onclick\":\"breakpoint\",\"line\": %ld}",curline);
   send_pkg_to_gdb (pkg);
   free (pkg);
 }
@@ -747,7 +747,7 @@ void
 mcgdb_cmd_disableenable_bp (WEdit * e) {
   char *pkg;
   long curline = e->buffer.curs_line+1;
-  asprintf (&pkg,"{\"cmd\":\"editor_breakpoint_de\",\"line\": %ld}",curline);
+  asprintf (&pkg,"{\"cmd\":\"onclick\",\"onclick\":\"breakpoint_de\",\"line\": %ld}",curline);
   send_pkg_to_gdb (pkg);
   free (pkg);
 }
