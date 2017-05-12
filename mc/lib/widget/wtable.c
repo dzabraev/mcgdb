@@ -1019,7 +1019,7 @@ table_draw(Table * tab, gboolean blank) {
       rtop=r->y1;
       rbottom=r->y2-1;
       //get_row_topbottom (tab,r,&top,&bottom);
-      if ((rtop>=tt && rtop<=tb) || (rbottom>=tt && rbottom<=tb) ) {
+      if ((rtop>=tt && rtop<=tb) || (rbottom>=tt && rbottom<=tb) || (rtop<=tt && rbottom>=tb)) {
         tab->last_row_pos=r->y1;
         tty_setcolor(EDITOR_NORMAL_COLOR);
         table_draw_row (tab,r,blank);
