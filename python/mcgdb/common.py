@@ -16,9 +16,9 @@ main_thread_ident=threading.current_thread().ident
 mcgdb_main=None
 
 
-level = logging.CRITICAL
+#level = logging.CRITICAL
 #level = logging.WARNING
-#level = logging.DEBUG
+level = logging.DEBUG
 logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
 
 
@@ -39,7 +39,7 @@ class MCGDB_VERSION(object):
 
 class Index(object):
   def __init__(self):
-    self.index_data={}
+    self.drop()
     self.counter=1
 
   def insert(self,key,data=None):
@@ -50,6 +50,7 @@ class Index(object):
     else:
       idx,_ = old
     self.index_data[key] = (idx,data)
+    self.index_key[idx] = data
     return idx
 
   def get(self,key):
@@ -58,10 +59,19 @@ class Index(object):
       return None,None
     else:
       return cv
+
+  def get_by_idx(self,idx):
+    return self.index_key[idx]
+
   def __call__(self,*args,**kwargs):
     return self.insert(*args,**kwargs)
 
+  def drop(self):
+    self.index_data={}
+    self.index_key={}
+
 INDEX=Index()
+INDEX_tmp=Index() #данный индекс будет очищатсья вместе с value_cache
 
 def valueaddress_to_ulong(value):
   if value==None:
@@ -629,6 +639,7 @@ class GEThread(object):
       new_pkg={'cmd':'gdbevt','gdbevt':evtname,'evt':evt}
       if evtname in ('exited','stop','new_objfile','clear_objfiles','memory_changed','register_changed'):
         value_cache.drop()
+        INDEX_tmp.drop()
       return new_pkg
     elif cmd=='stop_event_loop':
       for fd,win in self.fte.iteritems():

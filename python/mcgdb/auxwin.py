@@ -7,14 +7,14 @@ import re,sys,ctypes
 from mcgdb.basewin import BaseWin
 from mcgdb.common  import gdb_stopped,inferior_alive,gdb_print
 from mcgdb.valuetochunks import check_chunks, ValueToChunks
-from mcgdb.common  import exec_main, valcache, INDEX
+from mcgdb.common  import exec_main, valcache, INDEX, INDEX_tmp
 
 
 class BaseSubentity(ValueToChunks):
-  def __init__(self,**kwargs):
+  def __init__(self,INDEX=None,**kwargs):
     self.send = kwargs['send']
     self.send_error = kwargs['send_error']
-    super(BaseSubentity,self).__init__(**kwargs)
+    super(BaseSubentity,self).__init__(INDEX,**kwargs)
 
 class BacktraceTable(BaseSubentity):
   subentity_name='backtrace'
@@ -150,8 +150,7 @@ class RegistersTable(BaseSubentity):
       if len(reg)>0 and reg[0] and reg[0]!="''" and len(reg[0])>0:
         regname='$'+reg[0]
         self.regnames.append(regname)
-    super(RegistersTable,self).__init__(**kwargs)
-
+    super(RegistersTable,self).__init__(INDEX,**kwargs)
 
   def process_connection(self):
     return self.update_registers_initial()
@@ -239,6 +238,7 @@ class RegistersTable(BaseSubentity):
     for chunk in chunks_with_id:
       assert 'id' in chunk
       pkgs.append(self.update_regnode_pkg (chunk))
+    assert (len(pkgs)>0)
     return pkgs
 
 
@@ -429,7 +429,7 @@ class LocalvarsTable(BaseSubentity):
   subentity_name='localvars'
 
   def __init__(self,**kwargs):
-    super(LocalvarsTable,self).__init__(**kwargs)
+    super(LocalvarsTable,self).__init__(INDEX_tmp,**kwargs)
 
   def process_connection(self):
     self.update_localvars()
@@ -477,19 +477,26 @@ class LocalvarsTable(BaseSubentity):
       block = block.superblock
     return variables
 
+  def docheckpkg(self,pkg):
+    return self.INDEX.get_by_idx(pkg['parent_id'])
+
   def onclick_expand_variable(self,pkg):
+    self.docheckpkg(pkg)
     super(LocalvarsTable,self).onclick_expand_variable(pkg)
     self.update_localvars()
 
   def onclick_collapse_variable(self,pkg):
+    self.docheckpkg(pkg)
     super(LocalvarsTable,self).onclick_collapse_variable(pkg)
     self.update_localvars()
 
   def onclick_change_slice(self,pkg):
+    self.docheckpkg(pkg)
     super(LocalvarsTable,self).onclick_change_slice(pkg)
     self.update_localvars()
 
   def onclick_change_variable(self,pkg):
+    self.docheckpkg(pkg)
     super(LocalvarsTable,self).onclick_change_variable(pkg)
     self.update_localvars()
 
