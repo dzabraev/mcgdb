@@ -21,6 +21,8 @@ mcgdb-python-build:
 	ln -sfn $(abs_srcdir)/python/mcgdb/basewin.py $(abs_builddir)/python/mcgdb/basewin.py
 	ln -sfn $(abs_srcdir)/python/mcgdb/commands.py $(abs_builddir)/python/mcgdb/commands.py
 	ln -sfn $(abs_srcdir)/python/mcgdb/common.py $(abs_builddir)/python/mcgdb/common.py
+	ln -snf $(abs_srcdir)/python/mcgdb/valuetochunks.py $(abs_builddir)/python/mcgdb/valuetochunks.py
+	ln -snf $(abs_srcdir)/python/mcgdb/gdb2.py $(abs_builddir)/python/mcgdb/gdb2.py
 	cp      $(abs_srcdir)/python/mcgdb/__init__.py $(abs_builddir)/python/mcgdb/__init__.py
 	sed "s#__PATH_TO_DEFINES_MCGDB__#$(abs_builddir)/defines-mcgdb.gdb#"  $(abs_builddir)/python/mcgdb/__init__.py -i
 	sed "s#__PATH_TO_MC__#$(abs_builddir)/mc/src/mcgdb_mc#"               $(abs_builddir)/python/mcgdb/__init__.py -i
