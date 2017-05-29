@@ -42,6 +42,8 @@ class ValueToChunks(object):
     self.INDEX=INDEX
     self.converters['bin_to_long'] = lambda x: long(x,2)
     self.converters['hex_to_long'] = lambda x: long(x,16)
+    self.path_id_thread_depend = kwargs.pop('thread_depend',True)
+    self.path_id_frame_depend  = kwargs.pop('frame_depend',True)
     self.on_cbs={
       'expand_variable':    [],
       'collapse_variable':  [],
@@ -56,9 +58,13 @@ class ValueToChunks(object):
     return d
 
   def path_id(self,path,value=None):
-    thnum = get_this_thread_num()
-    frnum = get_this_frame_num()
-    key=(thnum,frnum,path)
+    key=[]
+    if self.path_id_thread_depend:
+      key.append(get_this_thread_num())
+    if self.path_id_frame_depend:
+      key.append(get_this_frame_num())
+    key.append(path)
+    key=tuple(key)
     if value!=None:
       return self.INDEX(key,value)
     else:

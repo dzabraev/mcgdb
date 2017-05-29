@@ -16,6 +16,21 @@ class BaseSubentity(ValueToChunks):
     self.send_error = kwargs['send_error']
     super(BaseSubentity,self).__init__(INDEX,**kwargs)
 
+  def set_message_in_table(self,msg):
+    pkg={
+      'cmd':self.subentity_name,
+      'table':{'rows':[{'columns':[{'chunks':[{'str':msg}]}]}]},
+    }
+    self.send(pkg)
+
+  def clear_table(self):
+    pkg={
+      'cmd':self.subentity_name,
+      'table':{'rows':[]},
+    }
+    self.send(pkg)
+
+
 class BacktraceTable(BaseSubentity):
   subentity_name='backtrace'
 
@@ -100,7 +115,7 @@ class BacktraceTable(BaseSubentity):
 
 
   def gdbevt_exited(self,pkg):
-    self.update_backtrace()
+    self.clear_table()
 
   def gdbevt_stop(self,pkg):
     self.update_backtrace()
@@ -150,7 +165,7 @@ class RegistersTable(BaseSubentity):
       if len(reg)>0 and reg[0] and reg[0]!="''" and len(reg[0])>0:
         regname='$'+reg[0]
         self.regnames.append(regname)
-    super(RegistersTable,self).__init__(INDEX,**kwargs)
+    super(RegistersTable,self).__init__(INDEX,thread_depend=False,frame_depend=False, **kwargs)
 
   def process_connection(self):
     return self.update_registers_initial()
@@ -212,25 +227,6 @@ class RegistersTable(BaseSubentity):
   def update_regnode_pkg (self,node_data):
     return {'cmd':'update_node','table':'registers', 'node_data':node_data}
 
-  '''
-  def pkgs_update_register(self,regname,value):
-    pkgs=[]
-    if value.type.strip_typedefs().code==gdb.TYPE_CODE_INT:
-      chunks=[
-        self.changable_value_to_chunks(value,regname,integer_mode='dec',index_name=regname+'_dec')[0],
-        self.changable_value_to_chunks(value,regname,integer_mode='hex',index_name=regname+'_hex',converter='hex_to_long')[0],
-        self.changable_value_to_chunks(value,regname,integer_mode='bin',index_name=regname+'_bin',converter='bin_to_long')[0],
-      ]
-    else:
-      chunks = [self.changable_value_to_chunks(value,regname,integer_mode='hex',converter='hex_to_long')[0]]
-    for d in :
-      pkgs.append(self.update_regnode_pkg ({
-        'id':d['id']),
-        'str':d['str'],
-        'onclick_data':d['onclick_data'],
-      }))
-    return pkgs
-  '''
   def pkgs_update_register(self,regname):
     chunks = self.get_register_chunks(regname)
     chunks_with_id = self.filter_chunks_with_id(chunks)
@@ -258,7 +254,8 @@ class RegistersTable(BaseSubentity):
 
   #GDB EVENTS
   def gdbevt_exited(self,pkg):
-    return self.update_registers()
+    self.clear_table()
+    self.registers_drawn=False
 
   def gdbevt_stop(self,pkg):
     return self.update_registers()
@@ -388,7 +385,7 @@ class ThreadsTable(BaseSubentity):
 
   #GDB EVENTS
   def gdbevt_exited(self,evt):
-    self.update_threads()
+    self.clear_table()
 
   def gdbevt_stop(self,evt):
     self.update_threads()
@@ -501,7 +498,7 @@ class LocalvarsTable(BaseSubentity):
     self.update_localvars()
 
   def gdbevt_exited(self,pkg):
-    self.update_localvars()
+    self.clear_table()
   def gdbevt_stop(self,pkg):
     self.update_localvars()
   def gdbevt_new_objfile(self,pkg):

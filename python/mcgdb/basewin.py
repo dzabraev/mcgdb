@@ -56,7 +56,7 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
         gdb_print('''\nCan't open gui window({type}). execute manually: `{cmd}`\n'''.format(cmd=cmd,type=self.type))
     if not hasattr(self,'subentities'):
       self.subentities={}
-    super(BaseWin,self).__init__(**kwargs)
+    #super(BaseWin,self).__init__(**kwargs)
 
   #@abstractproperty
   #def subentities(self):

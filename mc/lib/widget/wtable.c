@@ -409,17 +409,31 @@ table_get_node_by_id (Table * tab, gint64 node_id) {
 static void
 update_chunk (cell_data_t * data, json_t * json_data) {
 #define update_prop(data,newdata,json_data,key) do {\
-  if (json_object_get(json_data,#key))\
+  if (json_object_get(json_data,#key)) {\
     data->key=newdata->key;\
+  }\
 } while(0)
   cell_data_t * cell_data = cell_data_new_from_json (json_data);
-  update_prop(data,cell_data,json_data,str);
-  update_prop(data,cell_data,json_data,proposed_text);
+  if (json_object_get(json_data,"str")) {
+    free(data->str);
+    data->str = cell_data->str;
+  }
+  if (json_object_get(json_data,"proposed_text")) {
+    free(data->proposed_text);
+    data->proposed_text = cell_data->proposed_text;
+  }
+  if (json_object_get(json_data,"onclick_data")) {
+    json_decref (data->onclick_data);
+    data->onclick_data = cell_data->onclick_data;
+  }
+  //update_prop(data,cell_data,json_data,str);
+  //update_prop(data,cell_data,json_data,proposed_text,free);
   update_prop(data,cell_data,json_data,selected);
-  update_prop(data,cell_data,json_data,onclick_data);
+  //update_prop(data,cell_data,json_data,onclick_data);
   update_prop(data,cell_data,json_data,onclick_user_input);
   update_prop(data,cell_data,json_data,name);
   cell_data_makecolor(data);
+  free(cell_data);
 }
 
 
@@ -452,6 +466,40 @@ table_update_node_json_1 (Table *tab, GNode *root, json_t *json_chunk) {
 }
 */
 
+
+static gboolean
+drop_childs_free (GNode *node, gpointer data) {
+  //if (node->data) {
+  cell_data_free ((cell_data_t *)node->data);
+  node->data=NULL;
+  //}
+  return FALSE;
+}
+
+static void
+drop_childs (GNode *node) {
+  GNode *child = g_node_first_child (node);
+  while (child) {
+    g_node_unlink (child);
+    g_node_traverse (child,G_IN_ORDER,G_TRAVERSE_ALL,-1,drop_childs_free,0);
+    g_node_destroy (child);
+    child = g_node_first_child (node);
+  }
+}
+
+static void
+json_to_celltree (Table *tab, GNode *parent, json_t *json_chunk) {
+  json_t *json_child_chunks = json_object_get (json_chunk, "chunks");
+  if (!json_child_chunks)
+    return;
+  for (size_t nc=0; nc<json_array_size (json_child_chunks); nc++) {
+    json_t * json_node_data = json_array_get (json_child_chunks,nc);
+    GNode * node = table_add_node (tab,parent,json_node_data);
+    json_to_celltree(tab,node,json_node_data);
+  }
+}
+
+
 static void
 table_update_node_json (Table *tab, json_t *json_chunk) {
   json_t *json_id;
@@ -463,21 +511,15 @@ table_update_node_json (Table *tab, json_t *json_chunk) {
   node = table_get_node_by_id (tab, node_id);
   message_assert (node!=NULL);
   update_chunk(CHUNK(node),json_chunk);
-  //table_update_node_json_1 (tab,NULL,json_chunk);
+  if (json_object_get (json_chunk, "chunks")) {
+    /*if new data has subtree => replace old subtree*/
+    drop_childs(node);
+    json_to_celltree(tab,node,json_chunk);
+  }
+  table_draw (tab,TRUE);
 }
 
-static void
-json_to_celltree (Table *tab, GNode *parent, json_t *json_chunk) {
-  json_t *json_child_chunks = json_object_get (json_chunk, "chunks");
-  if (!json_child_chunks)
-    return;
-  for (size_t nc=0; nc<json_array_size (json_child_chunks); nc++) {
-    json_t * json_node_data = json_array_get (json_child_chunks,nc);
-    //GNode * node = g_node_append_data (parent,cell_data_new_from_json (json_node_data));
-    GNode * node = table_add_node (tab,parent,json_node_data);
-    json_to_celltree(tab,node,json_node_data);
-  }
-}
+
 
 static void
 table_set_cell_text (Table *tab, int nrow, int ncol, json_t *json_data) {
