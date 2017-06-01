@@ -62,15 +62,17 @@ class SrcWin(BaseWin):
     self.update_current_frame()
     self.update_breakpoints()
 
-  def shellcmd_down(self,pkg):
-    self.update_current_frame()
-    self.update_breakpoints()
-
   def mcgdbevt_frame(self,pkg):
     self.update_current_frame()
     self.update_breakpoints()
 
+  def shellcmd_thread(self,pkg):
+    self.update_current_frame()
+    self.update_breakpoints()
 
+  def mcgdbevt_thread(self,pkg):
+    self.update_current_frame()
+    self.update_breakpoints()
 
   def update_current_frame(self):
     '''Данная функция извлекает из gdb текущий файл
