@@ -209,13 +209,13 @@ class AsmWin(BaseWin,ValueToChunks):
     self.need_redisplay_asm=True
     self.update_asm_code()
 
-  def shellcmd_frame_up(self):
+  def shellcmd_up(self,pkg):
     self.update_asm_code()
 
-  def shellcmd_frame_down(self):
+  def shellcmd_down(self,pkg):
     self.update_asm_code()
 
-  def shellcmd_thread(self):
+  def shellcmd_thread(self,pkg):
     self.update_asm_code()
 
   def mcgdbevt_frame(self,data):
