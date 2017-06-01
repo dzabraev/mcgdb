@@ -5,7 +5,8 @@
 #include "file.h"
 #include "myclass.h"
 #include "testdir/file.h"
-
+#include <pthread.h>
+#include <unistd.h>
 
 int globalvar = 1;
 
@@ -28,14 +29,14 @@ struct mystruct {
   } st;
 };
 
-int f1(int x) {
-  int y=10;
-  {
+void *f1(void *arg) {
+  int y=10, x=0;
+  for (;;) {
     int z=15;
     z+=y;
     x+=z;
+    sleep(1);
   }
-  return x+1;
 }
 
 int f3(int x) {
@@ -63,6 +64,8 @@ int main(void) {
   incompl_union *iu;
   incompl_union **is2;
   incompl_union ******is6;
+  pthread_t tid;
+  pthread_create(&tid,0,f1,0);
   is6                   = (incompl_union ******)malloc(sizeof(void *));
   is6[0]                = (incompl_union *****)malloc(sizeof(void *));
   is6[0][0]             = (incompl_union ****)malloc(sizeof(void *));
@@ -90,7 +93,8 @@ int main(void) {
   const char * longstr = "123456789abcdef123456789abcdef";
   int x1=1,x2=2,x3=3,x4=4,x5=5,x6=6,x7=7,x888888888888888=8888;
   MyClass mycl;
-  x=f1(x);
+  pthread_t thread;
+  pthread_create(&thread,0,f1,0);
   x=f2(x);
   x=f3(x);
   x=f5(x);

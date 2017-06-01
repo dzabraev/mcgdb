@@ -6,7 +6,7 @@ infinite : infinite.c
 	g++ $(CFLAGS) infinite.c -o infinite
 
 main : main.o file.o testdir/file.o myclass.o
-	g++ main.o file.o testdir/file.o myclass.o  -o main
+	g++ main.o file.o testdir/file.o myclass.o  -o main -lpthread
 
 main.o : main.c head.h
 	g++ $(CFLAGS) main.c -o main.o -c
