@@ -247,7 +247,11 @@ class RegistersTable(BaseSubentity):
     tabidx,tabdata=INDEX.get(self.subentity_name)
     for regname in self.regnames:
       regvalue = valcache(regname)
-      if tabdata[regname]!=regvalue:
+      #register value cast to string because by default
+      #gdb.Value will be case into long or int and python will
+      #raise exception:
+      #Python Exception <class 'gdb.error'> That operation is not available on integers of more than 8 bytes.:
+      if str(tabdata[regname])!=str(regvalue):
         packages+=self.pkgs_update_register(regname)
         tabdata[regname]=regvalue
     self.send(packages)

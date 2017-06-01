@@ -135,8 +135,7 @@ mcgdb_aux_dialog_callback (Widget * w, Widget * sender, widget_msg_t msg, int pa
       {
           cb_ret_t ret = MSG_NOT_HANDLED;
 
-          if (parm==EV_GDB_MESSAGE)
-          {
+          if (parm==EV_GDB_MESSAGE) {
             mcgdb_aux_dialog_gdbevt (h);
             ret = MSG_HANDLED;
           }
