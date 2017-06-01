@@ -16,9 +16,9 @@ main_thread_ident=threading.current_thread().ident
 mcgdb_main=None
 
 
-#level = logging.CRITICAL
+level = logging.CRITICAL
 #level = logging.WARNING
-level = logging.DEBUG
+#level = logging.DEBUG
 logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
 
 
@@ -655,8 +655,12 @@ class GEThread(object):
     if cmd=='exec_in_gdb':
       if gdb_stopped():
         command_for_exec_in_gdbshell=pkg['exec_in_gdb']
-        gdb2.execute(command_for_exec_in_gdbshell)
-      return None
+        try:
+          gdb2.execute(command_for_exec_in_gdbshell)
+        except gdb.error:
+          return None
+      else:
+        return None
     return pkg
 
 

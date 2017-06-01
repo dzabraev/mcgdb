@@ -140,8 +140,8 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
       shellcmd_bp_disable(self,pkg)
       shellcmd_bp_enable(self,pkg)
       shellcmd_frame(self,pkg)
-      shellcmd_frame_up(self,pkg)
-      shellcmd_frame_down(self,pkg)
+      shellcmd_up(self,pkg)
+      shellcmd_down(self,pkg)
       shellcmd_thread(self,pkg)
 
       3. Методы, которые используются для обработки событий,

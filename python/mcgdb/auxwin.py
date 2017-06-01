@@ -132,10 +132,10 @@ class BacktraceTable(BaseSubentity):
   def gdbevt_register_changed(self,pkg):
     self.update_backtrace()
 
-  def shellcmd_frame_up(self,pkg):
+  def shellcmd_up(self,pkg):
     self.update_backtrace()
 
-  def shellcmd_frame_down(self,pkg):
+  def shellcmd_down(self,pkg):
     self.update_backtrace()
 
   def shellcmd_thread(self,pkg):
@@ -264,10 +264,10 @@ class RegistersTable(BaseSubentity):
     return self.update_registers()
 
   #SHELL COMMANDS
-  def shellcmd_frame_up(self,pkg):
+  def shellcmd_up(self,pkg):
     return self.update_registers()
 
-  def shellcmd_frame_down(self,pkg):
+  def shellcmd_down(self,pkg):
     return self.update_registers()
 
   def shellcmd_thread(self,pkg):
@@ -403,10 +403,10 @@ class ThreadsTable(BaseSubentity):
     self.update_threads()
 
   #SHELL COMMANDS
-  def shellcmd_frame_up(self,data=None):
+  def shellcmd_up(self,data=None):
     self.update_threads()
 
-  def shellcmd_frame_down(self,data=None):
+  def shellcmd_down(self,data=None):
     self.update_threads()
 
   def shellcmd_thread(self,data=None):
@@ -510,9 +510,9 @@ class LocalvarsTable(BaseSubentity):
   def gdbevt_register_changed(self,pkg):
     self.update_localvars()
 
-  def shellcmd_frame_up(self,pkg):
+  def shellcmd_up(self,pkg):
     self.update_localvars()
-  def shellcmd_frame_down(self,pkg):
+  def shellcmd_down(self,pkg):
     self.update_localvars()
   def shellcmd_thread(self,pkg):
     self.update_localvars()
