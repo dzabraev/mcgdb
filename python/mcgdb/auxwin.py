@@ -240,6 +240,8 @@ class RegistersTable(BaseSubentity):
 
   @exec_main
   def update_registers(self):
+    if not gdb_stopped():
+      return
     if not self.registers_drawn:
       self.update_registers_initial()
       return
@@ -248,7 +250,7 @@ class RegistersTable(BaseSubentity):
     for regname in self.regnames:
       regvalue = valcache(regname)
       #register value cast to string because by default
-      #gdb.Value will be case into long or int and python will
+      #gdb.Value will be cast into long or int and python will
       #raise exception:
       #Python Exception <class 'gdb.error'> That operation is not available on integers of more than 8 bytes.:
       if str(tabdata[regname])!=str(regvalue):
