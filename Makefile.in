@@ -875,8 +875,8 @@ all : mcgdb-python-build
 mcgdb-python-install:
 	mkdir -p $(DESTDIR)$(pkgdatapythondir)
 	cp -r $(abs_srcdir)/python/mcgdb $(DESTDIR)$(pkgdatapythondir)
-	sed "s#__PATH_TO_DEFINES_MCGDB__#$(pkgdatadir)/defines-mcgdb.gdb#"  $(pkgdatapythondir)/mcgdb/__init__.py -i
-	sed "s#__PATH_TO_MC__#$(bindir)/mcgdb_mc#"                            $(pkgdatapythondir)/mcgdb/__init__.py -i
+	sed "s#__PATH_TO_DEFINES_MCGDB__#$(pkgdatadir)/defines-mcgdb.gdb#"  $(DESTDIR)$(pkgdatapythondir)/mcgdb/__init__.py -i
+	sed "s#__PATH_TO_MC__#$(bindir)/mcgdb_mc#"                          $(DESTDIR)$(pkgdatapythondir)/mcgdb/__init__.py -i
 
 startup.gdb :
 	cp $(abs_srcdir)/startup.gdb.in $(abs_builddir)/startup.gdb
