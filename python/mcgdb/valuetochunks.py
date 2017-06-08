@@ -29,7 +29,7 @@ def check_chunks(chunks):
 
 
 def is_incomplete_type_ptr(value):
-  return  value.type.strip_typedefs().target().strip_typedefs().code in (gdb.TYPE_CODE_VOID,) or (
+  return  value.type.target().strip_typedefs().code in (gdb.TYPE_CODE_VOID,) or ( #typedef T1 void; T1 *x
           value.type.strip_typedefs().code==gdb.TYPE_CODE_PTR and \
           value.type.strip_typedefs().target().strip_typedefs().code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION) and \
           len(value.type.strip_typedefs().target().strip_typedefs().fields())==0)
