@@ -3,6 +3,7 @@
 import gdb
 
 import re,sys,ctypes
+import traceback
 
 from mcgdb.basewin import BaseWin
 from mcgdb.common  import gdb_stopped,inferior_alive,gdb_print
@@ -343,6 +344,7 @@ class ThreadsTable(BaseSubentity):
   @exec_main
   def get_threads(self):
     selected_thread = gdb.selected_thread()
+    selected_frame = gdb.selected_frame()
     throws=[]
     threads=gdb.selected_inferior().threads()
     nrow=0
@@ -380,8 +382,10 @@ class ThreadsTable(BaseSubentity):
       row={'columns' : [column]}
       throws.append(row)
       nrow+=1
-    if selected_thread!=None:
+    if selected_thread != None:
       selected_thread.switch()
+    if selected_frame != None:
+      selected_frame.select()
     table = {
       'rows':throws,
     }
@@ -484,6 +488,9 @@ class LocalvarsTable(BaseSubentity):
     return self.INDEX.get_by_idx(pkg['parent_id'])
 
   def onclick_expand_variable(self,pkg):
+    #gdb_print(gdb.selected_frame().name()+'\n')
+    if gdb.selected_frame().name()=='sem_wait':
+      traceback.print_stack()
     self.docheckpkg(pkg)
     super(LocalvarsTable,self).onclick_expand_variable(pkg)
     self.update_localvars()

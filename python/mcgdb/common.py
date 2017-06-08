@@ -1,7 +1,7 @@
 #coding=utf8
 
 import gdb
-import sys,os,select,errno,socket,stat
+import sys,os,select,errno,socket,stat,time
 import json
 import logging
 import threading, subprocess
@@ -15,7 +15,7 @@ import mcgdb
 main_thread_ident=threading.current_thread().ident
 mcgdb_main=None
 
-
+debug_messages=False
 level = logging.CRITICAL
 #level = logging.WARNING
 #level = logging.DEBUG
@@ -631,6 +631,8 @@ class GEThread(object):
     '''
     pkg=pkgrecv(self.gdb_rfd)
     cmd=pkg['cmd']
+    if debug_messages:
+      gdb_print('time={t} sender=gdb cmd={cmd}\n'.format(t=time.time(),cmd=cmd))
     if cmd=='open_window':
       self.__open_window(pkg)
       return
@@ -652,6 +654,8 @@ class GEThread(object):
     pkg = pkgrecv(fd)
     #gdb_print(str(pkg)+'\n')
     cmd=pkg['cmd']
+    if debug_messages:
+      gdb_print('time={t} sender=guiwin cmd={cmd}\n'.format(t=time.time(),cmd=cmd))
     if cmd=='exec_in_gdb':
       if gdb_stopped():
         command_for_exec_in_gdbshell=pkg['exec_in_gdb']
@@ -673,7 +677,10 @@ class GEThread(object):
         entity=self.fte[fd]
         res = entity.process_pkg (pkg)
         if res:
+          if debug_messages:
+            gdb_print('time={time} sender={type} pkgs={pkgs}\n'.format(type=entity.type,pkgs=res,time=time.time()))
           self.entities_evt_queue+=res
+
 
   def __call__(self):
     assert not self.WasCalled
@@ -720,6 +727,8 @@ class GEThread(object):
               if pkg:
                 ret_pkgs = entity.process_pkg(pkg)
                 if ret_pkgs:
+                  if debug_messages:
+                    gdb_print('time={time} sender={type} pkgs={pkgs}\n'.format(type=entity.type,pkgs=ret_pkgs,time=time.time()))
                   self.entities_evt_queue += ret_pkgs
             except IOFailure:
               #возможно удаленное окно было закрыто =>
