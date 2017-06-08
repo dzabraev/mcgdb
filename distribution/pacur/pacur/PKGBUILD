@@ -21,13 +21,13 @@ license=("GPLv3")
 section="utils"
 priority="optional"
 url="https://github.com/dzabraev/${pkgname}"
-revision="973fb0bbf7ff34c631b5eaab2286b194054fe777"
+revision="dc1bb40f76348620a3b1ff4dfb5734aaa92368c9"
 sources=(
     "https://github.com/dzabraev/mcgdb/archive/${revision}.zip"
 )
 
 hashsums=(
-    "806e4d4182adbb614a84c270406cc1be"
+    "16d801a23f4592c0fac8080b085d5342"
 )
 
 
