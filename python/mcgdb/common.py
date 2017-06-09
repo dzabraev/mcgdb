@@ -2,7 +2,12 @@
 
 import gdb
 import sys,os,select,errno,socket,stat,time
-import pysigset, signal
+import signal
+try:
+  import pysigset
+except:
+  #sigset not exists in ubuntu repo; will distribute this package with mcgdb
+  import mcgdb.deps.pysigset as pysigset
 import json
 import logging
 import threading, subprocess
@@ -782,6 +787,8 @@ class McgdbMain(object):
     with pysigset.suspended_signals(signal.SIGCHLD):
       event_thread=threading.Thread (target=gethread,args=()) #this thread will be communicate with editors
       event_thread.start()
+
+
     self.event_thread=event_thread
 
     #unused events commented
