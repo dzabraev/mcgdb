@@ -14,6 +14,7 @@ EXTRA_DIST = mcgdb.in startup.gdb.in python
 
 .PHONY:mcgdb-python-build
 mcgdb-python-build:
+#   python module
 	mkdir -p $(abs_builddir)/python/mcgdb
 	ln -sfn $(abs_srcdir)/python/mcgdb/srcwin.py $(abs_builddir)/python/mcgdb/srcwin.py
 	ln -sfn $(abs_srcdir)/python/mcgdb/asmwin.py $(abs_builddir)/python/mcgdb/asmwin.py
@@ -26,6 +27,21 @@ mcgdb-python-build:
 	cp      $(abs_srcdir)/python/mcgdb/__init__.py $(abs_builddir)/python/mcgdb/__init__.py
 	sed "s#__PATH_TO_DEFINES_MCGDB__#$(abs_builddir)/defines-mcgdb.gdb#"  $(abs_builddir)/python/mcgdb/__init__.py -i
 	sed "s#__PATH_TO_MC__#$(abs_builddir)/mc/src/mcgdb_mc#"               $(abs_builddir)/python/mcgdb/__init__.py -i
+#testing file.c  file.h  file.o  head.h  main  main.c  main.o  Makefile  myclass.cpp  myclass.h  myclass.o  nframes  nframes.c  nrun.py  testdir
+	mkdir -p $(abs_builddir)/tests
+	mkdir -p $(abs_builddir)/tests/testdir
+	ln -sfn $(abs_srcdir)/tests/file.c $(abs_builddir)/tests/file.c
+	ln -sfn $(abs_srcdir)/tests/file.h $(abs_builddir)/tests/file.h
+	ln -sfn $(abs_srcdir)/tests/head.h $(abs_builddir)/tests/head.h
+	ln -sfn $(abs_srcdir)/tests/main.c $(abs_builddir)/tests/main.c
+	ln -sfn $(abs_srcdir)/tests/Makefile $(abs_builddir)/tests/Makefile
+	ln -sfn $(abs_srcdir)/tests/myclass.h $(abs_builddir)/tests/myclass.h
+	ln -sfn $(abs_srcdir)/tests/nframes.c $(abs_builddir)/tests/nframes.c
+	ln -sfn $(abs_srcdir)/tests/testdir/file.c $(abs_builddir)/tests/testdir/file.c
+	ln -sfn $(abs_srcdir)/tests/testdir/file.h $(abs_builddir)/tests/testdir/file.h
+	ln -sfn $(abs_srcdir)/tests/nrun.py $(abs_builddir)/tests/nrun.py
+	chmod u+x $(abs_builddir)/tests/nrun.py
+	make -C $(abs_builddir)/tests
 
 all : mcgdb-python-build
 
