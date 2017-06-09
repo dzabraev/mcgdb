@@ -2,6 +2,7 @@
 
 import gdb
 import sys,os,select,errno,socket,stat,time
+import pysigset, signal
 import json
 import logging
 import threading, subprocess
@@ -382,9 +383,10 @@ class GdbBreakpoints(object):
   def __init__(self):
     pass
 
+  @exec_main
   def get_all_bps(self):
     ''' Возвращает все точки останова, которые есть в gdb'''
-    return exec_in_main_pythread( gdb.breakpoints, ())
+    return gdb.breakpoints()
 
   def find_bp_in_gdb(self,filename,line):
     if not self.location_belongs_file(filename,line):
@@ -404,17 +406,19 @@ class GdbBreakpoints(object):
         return bp
     return None
 
+  @exec_main
   def location_belongs_file(self,filename,line):
     if not filename or line==None:
       return False
     try:
       #check whether line belongs to file
-      exec_in_main_pythread( gdb.decode_line, ('{}:{}'.format(filename,line),))
+      gdb.decode_line('{}:{}'.format(filename,line),)
     except:
       #not belonging
       return False
     return True
 
+  @exec_main
   def get_bp_locations(self,bp):
     if bp.type!=gdb.BP_BREAKPOINT:
       return []
@@ -463,6 +467,7 @@ class BreakpointQueue(GdbBreakpoints):
           return idx
     return None
 
+  @exec_main
   def insert_or_delete(self,filename,line):
     ''' Если bp существует, то данная bp удаляется. Если не существует, то дабавл.'''
     idx = self.__find_bp_in_queue(filename,line)
@@ -484,6 +489,7 @@ class BreakpointQueue(GdbBreakpoints):
         'locations':self.get_bp_locations(bp),
       }))
 
+  @exec_main
   def get_inserted_bps_locs(self,filename=None):
     ''' Данная функция возвращает список пар (fname,line) для каждой bp, которая либо уже
         вставлена в gdb и не находится в очереди на удаление, либо находится в
@@ -510,18 +516,22 @@ class BreakpointQueue(GdbBreakpoints):
       locs=[ line for fname,line in locs if fname==filename ]
     return locs
 
+  @exec_main
   def get_bps_locs_normal(self,filename=None):
     normal_bps=[bp for bp in self.get_all_bps() if bp.enabled]
     return self.__bps_to_locs(normal_bps,filename)
 
+  @exec_main
   def get_bps_locs_disabled(self,filename=None):
     disabled_bps=[bp for bp in self.get_all_bps() if not bp.enabled]
     return self.__bps_to_locs(disabled_bps,filename)
 
+  @exec_main
   def get_bps_locs_wait_remove(self,filename=None):
     wait_remove_locs=[ param['bp'] for act,param in self.queue if act=='delete' ]
     return self.__bps_to_locs(wait_remove_locs, filename)
 
+  @exec_main
   def get_bps_locs_wait_insert(self,filename=None):
     wait_insert_locs=[ (param['filename'],param['line']) for act,param in self.queue if act=='insert' ]
     if filename!=None:
@@ -529,8 +539,11 @@ class BreakpointQueue(GdbBreakpoints):
     else:
       return wait_insert_locs
 
-
-  def __process(self):
+  @exec_main
+  def process(self):
+    ''' Данный метод пытается вставить/удалить точки останова 
+        Если inferior запущен, то ничего сделано не будет
+    '''
     assert is_main_thread()
     if gdb.selected_thread()==None:
       #maybe inferior not running
@@ -547,18 +560,12 @@ class BreakpointQueue(GdbBreakpoints):
       else:
         debug('unknown action: {}'.format(action))
 
-  def process(self):
-    ''' Данный метод пытается вставить/удалить точки останова 
-        Если inferior запущен, то ничего сделано не будет
-    '''
-    exec_in_main_pythread(self.__process, () )
-
 
 breakpoint_queue=BreakpointQueue()
 
 
 
-
+@exec_main
 def inferior_alive ():
   return not gdb.selected_thread()==None
 
@@ -569,9 +576,9 @@ def exec_in_main_pythread(func,args=(),kwargs={}):
   result = {}
   evt=threading.Event()
 
-  def exec_in_main_pythread_1(func,args,evt,result):
+  def exec_in_main_pythread_1(func,args,kwargs,evt,result):
     try:
-      result['retval']=func(*args)
+      result['retval']=func(*args,**kwargs)
       result['succ']='ok'
     except Exception:
       result['succ']='exception'
@@ -579,7 +586,7 @@ def exec_in_main_pythread(func,args=(),kwargs={}):
     evt.set()
 
   gdb.post_event(
-      lambda : exec_in_main_pythread_1(func,args,evt,result)
+      lambda : exec_in_main_pythread_1(func,args,kwargs,evt,result)
   )
   evt.wait()
   if result['succ']=='ok':
@@ -772,9 +779,11 @@ class McgdbMain(object):
     gdb.execute('set pagination off',False,False)
     gdb.execute('source {}'.format(PATH_TO_DEFINES_MCGDB))
     gethread = GEThread(gdb_rfd,main_thread_ident)
-    event_thread=threading.Thread (target=gethread,args=()) #this thread will be communicate with editors
-    event_thread.start()
+    with pysigset.suspended_signals(signal.SIGCHLD):
+      event_thread=threading.Thread (target=gethread,args=()) #this thread will be communicate with editors
+      event_thread.start()
     self.event_thread=event_thread
+
     #unused events commented
     #gdb.events.cont.connect(               self.notify_gdb_cont )
     gdb.events.exited.connect(             self.notify_gdb_exited )

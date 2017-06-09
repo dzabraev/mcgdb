@@ -16,6 +16,7 @@ class AsmWin(BaseWin,ValueToChunks):
   type='asmwin'
   startcmd='mcgdb open asm'
 
+  @exec_main
   def __init__(self,**kwargs):
     super(AsmWin,self).__init__(**kwargs)
     self.location=kwargs.get('location') #display only this function.

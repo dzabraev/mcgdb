@@ -7,7 +7,7 @@ TMP_FILE_NAME="/tmp/mcgdb/mcgdb-tmp-file-{pid}.txt".format(pid=os.getpid())
 
 from mcgdb.basewin import BaseWin
 from mcgdb.common import breakpoint_queue
-from mcgdb.common import gdb_print
+from mcgdb.common import gdb_print, exec_main
 
 class SrcWin(BaseWin):
 
@@ -74,6 +74,7 @@ class SrcWin(BaseWin):
     self.update_current_frame()
     self.update_breakpoints()
 
+  @exec_main
   def update_current_frame(self):
     '''Данная функция извлекает из gdb текущий файл
         и номер строки исполнения. После чего, если необходимо, открывает

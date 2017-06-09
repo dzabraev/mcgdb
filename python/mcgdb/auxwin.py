@@ -12,6 +12,7 @@ from mcgdb.common  import exec_main, valcache, INDEX, INDEX_tmp
 
 
 class BaseSubentity(ValueToChunks):
+  @exec_main
   def __init__(self,INDEX=None,**kwargs):
     self.send = kwargs['send']
     self.send_error = kwargs['send_error']
@@ -154,6 +155,7 @@ class BacktraceTable(BaseSubentity):
 class RegistersTable(BaseSubentity):
   subentity_name='registers'
 
+  @exec_main
   def __init__(self, **kwargs):
     self.regnames=[]
     self.regex_split = re.compile('\s*([^\s]+)\s+([^\s+]+)\s+(.*)')
@@ -203,6 +205,7 @@ class RegistersTable(BaseSubentity):
       return
     return self._get_registers()
 
+  @exec_main
   def get_register_chunks(self,regname):
     regvalue = valcache(regname)
     chunks=[]
@@ -309,6 +312,7 @@ class RegistersTable(BaseSubentity):
 class ThreadsTable(BaseSubentity):
   subentity_name='threads'
 
+  @exec_main
   def __init__(self, **kwargs):
     super(ThreadsTable,self).__init__(**kwargs)
 
@@ -435,6 +439,7 @@ class ThreadsTable(BaseSubentity):
 class LocalvarsTable(BaseSubentity):
   subentity_name='localvars'
 
+  @exec_main
   def __init__(self,**kwargs):
     super(LocalvarsTable,self).__init__(INDEX_tmp,**kwargs)
 
@@ -487,6 +492,7 @@ class LocalvarsTable(BaseSubentity):
   def docheckpkg(self,pkg):
     return self.INDEX.get_by_idx(pkg['parent_id'])
 
+  @exec_main
   def onclick_expand_variable(self,pkg):
     #gdb_print(gdb.selected_frame().name()+'\n')
     if gdb.selected_frame().name()=='sem_wait':
@@ -495,16 +501,19 @@ class LocalvarsTable(BaseSubentity):
     super(LocalvarsTable,self).onclick_expand_variable(pkg)
     self.update_localvars()
 
+  @exec_main
   def onclick_collapse_variable(self,pkg):
     self.docheckpkg(pkg)
     super(LocalvarsTable,self).onclick_collapse_variable(pkg)
     self.update_localvars()
 
+  @exec_main
   def onclick_change_slice(self,pkg):
     self.docheckpkg(pkg)
     super(LocalvarsTable,self).onclick_change_slice(pkg)
     self.update_localvars()
 
+  @exec_main
   def onclick_change_variable(self,pkg):
     self.docheckpkg(pkg)
     super(LocalvarsTable,self).onclick_change_variable(pkg)
@@ -546,6 +555,7 @@ class AuxWin(BaseWin):
   type='auxwin'
   startcmd='mcgdb open aux'
 
+  @exec_main
   def __init__(self, **kwargs):
     kwtab={
       'send'        :   self.send,
