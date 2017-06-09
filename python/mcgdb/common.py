@@ -15,11 +15,16 @@ import mcgdb
 main_thread_ident=threading.current_thread().ident
 mcgdb_main=None
 
+LOG_FILENAME='/tmp/mcgdb.log'
+if os.path.exists(LOG_FILENAME):
+  os.remove(LOG_FILENAME)
+#debug_messages=True
 debug_messages=False
 level = logging.CRITICAL
 #level = logging.WARNING
+level = logging.INFO
 #level = logging.DEBUG
-logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
+logging.basicConfig(filename=LOG_FILENAME,format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
 
 
 
@@ -632,7 +637,7 @@ class GEThread(object):
     pkg=pkgrecv(self.gdb_rfd)
     cmd=pkg['cmd']
     if debug_messages:
-      gdb_print('time={t} sender=gdb cmd={cmd}\n'.format(t=time.time(),cmd=cmd))
+      logging.info('time={t} sender=gdb cmd={cmd}'.format(t=time.time(),cmd=(pkg[cmd] if cmd in pkg else cmd)))
     if cmd=='open_window':
       self.__open_window(pkg)
       return
@@ -655,7 +660,7 @@ class GEThread(object):
     #gdb_print(str(pkg)+'\n')
     cmd=pkg['cmd']
     if debug_messages:
-      gdb_print('time={t} sender=guiwin cmd={cmd}\n'.format(t=time.time(),cmd=cmd))
+      logging.info('time={t} sender=guiwin cmd={cmd}'.format(t=time.time(),cmd=(pkg[cmd] if cmd in pkg else cmd)))
     if cmd=='exec_in_gdb':
       if gdb_stopped():
         command_for_exec_in_gdbshell=pkg['exec_in_gdb']
@@ -670,6 +675,8 @@ class GEThread(object):
 
   def send_pkg_to_entities (self, pkg):
     cmd=pkg['cmd']
+    if debug_messages:
+      logging.info('time={time} sendToEntities cmd={cmd}'.format(cmd=(pkg[cmd] if cmd in pkg else cmd),time=time.time()))
     if cmd=='check_breakpoint':
       breakpoint_queue.process()
     else:
@@ -678,7 +685,7 @@ class GEThread(object):
         res = entity.process_pkg (pkg)
         if res:
           if debug_messages:
-            gdb_print('time={time} sender={type} pkgs={pkgs}\n'.format(type=entity.type,pkgs=res,time=time.time()))
+            logging.info('time={time} sender={type} pkgs={pkgs}'.format(type=entity.type,pkgs=res,time=time.time()))
           self.entities_evt_queue+=res
 
 
@@ -728,7 +735,7 @@ class GEThread(object):
                 ret_pkgs = entity.process_pkg(pkg)
                 if ret_pkgs:
                   if debug_messages:
-                    gdb_print('time={time} sender={type} pkgs={pkgs}\n'.format(type=entity.type,pkgs=ret_pkgs,time=time.time()))
+                    logging.info('time={time} sender={type} pkgs={pkgs}'.format(type=entity.type,pkgs=ret_pkgs,time=time.time()))
                   self.entities_evt_queue += ret_pkgs
             except IOFailure:
               #возможно удаленное окно было закрыто =>
