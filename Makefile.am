@@ -35,6 +35,7 @@ mcgdb-python-build:
 	ln -sfn $(abs_srcdir)/tests/head.h $(abs_builddir)/tests/head.h
 	ln -sfn $(abs_srcdir)/tests/main.c $(abs_builddir)/tests/main.c
 	ln -sfn $(abs_srcdir)/tests/Makefile $(abs_builddir)/tests/Makefile
+	ln -sfn $(abs_srcdir)/tests/myclass.cpp $(abs_builddir)/tests/myclass.cpp
 	ln -sfn $(abs_srcdir)/tests/myclass.h $(abs_builddir)/tests/myclass.h
 	ln -sfn $(abs_srcdir)/tests/nframes.c $(abs_builddir)/tests/nframes.c
 	ln -sfn $(abs_srcdir)/tests/testdir/file.c $(abs_builddir)/tests/testdir/file.c
