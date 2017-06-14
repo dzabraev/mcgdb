@@ -15,6 +15,22 @@ void __message_assert (const char *EX, const char *FILE, int LINE);
 
 #define message_assert(EX) (void)((EX) || (__message_assert (#EX, __FILE__, __LINE__),0))
 
+#define __json_extract(obj,field,func) \
+({\
+  json_t *tmp = json_object_get(obj,field);\
+  message_assert(tmp!=NULL);\
+  func(tmp);\
+})
+
+#define __MCGDB_IDENTITY(x) x
+
+#define json_int(obj,field) __json_extract(obj,field,json_integer_value)
+#define json_str(obj,field) __json_extract(obj,field,json_string_value)
+#define json_bool(obj,field) __json_extract(obj,field,json_boolean_value)
+#define json_obj(obj,field) __json_extract(obj,field,__MCGDB_IDENTITY)
+
+
+
 
 enum gdb_cmd {
   MCGDB_UNKNOWN=0,

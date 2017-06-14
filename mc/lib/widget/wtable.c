@@ -88,6 +88,27 @@ static void     selbar_set_current_button(Selbar *selbar, const char *tabname);
 static void     selbar_draw (Selbar *bar);
 static void     reset_selected (gpointer data, gpointer user_data);
 
+/*Функция `wtable_do_row_visible_json` осуществляет перемотку содержимого таблицы tabname так,
+что бы строка с номером nrow стала видимой*/
+static void
+wtable_do_row_visible_json(WTable *wtab, json_t *pkg);
+
+static void
+wtable_exemplar_create(WTable *wtab, json_t *pkg);
+
+static void
+wtable_exemplar_drop(WTable *wtab, json_t *pkg);
+
+static void
+wtable_exemplar_set(WTable *wtab, json_t *pkg);
+
+static void
+wtable_exemplar_copy(WTable *wtab, json_t *pkg);
+
+
+static void
+wtable_update_node(WTable *wtab, json_t *pkg);
+
 
 static table_row *
 TAB_LAST_ROW(Table * tab) {
@@ -99,11 +120,148 @@ TAB_FIRST_ROW(Table * tab) {
   return tab->rows ? (table_row *)(tab->rows->data) : NULL;
 }
 
+static global_keymap_t *
+wtable_get_tab_keymap(WTable *wtab, const char *tabname) {
+  return g_hash_table_lookup (wtab->keymap, tabname);
+}
+
+static void
+wtable_exemplar_copy(WTable *wtab, json_t *pkg) {
+/*
+  pkg = {
+    'cmd' : 'exemplar_copy'
+    'id' : int,
+    'new_id': int,
+    'table_name' : str,
+  }
+*/
+  const char *table_name = json_str(pkg,"table_name");
+  Table *tab = table_copy (wtable_get_table (wtab,table_name));
+  gint new_id = json_int(pkg,"new_id");
+  wtable_insert_exemplar (wtab,tab,table_name,new_id);
+}
+
+static GHashTable *
+wtable_get_exemplars (WTable *wtab, const char *table_name) {
+  return (GHashTable *) g_hash_table_lookup (wtab->tables_exemplars, (gpointer) table_name);
+}
+
+static Table *
+get_exemplar(GHashTable *exemplars, gint id) {
+  return (Table *) g_hash_table_lookup (exemplars, GINT_TO_POINTER(id));
+}
+
+static void
+wtable_insert_exemplar (WTable *wtab, Table *tab, const char *table_name, gint id) {
+  /*insert exemplar `tab` to `table_name` exemplar set*/
+  GHashTable * exemplars;
+  exemplars = wtable_get_exemplars (wtab, table_name);
+  message_assert (exemplars!=NULL);
+  g_hash_table_insert (exemplars, GINT_TO_POINTER(id), (gpointer) tab);
+}
+
+
+static void
+wtable_set_exemplar_by_id(WTable *wtab, const char *table_name, gint id) {
+  /* устанавливает таблицу текущей для наименования table_name */
+  exemplars = wtable_get_exemplars (wtab,table_name);
+  message_assert (exemplars!=NULL);
+  tab = get_exemplar (exemplars,id);
+  message_assert (tab!=NULL);
+  g_hash_table_insert (wtab->tables, GINT_TO_POINTER(id), (gpointer) tab); /*set current table*/
+}
+
+static void
+wtable_exemplar_set(WTable *wtab, json_t *pkg) {
+/*
+  pkg = {
+    'cmd' : 'exemplar_set'
+    'id' : int,
+    'table_name' : str,
+  }
+*/
+  const char *table_name = json_str (pkg, "table_name");
+  gint id = json_int(pkg,"id");
+  wtable_set_exemplar_by_id (wtab,table_name,id);
+}
+
+static void
+wtable_exemplar_create (WTable *wtab, json_t *pkg) {
+/*
+  pkg = {
+    'cmd' : 'exemplar_create'
+    'id' : int,
+    'table_name' : str,
+    'table' : str,
+    'set' : Bool, #if True, this exemplar will be set as current for table_name
+  }
+*/
+  Table *tab;
+  int ncols;
+  const char *table_name = json_str (pkg, "table_name");
+  gint id = json_int (pkg, "id");
+  json_t *table = json_obj (pkg, "table");
+  json_t *rows = json_object_get (table, "rows");
+  GHashTable *exemplars;
+  /*evaluate table width (columns)*/
+  if (json_array_size(rows)==0) /*no rows*/
+    ncols=1;
+  else {
+    ncols = MAX(json_array_size(json_array_get(rows,0)),1);
+  }
+  tab = table_new(ncols);
+  tab->wtab = wtab;
+  tab->keymap = wtable_get_tab_keymap(wtab,table_name);
+
+  wtable_insert_exemplar (wtab, tab, table_name, id)
+  insert_pkg_json_into_table (table,tab); /*заполнение таблицы данными из пакета*/
+  if (json_boolean_value(json_object_get(pkg,"set")))
+    wtable_set_exemplar (wtab,table_name,id);
+}
+
+
+gboolean
+wtable_gdbevt_common (WTable *wtab, json_t *pkg) {
+  /*return TRUE if event was processed*/
+  gboolean handled=FALSE;
+  switch(act->command) {
+    case MCGDB_EXEMPLAR_CREATE:
+      wtable_exemplar_create (wtab,pkg);
+      handled=TRUE;
+      break;
+    case MCGDB_EXEMPLAR_DROP:
+      wtable_exemplar_drop (wtab,pkg);
+      handled=TRUE;
+      break;
+    case MCGDB_EXEMPLAR_SET:
+      wtable_exemplar_set (wtab,pkg);
+      handled=TRUE;
+      break;
+    case MCGDB_EXEMPLAR_COPY:
+      wtable_exemplar_copy (wtab,pkg);
+      handled=TRUE;
+      break;
+    case MCGDB_UPDATE_NODE:
+      wtable_update_node(wtab,pkg);
+      wtable_draw(wtab);
+      handled=TRUE;
+      break;
+    case MCGDB_DO_ROW_VISIBLE:
+      wtable_do_row_visible_json(wtab,pkg);
+      handled=TRUE;
+      break;
+    default:
+      break;
+  }
+
+  return handled;
+}
+
 
 static int
 insert_json_row (json_t *row, Table *tab) {
     int nrow;
-    json_t * columns = json_object_get (row,"columns");
+    json_t * columns = json_obj (row,"columns");
     size_t rowsize = json_array_size (columns);
     message_assert((size_t)tab->ncols==rowsize);
     nrow = table_add_row (tab);
@@ -118,18 +276,17 @@ insert_json_row (json_t *row, Table *tab) {
 
 static void
 insert_pkg_json_into_table (json_t *json_tab, Table *tab) {
-  json_t *json_rows = json_object_get (json_tab, "rows");
+  json_t *json_rows = json_obj (json_tab, "rows");
   size_t size_rows = json_array_size (json_rows);
   json_t *json_selected_row = json_object_get (json_tab,"selected_row");
   json_t *draw;
-  int selected_row;
+  int selected_row = json_selected_row ? json_integer_value (json_selected_row) : -1;
   if ((draw = json_object_get (json_tab,"draw_vline"))) {
     tab->draw_vline = json_boolean_value (draw);
   }
   if ((draw = json_object_get (json_tab,"draw_hline"))) {
     tab->draw_hline = json_boolean_value (draw);
   }
-  selected_row =  json_selected_row ? json_integer_value (json_selected_row) : -1;
   for (size_t i=0;i<size_rows;i++) {
     json_t * row = json_array_get (json_rows,i);
     insert_json_row (row,tab);
@@ -137,7 +294,6 @@ insert_pkg_json_into_table (json_t *json_tab, Table *tab) {
   table_draw (tab,TRUE);
   if (selected_row>=0)
     table_do_row_visible(tab,selected_row);
-  //table_add_offset (tab,0);
 }
 
 void
@@ -195,26 +351,27 @@ wtable_new (int y, int x, int height, int width)
     w = WIDGET (wtab);
     widget_init (w, y, x, height, width, wtable_callback, wtable_mouse_callback);
     w->options |=   WOP_SELECTABLE;
-    wtab->tables = g_hash_table_new (g_str_hash,  g_str_equal );
+    wtab->keymap = g_hash_table_new (g_str_hash,  g_str_equal);
+    wtab->tables = g_hash_table_new (g_str_hash,  g_str_equal);
+    wtab->tables_exemplars = g_hash_table_new (g_str_hash,  g_str_equal);
     wtab->selbar = selbar_new (y,x,1,width);
     return wtab;
 }
 
 void
-wtable_add_table(WTable *wtab, const char *tabname, int ncols, const global_keymap_t * keymap) {
-  Table *tab;
-  tab = table_new(ncols);
-  tab->wtab = wtab;
-  tab->keymap = keymap;
-  table_set_colwidth_formula(tab, formula_eq_col);
-  g_hash_table_insert ( wtab->tables, (gpointer) tabname, (gpointer) tab);
-  selbar_add_button   ( wtab->selbar, tabname);
+wtable_add_table(WTable *wtab, const char *tabname, const global_keymap_t * keymap) {
+  g_hash_table_insert (wtab->keymap, (gpointer) tabname, (gpointer) keymap);
+  g_hash_table_insert (wtab->tables, (gpointer) tabname, (gpointer) NULL);
+  g_hash_table_insert (
+    wtab->tables_exemplars,
+    (gpointer) tabname,
+    (gpointer) g_hash_table_new (g_direct_hash, g_direct_equal));
+  selbar_add_button (wtab->selbar, tabname);
 }
 
 void
 wtable_set_current_table(WTable *wtab, const char *tabname) {
   wtab->tab = g_hash_table_lookup (wtab->tables, tabname);
-  message_assert(wtab->tab!=NULL);
   selbar_set_current_button(wtab->selbar,tabname);
 }
 
@@ -223,6 +380,41 @@ wtable_get_table(WTable *wtab, const char *tabname) {
   return g_hash_table_lookup (wtab->tables, tabname);
 }
 
+gpointer
+table_cell_data_copy(gconstpointer src, gpointer data) {
+  Table *tab = (Table *)data;
+  cell_data_t * new_src = cell_data_copy((cell_data_t *)src);
+  if (new_src->id) {
+    g_hash_table_insert ( tab->hnodes, GINT_TO_POINTER(new_src->id), node);
+  }
+  return new_src;
+}
+
+static table_row *
+table_row_copy(Table *tab, const table_row *row) {
+  /*Копирует строку row в таблицу tab. Предполагается, что row
+   *принадлежит отличной от tab таблице. При копировании деревьев(chunks)
+   *для каждой ячейки столбца будет осуществляться добавление пар (node_id,pointer)
+   *в хэш-таблицу tab->hnodes
+   */
+  long ncols = row->ncols;
+  table_row * new_row = g_new0 (table_row,1);
+  new_row->ncols=row->ncols;
+  new_row->y1 = row->y1;
+  new_row->y2 = row->y2;
+  new_row->columns  = (GNode **)g_new0(GNode *, ncols);
+  new_row->offset   = (int *)g_new(int, ncols);
+  new_row->xl       = (int *)g_new(int, ncols);
+  new_row->xr       = (int *)g_new(int, ncols);
+  for (int col=0;col<ncols;col++) {
+    new_row->columns[col] = g_node_copy_deep (row->columns[col],table_cell_data_copy,tab);
+    new_row->offset[col]  = row->offset[col];
+    new_row->xl[col]      = row->xl[col];
+    new_row->xr[col]      = row->xr[col];
+  }
+  tab->rows = g_list_append (tab->rows, new_row);
+  return new_row;
+}
 
 static table_row *
 table_row_alloc(long ncols) {
@@ -307,6 +499,38 @@ json_get_chunk_name (json_t * chunk) {
     }
 }
 
+static Table *
+table_copy (const Table *tab) {
+  /*copy constructor*/
+  gint idx;
+  Table *new_tab = g_new0(Table,1);
+  GList *keys1,*keys2;
+  memcpy(new_tab,tab,sizeof(Table));
+  new_tab->hnodes=NULL;
+  new_tab->active_row=NULL;
+  new_tab->rows=NULL;
+
+  new_tab->colstart=g_new(long,(new_tab->ncols+1));
+  memcpy(new_tab->colstart,tab->colstart,(tab->ncols+1)*sizeof(long));
+
+  /*copy rows of `tab` into `new_tab`. При копировании
+   *будет осуществлено заполнение new_tab->hnodes
+   */
+  new_tab->hnodes = g_hash_table_new (g_direct_hash, g_direct_equal);
+  for(row=tab->rows;row;row=row->next) {
+    table_row_copy (new_tab,(struct table_row *)(row->data));
+  }
+  message_assert (g_hash_table_size(tab->hnodes)==g_hash_table_size(new_tab->hnodes));
+  if (tab->active_row) {
+    idx=g_list_index(tab->rows, (gconstpointer)(tab->active_row));
+    new_tab->active_row = (table_row *) g_list_nth_data(new_tab->rows,idx);
+  }
+  else {
+    new_tab->active_row = NULL;
+  }
+  return new_tab;
+}
+
 static cell_data_t *
 cell_data_new (void) {
   cell_data_t * data = g_new0 (cell_data_t, 1);
@@ -357,6 +581,37 @@ cell_data_makecolor(cell_data_t *data) {
   }
 }
 
+/*
+typedef struct celldata {
+  chunk_name_t name;
+  type_code_t type_code;
+  char *str;
+  char *proposed_text;
+  GArray *coord;
+  int color;
+  gboolean selected;
+  json_t *onclick_data;
+  gboolean onclick_user_input;
+  gint id;
+} cell_data_t;
+*/
+
+static cell_data_t *
+cell_data_copy (const cell_data_t * data) {
+  cell_data_t * new_data = cell_data_new();
+  new_data->name = data->name;
+  new_data->type_code = data->type_code;
+  new_data->str = strdup(data->str);
+  new_data->proposed_text = strdup(data->proposed_text);
+  memcpy(new_data->coord,data->coord,data->coord->len*sizeof(int));
+  new_data->color = data->color;
+  new_data->selected = data->selected;
+  new_data->onclick_data = json_deep_copy(data->onclick_data);
+  new_data->onclick_user_input = data->onclick_user_input;
+  new_data->id = data->id;
+  return new_data;
+}
+
 static cell_data_t *
 cell_data_new_from_json (json_t * json_chunk) {
   cell_data_t * data = cell_data_new ();
@@ -368,6 +623,7 @@ cell_data_new_from_json (json_t * json_chunk) {
   }
   if ( (json_id = json_object_get(json_chunk,"id")) ) {
     data->id = json_integer_value (json_id);
+    message_assert (data->id!=0);
   }
   else {
     data->id = 0;
@@ -401,8 +657,8 @@ cell_data_setcolor (cell_data_t *data) {
 
 
 static GNode *
-table_get_node_by_id (Table * tab, gint64 node_id) {
-  return (GNode *) g_hash_table_lookup (tab->hnodes, &node_id);
+table_get_node_by_id (Table * tab, gint node_id) {
+  return (GNode *) g_hash_table_lookup (tab->hnodes, GINT_TO_POINTER(node_id));
 }
 
 
@@ -441,30 +697,10 @@ static GNode *
 table_add_node(Table *tab, GNode * parent, json_t *json_data) {
   cell_data_t *data = cell_data_new_from_json (json_data);
   GNode *node = g_node_append_data (parent,data);
-  if (json_object_get (json_data,"id"))
-    g_hash_table_insert ( tab->hnodes, &(data->id), node);
+  if (data->id)
+    g_hash_table_insert ( tab->hnodes, GINT_TO_POINTER(data->id), node);
   return node;
 }
-/*
-static void
-table_update_node_json_1 (Table *tab, GNode *root, json_t *json_chunk) {
-  gint64 node_id = json_integer_value (json_object_get (json_chunk, "id"));
-  GNode *node = table_get_node_by_id (tab, node_id);
-  if (node) {
-    update_chunk(CHUNK(node),json_chunk);
-  }
-  else {
-    table_add_node(tab,root,json_chunk);
-  }
-  json_t *json_child_chunks = json_object_get (json_chunk, "chunks");
-  if (!json_child_chunks)
-    return;
-  for (size_t nc=0; nc<json_array_size (json_child_chunks); nc++) {
-    json_t * json_node_data = json_array_get (json_child_chunks,nc);
-    table_update_node_json_1 (tab,node,json_node_data);
-  }
-}
-*/
 
 
 static gboolean
@@ -503,11 +739,9 @@ json_to_celltree (Table *tab, GNode *parent, json_t *json_chunk) {
 static void
 table_update_node_json (Table *tab, json_t *json_chunk) {
   json_t *json_id;
-  gint64 node_id;
+  gint node_id;
   GNode *node;
-  json_id = json_object_get (json_chunk, "id");
-  message_assert (json_id!=NULL);
-  node_id = json_integer_value (json_id);
+  node_id = json_int (json_chunk, "id");
   node = table_get_node_by_id (tab, node_id);
   message_assert (node!=NULL);
   update_chunk(CHUNK(node),json_chunk);
@@ -534,7 +768,7 @@ table_set_cell_text (Table *tab, int nrow, int ncol, json_t *json_data) {
   cell_root = g_node_new (cell_data);
   row->columns[ncol] = cell_root;
   if (json_object_get (json_data, "id"))
-    g_hash_table_insert (tab->hnodes, &(cell_data->id), cell_root);
+    g_hash_table_insert (tab->hnodes, GINT_TO_POINTER(cell_data->id), cell_root);
   json_to_celltree (tab, row->columns[ncol], json_data);
 }
 
@@ -617,6 +851,7 @@ process_cell_tree_mouse_callbacks (Table *tab, GNode *root, int y, int x) {
   /*x,y являются абсолютными координатами*/
   gboolean handled = FALSE;
   gboolean insert_wait_text=FALSE;
+  message_assert (tab!=NULL);
   GNode * node = get_moset_depth_node_with_yx (root,y,x);
   if (node==NULL)
     node=root;
@@ -674,9 +909,12 @@ process_cell_tree_mouse_callbacks (Table *tab, GNode *root, int y, int x) {
 
 static void
 table_process_mouse_click(Table *tab, mouse_event_t * event) {
-  long click_y = WIDGET(tab->wtab)->y+event->y;
-  long click_x  = WIDGET(tab->wtab)->x+event->x;
-  GList *g_row = tab->rows;
+  long click_y, click_x;
+  GList *g_row;
+  message_assert (tab!=NULL);
+  click_y = WIDGET(tab->wtab)->y+event->y;
+  click_x  = WIDGET(tab->wtab)->x+event->x;
+  g_row = tab->rows;
   long nrow=0,ncol;
   table_row * row;
   gboolean handled=FALSE;
@@ -743,6 +981,8 @@ table_row_destroy_g(gpointer data) {
 
 static void
 table_clear_rows(Table * tab) {
+  if (!tab)
+    return
   g_list_free_full (tab->rows,table_row_destroy_g);
   tab->rows = NULL;
   tab->nrows=0;
@@ -791,7 +1031,9 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
    * `y` есть y-координата строки с учетом смещения.
    * `x_start`, `x_stop` есть координаты начала и конца строки.
    */
-  GArray * coord = chunk_data->coord;
+  GArray * coord;
+  message_assert (tab!=NULL);
+  coord = chunk_data->coord;
   if (blank && coord->len)
     g_array_remove_range (coord, 0, coord->len);
   p = chunk_data->str;
@@ -905,6 +1147,7 @@ get_chunk_horiz_shift(cell_data_t * chunk_data) {
 
 static int
 print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table *tab, int * rowcnt, gboolean blank) {
+  message_assert (tab!=NULL);
   message_assert (CHUNK(chunk)!=NULL);
   if (CHUNK(chunk)->str) {
     return print_str_chunk (CHUNK(chunk),x1,x2,start_pos,left_bound,right_bound,tab,rowcnt, blank);
@@ -973,12 +1216,16 @@ table_draw_row (Table * tab, table_row *row, gboolean blank) {
    * TAB_TOP(tab) --ближе к верху экрана  TAB_BOTTOM(tab) -- ближе к низу экрана
    * TAB_TOP(tab) и TAB_BOTTOM(tab) являются реальными координатами на экране.
    */
-  long * colstart = tab->colstart;
-  GNode ** columns = row->columns;
+  long * colstart;
+  GNode ** columns;
   GNode  * column;
   int rowcnt;
   long max_rowcnt=1, x1, x2;
   long offset;
+  message_assert (tab!=NULL);
+  colstart = tab->colstart;
+  columns = row->columns;
+  column;
   if (blank)
     row->y1 = ROW_OFFSET(tab,0); /*y-коорд. последней строки + 1*/
   for(int i=0;i<tab->ncols;i++) {
@@ -1035,9 +1282,11 @@ get_row_topbottom(Table * tab, table_row *row, int *t, int *b) {
 
 static void
 table_draw(Table * tab, gboolean blank) {
-  GList *row = tab->rows;
+  GList *row;
   table_row *r;
   long offset;
+  message_assert (tab!=NULL);
+  row = tab->rows;
   tty_fill_region(tab->y,tab->x,tab->lines,tab->cols,' ');
   tab->last_row_pos = tab->y - tab->row_offset;
   int tt=TAB_TOP(tab),tb=TAB_BOTTOM(tab);
@@ -1101,6 +1350,7 @@ table_update_colwidth(Table * tab) {
 
 static void
 table_update_bounds(Table * tab, long y, long x, long lines, long cols) {
+  message_assert (tab!=NULL);
   tab->x = x;
   tab->y = y;
   tab->lines = lines;
@@ -1121,7 +1371,8 @@ table_new (long ncols) {
   tab->colstart = (long *)g_new0(long,ncols+1);
   tab->row_offset=0;
   table_set_colwidth_formula(tab,formula_eq_col);
-  tab->hnodes = g_hash_table_new (g_int64_hash, g_int64_equal);
+  tab->hnodes = g_hash_table_new (g_direct_hash, g_direct_equal);
+  tab->formula = formula_eq_col;
   return tab;
 }
 
@@ -1298,6 +1549,7 @@ wtable_callback (Widget * w, __attribute__((unused)) Widget * sender, widget_msg
 static void
 table_do_row_visible(Table *tab, int nrow) {
     table_row * selrow;
+    message_assert (tab!=NULL);
     message_assert (nrow < tab->nrows);
     selrow = TABROW(g_list_nth (tab->rows, nrow));
     int off;
@@ -1338,14 +1590,16 @@ wtable_do_row_visible_json(WTable *wtab, json_t *pkg) {
 
 void
 wtable_draw(WTable *wtab) {
+  /*Fill widget space default color. If current table!=NULL, draw it.*/
   Table *tab = wtab->tab;
-  table_add_offset (tab,0); /*make offset valid*/
-
   tty_draw_box (WIDGET(wtab)->y+1, WIDGET(wtab)->x, WIDGET(wtab)->lines-1, WIDGET(wtab)->cols, FALSE);
-  table_draw (tab,FALSE);
-  tty_setcolor(EDITOR_NORMAL_COLOR);
+  if (tab) {
+    table_add_offset (tab,0); /*make offset valid*/
+    table_draw (tab,FALSE);
+    wtab->tab->redraw = REDRAW_NONE;
+    tty_setcolor(EDITOR_NORMAL_COLOR);
+  }
   selbar_draw (wtab->selbar);
-  wtab->tab->redraw = REDRAW_NONE;
 }
 
 static void

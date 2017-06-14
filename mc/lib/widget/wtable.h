@@ -98,7 +98,7 @@ typedef struct celldata {
   gboolean selected;
   json_t *onclick_data;
   gboolean onclick_user_input;
-  gint64 id;
+  gint id;
 } cell_data_t;
 
 typedef struct Table {
@@ -132,9 +132,24 @@ typedef struct Table {
 typedef struct WTable
 {
     Widget widget;
-    Table * tab;
+    /* В рамках WTable может существовать несколько наименований таблиц.
+     * Каждому наименованию может соответствовать несколько экземпляров (множество экземпляров).
+     * Для каждого наименования существует текущей экземпляр таблицы.
+     * При переключении вкладок в окне выбирается отрисовывается текущий экземпляр
+     * таблицы для выбранного наименования.
+    */
+    Table * tab; /*экземпляр таблицы, который отрисовывается в текущий момент*/
     Selbar *selbar;
-    GHashTable *tables;
+    GHashTable *tables; /*текущие экземпляры*/
+    GHashTable *keymap;
+
+    /*                                        |--|----------|
+                   |-------|------------|     |..|..........|
+tables_exemplars = |tabname|GHashTable *|---> |id|Table *tab|
+                   |.......|............|     |..|..........|
+                   |-------|------------|     |--|----------|
+    */
+    GHashTable *tables_exemplars;
 } WTable;
 
 
@@ -146,13 +161,13 @@ WTable  *wtable_new (int y, int x, int height, int width);
 void     wtable_add_table(WTable *wtab, const char *tabname, int ncols, const global_keymap_t * keymap);
 void     wtable_set_current_table(WTable *wtab, const char *tabname);
 void     wtable_set_colwidth_formula(WTable *wtab, const char *tabname, int (*formula)(const Table * tab, int ncol));
-void     wtable_update_node(WTable *wtab, json_t *pkg);
 void     wtable_draw(WTable *wtab);
 void     wtable_do_row_visible(WTable *wtab, const char *tabname, int nrow);
 Table *  wtable_get_table(WTable *wtab, const char *tabname);
-/*перемотать содержимое таблицы tabname так, что бы строка с номером nrow
-стала видимой*/
-void     wtable_do_row_visible_json(WTable *wtab, json_t *pkg);
+
+gboolean wtable_gdbevt_common (WTable *wtab, json_t *pkg);
+
+
 
 #define WTABLE(x) ((WTable *)x)
 #define TABLE(x)  ((Table *)x)
