@@ -58,8 +58,13 @@ enum gdb_cmd {
   MCGDB_THREADS,
   MCGDB_TABLE_ASM,
 
+  /*common*/
   MCGDB_UPDATE_NODE,
   MCGDB_DO_ROW_VISIBLE,
+  MCGDB_EXEMPLAR_CREATE,
+  MCGDB_EXEMPLAR_DROP,
+  MCGDB_EXEMPLAR_SET,
+  MCGDB_EXEMPLAR_COPY,
 };
 
 enum window_type {
@@ -82,10 +87,11 @@ struct json_t;
 extern enum window_type mcgdb_wtype;
 extern struct gdb_action * event_from_gdb;
 
+typedef
 struct gdb_action {
   enum gdb_cmd command;
   struct json_t *pkg;
-};
+} gdb_action_t;
 
 void mcgdb_error(void);
 void mcgdb_exit(void);

@@ -114,8 +114,8 @@ typedef struct Table {
   int (*formula)(const struct Table * tab, int ncol);
   long row_offset;
   redraw_t redraw;
-  gboolean (*row_callback)   (table_row *row, long nrow, long ncol);
-  gboolean (**cell_callbacks) (table_row *row, long nrow, long ncol);
+  //gboolean (*row_callback)   (table_row *row, long nrow, long ncol);
+  //gboolean (**cell_callbacks) (table_row *row, long nrow, long ncol);
   int mouse_down_x;
   int mouse_down_y;
   int        active_col;
@@ -126,6 +126,7 @@ typedef struct Table {
   gboolean draw_hline;
   const global_keymap_t * keymap;
   GHashTable *hnodes;
+  char *table_name;
 } Table;
 
 
@@ -140,8 +141,9 @@ typedef struct WTable
     */
     Table * tab; /*экземпляр таблицы, который отрисовывается в текущий момент*/
     Selbar *selbar;
-    GHashTable *tables; /*текущие экземпляры*/
-    GHashTable *keymap;
+    GHashTable *tables; /*current exemplars. key=table_name  value=Table *tab*/
+    GHashTable *keymap; /*key=table_name  value=keymap*/
+    char *current_table_name;
 
     /*                                        |--|----------|
                    |-------|------------|     |..|..........|
@@ -149,7 +151,7 @@ tables_exemplars = |tabname|GHashTable *|---> |id|Table *tab|
                    |.......|............|     |..|..........|
                    |-------|------------|     |--|----------|
     */
-    GHashTable *tables_exemplars;
+    GHashTable *tables_exemplars; /*key=table_name  value=hashtable(key=id, value=tab) with exemplars*/
 } WTable;
 
 
@@ -158,15 +160,14 @@ void pkg_table_package (json_t *pkg, WTable *wtab, const char *tabname);
 
 void     wtable_update_bound (WTable *wtab);
 WTable  *wtable_new (int y, int x, int height, int width);
-void     wtable_add_table(WTable *wtab, const char *tabname, int ncols, const global_keymap_t * keymap);
+void     wtable_add_table(WTable *wtab, const char *tabname, const global_keymap_t * keymap);
 void     wtable_set_current_table(WTable *wtab, const char *tabname);
 void     wtable_set_colwidth_formula(WTable *wtab, const char *tabname, int (*formula)(const Table * tab, int ncol));
 void     wtable_draw(WTable *wtab);
-void     wtable_do_row_visible(WTable *wtab, const char *tabname, int nrow);
 Table *  wtable_get_table(WTable *wtab, const char *tabname);
 
-gboolean wtable_gdbevt_common (WTable *wtab, json_t *pkg);
 
+gboolean wtable_gdbevt_common (WTable *wtab, gdb_action_t * act);
 
 
 #define WTABLE(x) ((WTable *)x)

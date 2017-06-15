@@ -45,7 +45,8 @@ size_t charlength_utf8(const char *str);
 static table_row *  table_row_alloc(long ncols);
 static void         table_row_destroy(table_row *row);
 static void         table_update_bounds(Table * tab, long y, long x, long lines, long cols);
-static Table *      table_new (long ncols);
+static Table *      table_new (const char *table_name, long ncols);
+static Table *      table_copy (const Table *tab);
 static int          table_add_row (Table * tab);
 static void         table_destroy(Table *tab);
 static void         table_clear_rows(Table * tab);
@@ -105,9 +106,30 @@ wtable_exemplar_set(WTable *wtab, json_t *pkg);
 static void
 wtable_exemplar_copy(WTable *wtab, json_t *pkg);
 
+static void
+wtable_insert_exemplar (WTable *wtab, Table *tab, const char *table_name, gint id);
 
 static void
 wtable_update_node(WTable *wtab, json_t *pkg);
+
+
+static void
+insert_pkg_json_into_table (json_t *json_tab, Table *tab);
+
+
+static cell_data_t * cell_data_new (void);
+static cell_data_t * cell_data_copy (const cell_data_t * data);
+
+
+
+
+
+
+
+
+
+
+
 
 
 static table_row *
@@ -136,8 +158,8 @@ wtable_exemplar_copy(WTable *wtab, json_t *pkg) {
   }
 */
   const char *table_name = json_str(pkg,"table_name");
-  Table *tab = table_copy (wtable_get_table (wtab,table_name));
   gint new_id = json_int(pkg,"new_id");
+  Table *tab = table_copy (wtable_get_table (wtab,table_name));
   wtable_insert_exemplar (wtab,tab,table_name,new_id);
 }
 
@@ -148,41 +170,67 @@ wtable_get_exemplars (WTable *wtab, const char *table_name) {
 
 static Table *
 get_exemplar(GHashTable *exemplars, gint id) {
+  message_assert (exemplars!=NULL);
   return (Table *) g_hash_table_lookup (exemplars, GINT_TO_POINTER(id));
 }
 
 static void
+wtable_exemplar_drop(WTable *wtab, json_t *pkg) {
+/* pkg = {
+*    'cmd' : 'exemplar_drop'
+*    'id' : int,
+*    'table_name' : str,
+*  }
+*/
+  const char *table_name = json_str (pkg, "table_name");
+  gint id = json_int(pkg,"id");
+  GHashTable * exemplars=wtable_get_exemplars (wtab, table_name);
+  Table *tab = get_exemplar (exemplars, id);
+  Table *curtable = g_hash_table_lookup (wtab->tables, table_name);
+  if (curtable==tab)
+    g_hash_table_replace (wtab->tables, strdup(table_name), NULL);
+  if (tab==wtab->tab)
+    wtab->tab=NULL;
+  g_hash_table_remove (exemplars, GINT_TO_POINTER(id));
+  table_destroy (tab);
+}
+
+
+static void
 wtable_insert_exemplar (WTable *wtab, Table *tab, const char *table_name, gint id) {
   /*insert exemplar `tab` to `table_name` exemplar set*/
-  GHashTable * exemplars;
-  exemplars = wtable_get_exemplars (wtab, table_name);
+  GHashTable * exemplars = wtable_get_exemplars (wtab, table_name);
   message_assert (exemplars!=NULL);
   g_hash_table_insert (exemplars, GINT_TO_POINTER(id), (gpointer) tab);
 }
 
 
 static void
-wtable_set_exemplar_by_id(WTable *wtab, const char *table_name, gint id) {
+wtable_set_current_exemplar(WTable *wtab, const char *table_name, gint id) {
   /* устанавливает таблицу текущей для наименования table_name */
-  exemplars = wtable_get_exemplars (wtab,table_name);
+  GHashTable *exemplars = wtable_get_exemplars (wtab,table_name);
+  Table *tab;
   message_assert (exemplars!=NULL);
   tab = get_exemplar (exemplars,id);
   message_assert (tab!=NULL);
-  g_hash_table_insert (wtab->tables, GINT_TO_POINTER(id), (gpointer) tab); /*set current table*/
+  g_hash_table_replace (wtab->tables, GINT_TO_POINTER(id), (gpointer) tab); /*set current table*/
+  if (wtab->current_table_name==tab->table_name) {
+    wtab->tab=tab;
+    wtab->tab->redraw = REDRAW_TAB;
+  }
 }
 
 static void
 wtable_exemplar_set(WTable *wtab, json_t *pkg) {
-/*
-  pkg = {
-    'cmd' : 'exemplar_set'
-    'id' : int,
-    'table_name' : str,
-  }
+/* pkg = {
+*    'cmd' : 'exemplar_set'
+*    'id' : int,
+*    'table_name' : str,
+*  }
 */
   const char *table_name = json_str (pkg, "table_name");
   gint id = json_int(pkg,"id");
-  wtable_set_exemplar_by_id (wtab,table_name,id);
+  wtable_set_current_exemplar (wtab,table_name,id);
 }
 
 static void
@@ -202,27 +250,30 @@ wtable_exemplar_create (WTable *wtab, json_t *pkg) {
   gint id = json_int (pkg, "id");
   json_t *table = json_obj (pkg, "table");
   json_t *rows = json_object_get (table, "rows");
-  GHashTable *exemplars;
   /*evaluate table width (columns)*/
   if (json_array_size(rows)==0) /*no rows*/
-    ncols=1;
+    ncols=0;
   else {
-    ncols = MAX(json_array_size(json_array_get(rows,0)),1);
+    ncols = json_array_size(json_array_get(rows,0));
   }
-  tab = table_new(ncols);
+  tab = table_new(table_name, ncols);
   tab->wtab = wtab;
   tab->keymap = wtable_get_tab_keymap(wtab,table_name);
-
-  wtable_insert_exemplar (wtab, tab, table_name, id)
   insert_pkg_json_into_table (table,tab); /*заполнение таблицы данными из пакета*/
-  if (json_boolean_value(json_object_get(pkg,"set")))
-    wtable_set_exemplar (wtab,table_name,id);
+
+  wtable_insert_exemplar (wtab, tab, table_name, id);
+
+  if (json_boolean_value(json_object_get(pkg,"set"))) {
+    wtable_set_current_exemplar (wtab,table_name,id);
+    
+  }
 }
 
 
 gboolean
-wtable_gdbevt_common (WTable *wtab, json_t *pkg) {
+wtable_gdbevt_common (WTable *wtab, gdb_action_t * act) {
   /*return TRUE if event was processed*/
+  json_t *pkg = act->pkg;
   gboolean handled=FALSE;
   switch(act->command) {
     case MCGDB_EXEMPLAR_CREATE:
@@ -253,7 +304,8 @@ wtable_gdbevt_common (WTable *wtab, json_t *pkg) {
     default:
       break;
   }
-
+  if (wtab->tab && wtab->tab->redraw)
+    wtable_draw(wtab);
   return handled;
 }
 
@@ -352,16 +404,16 @@ wtable_new (int y, int x, int height, int width)
     widget_init (w, y, x, height, width, wtable_callback, wtable_mouse_callback);
     w->options |=   WOP_SELECTABLE;
     wtab->keymap = g_hash_table_new (g_str_hash,  g_str_equal);
-    wtab->tables = g_hash_table_new (g_str_hash,  g_str_equal);
-    wtab->tables_exemplars = g_hash_table_new (g_str_hash,  g_str_equal);
+    wtab->tables = g_hash_table_new_full (g_str_hash,  g_str_equal, free, NULL);
+    wtab->tables_exemplars = g_hash_table_new_full (g_str_hash,  g_str_equal, NULL, (GDestroyNotify) g_hash_table_destroy);
     wtab->selbar = selbar_new (y,x,1,width);
     return wtab;
 }
 
 void
 wtable_add_table(WTable *wtab, const char *tabname, const global_keymap_t * keymap) {
-  g_hash_table_insert (wtab->keymap, (gpointer) tabname, (gpointer) keymap);
-  g_hash_table_insert (wtab->tables, (gpointer) tabname, (gpointer) NULL);
+  g_hash_table_insert (wtab->keymap, (gpointer) strdup(tabname), (gpointer) keymap);
+  g_hash_table_insert (wtab->tables, (gpointer) strdup(tabname), (gpointer) NULL);
   g_hash_table_insert (
     wtab->tables_exemplars,
     (gpointer) tabname,
@@ -372,6 +424,7 @@ wtable_add_table(WTable *wtab, const char *tabname, const global_keymap_t * keym
 void
 wtable_set_current_table(WTable *wtab, const char *tabname) {
   wtab->tab = g_hash_table_lookup (wtab->tables, tabname);
+  wtab->current_table_name = wtab->tab->table_name;
   selbar_set_current_button(wtab->selbar,tabname);
 }
 
@@ -380,14 +433,14 @@ wtable_get_table(WTable *wtab, const char *tabname) {
   return g_hash_table_lookup (wtab->tables, tabname);
 }
 
-gpointer
+static gpointer
 table_cell_data_copy(gconstpointer src, gpointer data) {
   Table *tab = (Table *)data;
-  cell_data_t * new_src = cell_data_copy((cell_data_t *)src);
-  if (new_src->id) {
-    g_hash_table_insert ( tab->hnodes, GINT_TO_POINTER(new_src->id), node);
+  cell_data_t * new_node = cell_data_copy((cell_data_t *)src);
+  if (new_node->id) {
+    g_hash_table_insert ( tab->hnodes, GINT_TO_POINTER(new_node->id), new_node);
   }
-  return new_src;
+  return new_node;
 }
 
 static table_row *
@@ -407,7 +460,7 @@ table_row_copy(Table *tab, const table_row *row) {
   new_row->xl       = (int *)g_new(int, ncols);
   new_row->xr       = (int *)g_new(int, ncols);
   for (int col=0;col<ncols;col++) {
-    new_row->columns[col] = g_node_copy_deep (row->columns[col],table_cell_data_copy,tab);
+    new_row->columns[col] = g_node_copy_deep (row->columns[col],table_cell_data_copy,(gpointer) tab);
     new_row->offset[col]  = row->offset[col];
     new_row->xl[col]      = row->xl[col];
     new_row->xr[col]      = row->xr[col];
@@ -504,9 +557,8 @@ table_copy (const Table *tab) {
   /*copy constructor*/
   gint idx;
   Table *new_tab = g_new0(Table,1);
-  GList *keys1,*keys2;
   memcpy(new_tab,tab,sizeof(Table));
-  new_tab->hnodes=NULL;
+
   new_tab->active_row=NULL;
   new_tab->rows=NULL;
 
@@ -517,16 +569,13 @@ table_copy (const Table *tab) {
    *будет осуществлено заполнение new_tab->hnodes
    */
   new_tab->hnodes = g_hash_table_new (g_direct_hash, g_direct_equal);
-  for(row=tab->rows;row;row=row->next) {
-    table_row_copy (new_tab,(struct table_row *)(row->data));
+  for(GList *row=tab->rows;row;row=row->next) {
+    table_row_copy (new_tab,(const table_row *)(row->data));
   }
   message_assert (g_hash_table_size(tab->hnodes)==g_hash_table_size(new_tab->hnodes));
   if (tab->active_row) {
     idx=g_list_index(tab->rows, (gconstpointer)(tab->active_row));
     new_tab->active_row = (table_row *) g_list_nth_data(new_tab->rows,idx);
-  }
-  else {
-    new_tab->active_row = NULL;
   }
   return new_tab;
 }
@@ -705,10 +754,8 @@ table_add_node(Table *tab, GNode * parent, json_t *json_data) {
 
 static gboolean
 drop_childs_free (GNode *node, gpointer data) {
-  //if (node->data) {
   cell_data_free ((cell_data_t *)node->data);
   node->data=NULL;
-  //}
   return FALSE;
 }
 
@@ -738,7 +785,6 @@ json_to_celltree (Table *tab, GNode *parent, json_t *json_chunk) {
 
 static void
 table_update_node_json (Table *tab, json_t *json_chunk) {
-  json_t *json_id;
   gint node_id;
   GNode *node;
   node_id = json_int (json_chunk, "id");
@@ -778,7 +824,7 @@ is_node_match_yx (GNode *node, int y, int x) {
   GArray *coord = data->coord;
   if (data->str) {
     message_assert (coord->len%3 == 0);
-    for (int i=0;i<coord->len;i+=3) {
+    for (unsigned int i=0;i<coord->len;i+=3) {
       int y1 = g_array_index (coord,int,i+0);
       int x1 = g_array_index (coord,int,i+1);
       int x2 = g_array_index (coord,int,i+2);
@@ -789,11 +835,12 @@ is_node_match_yx (GNode *node, int y, int x) {
     return FALSE;
   }
   else {
+    int x1,x2,y1,y2;
     message_assert (coord->len==4);
-    int y1 = g_array_index (coord,int,0);
-    int x1 = g_array_index (coord,int,1);
-    int y2 = g_array_index (coord,int,2);
-    int x2 = g_array_index (coord,int,3);
+    y1 = g_array_index (coord,int,0);
+    x1 = g_array_index (coord,int,1);
+    y2 = g_array_index (coord,int,2);
+    x2 = g_array_index (coord,int,3);
     if (y1==y2 && y==y1) {
       return (x>=x1) && (x<x2);
     }
@@ -851,8 +898,10 @@ process_cell_tree_mouse_callbacks (Table *tab, GNode *root, int y, int x) {
   /*x,y являются абсолютными координатами*/
   gboolean handled = FALSE;
   gboolean insert_wait_text=FALSE;
+  GNode * node;
   message_assert (tab!=NULL);
-  GNode * node = get_moset_depth_node_with_yx (root,y,x);
+  message_assert (root!=NULL);
+  node = get_moset_depth_node_with_yx (root,y,x);
   if (node==NULL)
     node=root;
   while (node) {
@@ -911,13 +960,16 @@ static void
 table_process_mouse_click(Table *tab, mouse_event_t * event) {
   long click_y, click_x;
   GList *g_row;
-  message_assert (tab!=NULL);
-  click_y = WIDGET(tab->wtab)->y+event->y;
-  click_x  = WIDGET(tab->wtab)->x+event->x;
-  g_row = tab->rows;
   long nrow=0,ncol;
   table_row * row;
   gboolean handled=FALSE;
+
+  message_assert (tab!=NULL);
+
+  click_y = WIDGET(tab->wtab)->y+event->y;
+  click_x  = WIDGET(tab->wtab)->x+event->x;
+  g_row = tab->rows;
+
   if (  (click_y <  tab->y) ||
         (click_y >= tab->y+tab->lines) ||
         (click_x <  tab->x) ||
@@ -952,13 +1004,14 @@ table_process_mouse_click(Table *tab, mouse_event_t * event) {
     click_x
   );
 
+/*
   if (!handled && tab->cell_callbacks)
     handled = tab->cell_callbacks[ncol](row,nrow,ncol);
 
   if (!handled && tab->row_callback) {
     handled = tab->row_callback(row,nrow,ncol);
   }
-
+*/
   if (tab->redraw) {
     table_draw (tab, TRUE);
     table_draw (tab, FALSE);
@@ -1225,7 +1278,6 @@ table_draw_row (Table * tab, table_row *row, gboolean blank) {
   message_assert (tab!=NULL);
   colstart = tab->colstart;
   columns = row->columns;
-  column;
   if (blank)
     row->y1 = ROW_OFFSET(tab,0); /*y-коорд. последней строки + 1*/
   for(int i=0;i<tab->ncols;i++) {
@@ -1285,12 +1337,13 @@ table_draw(Table * tab, gboolean blank) {
   GList *row;
   table_row *r;
   long offset;
+  int rtop,rbottom,tt,tb;
   message_assert (tab!=NULL);
   row = tab->rows;
   tty_fill_region(tab->y,tab->x,tab->lines,tab->cols,' ');
   tab->last_row_pos = tab->y - tab->row_offset;
-  int tt=TAB_TOP(tab),tb=TAB_BOTTOM(tab);
-  int rtop,rbottom;
+  tt=TAB_TOP(tab);
+  tb=TAB_BOTTOM(tab);
 
   if (blank) {
     /*ничего не рисуется, только высчитывается длина*/
@@ -1361,7 +1414,7 @@ table_update_bounds(Table * tab, long y, long x, long lines, long cols) {
 
 
 static Table *
-table_new (long ncols) {
+table_new (const char *table_name, long ncols) {
   Table *tab;
   tab = g_new0(Table,1);
   tab->ncols=ncols;
@@ -1373,6 +1426,7 @@ table_new (long ncols) {
   table_set_colwidth_formula(tab,formula_eq_col);
   tab->hnodes = g_hash_table_new (g_direct_hash, g_direct_equal);
   tab->formula = formula_eq_col;
+  tab->table_name = strdup(table_name);
   return tab;
 }
 
@@ -1408,12 +1462,13 @@ node_update_coord(GNode *node, int off) {
   if (CHUNK(node)->str) {
     message_assert(coord->len>0);
     message_assert(coord->len%3==0);
-    for (int idx=0;idx<coord->len;idx+=3) {
+    for (unsigned int idx=0;idx<coord->len;idx+=3) {
       //int y1 = g_array_index(coord,int,idx) - off;
       g_array_index(coord,int,idx) -= off;
     }
   }
   else {
+    GNode *child;
     if (coord->len==4) {
       //int y1 = g_array_index(coord,int,0) - off;
       //int y2 = g_array_index(coord,int,2) - off;
@@ -1422,7 +1477,7 @@ node_update_coord(GNode *node, int off) {
       g_array_index(coord,int,0) -= off;
       g_array_index(coord,int,2) -= off;
     }
-    GNode *child = g_node_first_child (node);
+    child = g_node_first_child (node);
     while (child) {
       node_update_coord (child,off);
       child = g_node_next_sibling (child);
@@ -1549,10 +1604,12 @@ wtable_callback (Widget * w, __attribute__((unused)) Widget * sender, widget_msg
 static void
 table_do_row_visible(Table *tab, int nrow) {
     table_row * selrow;
+    int off;
+
     message_assert (tab!=NULL);
     message_assert (nrow < tab->nrows);
+
     selrow = TABROW(g_list_nth (tab->rows, nrow));
-    int off;
     if (selrow->y1 <= TAB_TOP(tab) &&  selrow->y2 >= TAB_TOP(tab)) {
       /* верхняя строка ячейки не видна, нижняя видна
        * Делаем, что бы верхняя была видна
@@ -1642,9 +1699,10 @@ static void
 table_process_mouse_down(Table *tab, mouse_event_t * event) {
   GList * row = tab->rows;
   table_row *tr;
+  int ncol;
+
   tab->mouse_down_x = event->x;
   tab->mouse_down_y = event->y;
-  int ncol;
   while(row) {
     tr = (table_row *)(row->data);
     if (tr->y1<=event->y && event->y<tr->y2)

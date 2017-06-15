@@ -64,9 +64,10 @@ mcgdb_aux_dialog_gdbevt (WDialog *h) {
          *wtab=NULL;
   struct gdb_action * act = event_from_gdb;
   json_t *pkg = act->pkg;
-  event_from_gdb=NULL;
   const char *tabname;
+  event_from_gdb=NULL;
 
+/*
   switch(act->command) {
     case MCGDB_LOCALVARS:
     case MCGDB_REGISTERS:
@@ -76,9 +77,8 @@ mcgdb_aux_dialog_gdbevt (WDialog *h) {
     case MCGDB_THREADS:
       wtab = wtab_bt_th;
       break;
-    case MCGDB_UPDATE_NODE:
-    case MCGDB_DO_ROW_VISIBLE:
-      tabname = json_string_value (json_object_get (pkg,"table"));
+    default:
+      tabname = json_str (pkg,"table");
       if (wtable_get_table(wtab_vars_regs,tabname)) {
         wtab=wtab_vars_regs;
       }
@@ -87,10 +87,16 @@ mcgdb_aux_dialog_gdbevt (WDialog *h) {
       }
       message_assert (wtab!=NULL);
       break;
-    default:
-      break;
+  }*/
+  tabname = json_str (pkg,"table");
+  if (wtable_get_table(wtab_vars_regs,tabname)) {
+    wtab=wtab_vars_regs;
   }
-
+  else if (wtable_get_table(wtab_bt_th,tabname)) {
+    wtab=wtab_bt_th;
+  }
+  message_assert (wtab!=NULL);
+  /*
   switch(act->command) {
     case MCGDB_LOCALVARS:
       pkg_table_package (pkg,wtab,"localvars");
@@ -104,17 +110,10 @@ mcgdb_aux_dialog_gdbevt (WDialog *h) {
     case MCGDB_THREADS:
       pkg_table_package (pkg,wtab,"threads");
       break;
-    case MCGDB_UPDATE_NODE:
-      wtable_update_node(wtab,pkg);
-      wtable_draw(wtab);
-      break;
-    case MCGDB_DO_ROW_VISIBLE:
-      wtable_do_row_visible_json(wtab,pkg);
-      break;
     default:
-      wtab_gdbevt_common (wtab, pkg);
-  }
-
+      wtable_gdbevt_common (wtab, act);
+  }*/
+  wtable_gdbevt_common (wtab, act);
   free_gdb_evt (act);
 
 }
@@ -190,13 +189,7 @@ int
 mcgdb_aux_dlg(void) {
   WDialog *aux_dlg;
   WTable  *vars_regs_table, *bt_th_table;
-  /*names of tables. this strings will be used as hashtable keys.
-   *We must keep this strings alive along program run.*/
-  static const char LOCALVARS[] = "localvars";
-  static const char REGISTERS[] = "registers";
-  static const char BACKTRACE[] = "backtrace";
-  static const char THREADS[] = "threads";
-  
+
   //int wait_gdb=1;
   //while(wait_gdb) {}
 
@@ -208,9 +201,9 @@ mcgdb_aux_dlg(void) {
     VARS_REGS_WIDGET_LINES,
     VARS_REGS_WIDGET_COLS
   );
-  wtable_add_table(vars_regs_table,LOCALVARS,1,mcgdb_aux_map);
-  wtable_add_table(vars_regs_table,REGISTERS,1,mcgdb_aux_map);
-  wtable_set_current_table(vars_regs_table,LOCALVARS);
+  wtable_add_table(vars_regs_table,"localvars",mcgdb_aux_map);
+  wtable_add_table(vars_regs_table,"registers",mcgdb_aux_map);
+  wtable_set_current_table(vars_regs_table,"localvars");
   wtable_update_bound(vars_regs_table);
 
   bt_th_table = wtable_new (
@@ -219,9 +212,9 @@ mcgdb_aux_dlg(void) {
     BT_TH_WIDGET_LINES,
     BT_TH_WIDGET_COLS
   );
-  wtable_add_table (bt_th_table,BACKTRACE,1,mcgdb_aux_map);
-  wtable_add_table (bt_th_table,THREADS,1,mcgdb_aux_map);
-  wtable_set_current_table (bt_th_table,BACKTRACE);
+  wtable_add_table (bt_th_table,"backtrace",mcgdb_aux_map);
+  wtable_add_table (bt_th_table,"threads",mcgdb_aux_map);
+  wtable_set_current_table (bt_th_table,"backtrace");
   wtable_update_bound(bt_th_table);
 
   aux_dlg = dlg_create (FALSE, 0, 0, 0, 0, WPOS_FULLSCREEN, FALSE, NULL, mcgdb_aux_dialog_callback,
