@@ -116,7 +116,13 @@ static void
 wtable_update_node(WTable *wtab, json_t *pkg);
 
 static void
-wtable_do_row_visible(WTable *wtab, const char *tabname, int nrow);
+wtable_do_row_visible(WTable *wtab, const char *tabname, gint id, int nrow);
+
+static Table *
+wtable_get_exemplar (WTable *wtab, const char *table_name, gint id);
+
+static GHashTable *
+wtable_get_exemplars (WTable *wtab, const char *table_name);
 
 
 static void
@@ -126,6 +132,8 @@ insert_pkg_json_into_table (json_t *json_tab, Table *tab);
 static cell_data_t * cell_data_new (void);
 static cell_data_t * cell_data_copy (const cell_data_t * data);
 
+static Table *
+get_exemplar(GHashTable *exemplars, gint id);
 
 
 
@@ -167,6 +175,15 @@ wtable_exemplar_copy(WTable *wtab, json_t *pkg) {
   gint new_id = json_int(pkg,"new_id");
   Table *tab = table_copy (wtable_get_table (wtab,table_name));
   wtable_insert_exemplar (wtab,tab,table_name,new_id);
+}
+
+static Table *
+wtable_get_exemplar (WTable *wtab, const char *table_name, gint id) {
+  /*Если id!=0, то возвращается экземляр по id, иначе возвр. текущий экземпляр.*/
+  if (id)
+    return get_exemplar(wtable_get_exemplars (wtab,table_name),id);
+  else
+    return wtable_get_table (wtab,table_name);
 }
 
 static GHashTable *
@@ -1701,21 +1718,26 @@ table_do_row_visible(Table *tab, int nrow) {
      off = (selrow->y2 + selrow->y1)/2 - (TAB_BOTTOM(tab)+TAB_TOP(tab))/2;
     }
     table_add_offset (tab,off);
+    tab->redraw=TRUE;
     //table_draw (tab, FALSE);
 }
 
 static void
-wtable_do_row_visible(WTable *wtab, const char *tabname, int nrow) {
-  Table *tab = wtable_get_table(wtab,tabname);
+wtable_do_row_visible(WTable *wtab, const char *tabname, gint id, int nrow) {
+  Table *tab = wtable_get_exemplar(wtab,tabname,id);
+  //Table *tab = wtable_get_table(wtab,tabname);
+  tab->selected_row = nrow;
+  tab->redraw = REDRAW_TAB;
   table_do_row_visible(tab,nrow);
 }
 
 void
 wtable_do_row_visible_json(WTable *wtab, json_t *pkg) {
   const char *tabname=json_str (pkg,"table_name");
+  gint id = json_integer_value (json_object_get (pkg, "id"));
   int nrow=json_int (pkg,"nrow");
   message_assert (tabname!=NULL);
-  wtable_do_row_visible(wtab,tabname,nrow);
+  wtable_do_row_visible(wtab,tabname,id,nrow);
 }
 
 

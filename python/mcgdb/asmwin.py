@@ -160,7 +160,7 @@ class AsmWin(BaseWin,ValueToChunks):
     try:
       funcname,start_addr,end_addr = self.get_selected_frame_func()
     except gdb.error as e:
-      pkg={'cmd':'exemplar_create','table_name':'asm','table':self.tablemsg(str(e))}
+      pkg={'cmd':'exemplar_create','table_name':'asm','id':1024,'table':self.tablemsg(str(e))}
       self.send(pkg)
       return
     #funcname_loc,start_addr_loc,end_addr_loc = self.get_func_addr_by_location(self.location)
@@ -177,18 +177,19 @@ class AsmWin(BaseWin,ValueToChunks):
       self.need_redisplay_asm=False
       selected_row=None
       if not frame:
-        asm_rows = self.text_chunk('not frame selected')
+        #asm_rows = self.text_chunk('not frame selected')
+        asm_rows = self.tablemsg('not frame selected')
       else:
         asm_rows,selected_row = self.asm_to_chunks()
       table={'rows':asm_rows, 'draw_vline':False, 'draw_hline':False}
       if selected_row!=None:
         table['selected_row']=selected_row
-      pkg={'cmd':'exemplar_create','table_name':'asm','table':table,}
+      pkg={'cmd':'exemplar_create','table_name':'asm','id':1024,'table':table,}
       self.send(pkg)
     elif need_update_current_op:
       if self.selected_asm_op_id!=None:
         node_data={'id':self.selected_asm_op_id,'selected':False}
-        pkg={'cmd':'update_node','table_name':'asm', 'node_data':node_data}
+        pkg={'cmd':'update_node','table_name':'asm','node_data':node_data}
         self.send(pkg)
       self.selected_asm_op_id = frame.pc()
       node_data={'id':frame.pc(),'selected':True}

@@ -284,23 +284,6 @@ get_command_num(json_t *pkg) {
     else if (compare_cmd("exit")) {
       return MCGDB_EXIT;
     }
-/*
-    else if (compare_cmd("localvars")) {
-      return MCGDB_LOCALVARS;
-    }
-    else if (compare_cmd("backtrace")) {
-      return MCGDB_BACKTRACE;
-    }
-    else if (compare_cmd("registers")) {
-      return MCGDB_REGISTERS;
-    }
-    else if (compare_cmd("threads")) {
-      return MCGDB_THREADS;
-    }
-    else if (compare_cmd("table_asm")) {
-      return MCGDB_TABLE_ASM;
-    }
-*/
     else if (compare_cmd("error_message")) {
       return MCGDB_ERROR_MESSAGE;
     }
@@ -313,8 +296,10 @@ get_command_num(json_t *pkg) {
     else if (compare_cmd("exemplar_create")) {return MCGDB_EXEMPLAR_CREATE;}
     else if (compare_cmd("exemplar_drop"))   {return MCGDB_EXEMPLAR_DROP;}
     else if (compare_cmd("exemplar_set"))    {return MCGDB_EXEMPLAR_SET;}
-    else if (compare_cmd("exemplar_copy"))    {return MCGDB_EXEMPLAR_COPY;}
+    else if (compare_cmd("exemplar_copy"))   {return MCGDB_EXEMPLAR_COPY;}
     else {
+      cmd = MCGDB_UNKNOWN;
+      message_assert (cmd!=MCGDB_UNKNOWN);
       return MCGDB_UNKNOWN;
     }
   }
