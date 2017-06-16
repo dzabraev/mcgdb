@@ -61,6 +61,10 @@ typedef struct {
   int *xr;
 } table_row;
 
+typedef enum table_type_id {
+  TABID_TMP         = 1,
+  TABID_EMPTY_TABLE = 2,
+} table_type_id;
 
 typedef struct WTable WTable;
 
@@ -121,14 +125,21 @@ typedef struct Table {
   int        active_col;
   table_row *active_row;
   WTable *wtab;
+
+  /* если selected_row!=-1, то таблица будет перемотана в строке с номером selected_row.
+   * После перемотки значение данного поля будет выставлено в -1.*/
   int selected_row;
   gboolean draw_vline;
   gboolean draw_hline;
   const global_keymap_t * keymap;
   GHashTable *hnodes;
   char *table_name;
+  gint id;
+  gboolean lengths_outdated;
 } Table;
 
+#define TABLE_IS_TMP(tab) ((tab)->id==TABID_TMP)
+#define NEED_REDRAW(wtab) ((wtab)->tab->lengths_outdated || (wtab)->tab->redraw)
 
 typedef struct WTable
 {
@@ -161,7 +172,8 @@ void pkg_table_package (json_t *pkg, WTable *wtab, const char *tabname);
 void     wtable_update_bound (WTable *wtab);
 WTable  *wtable_new (int y, int x, int height, int width);
 void     wtable_add_table(WTable *wtab, const char *tabname, const global_keymap_t * keymap);
-void     wtable_set_current_table(WTable *wtab, const char *tabname);
+void     wtable_set_tab(WTable *wtab, const char *tabname);
+
 void     wtable_set_colwidth_formula(WTable *wtab, const char *tabname, int (*formula)(const Table * tab, int ncol));
 void     wtable_draw(WTable *wtab);
 Table *  wtable_get_table(WTable *wtab, const char *tabname);

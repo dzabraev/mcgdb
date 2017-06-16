@@ -5,7 +5,8 @@ import gdb
 import re,sys,ctypes
 import traceback
 
-from mcgdb.basewin import BaseWin
+
+from mcgdb.basewin import BaseWin,TABID_TEMP
 from mcgdb.common  import gdb_stopped,inferior_alive,gdb_print
 from mcgdb.valuetochunks import check_chunks, ValueToChunks
 from mcgdb.common  import exec_main, valcache, INDEX, INDEX_tmp
@@ -18,19 +19,19 @@ class BaseSubentity(ValueToChunks):
     self.send_error = kwargs['send_error']
     super(BaseSubentity,self).__init__(INDEX,**kwargs)
 
-  def set_message_in_table(self,msg):
+  def set_message_in_table(self,msg,id=TABID_TEMP,set_current=True):
     pkg={
-      'cmd':self.subentity_name,
+      'cmd':'exemplar_create',
       'table':{'rows':[{'columns':[{'chunks':[{'str':msg}]}]}]},
+      'table_name':self.subentity_name,
+      'id':id,
     }
+    if set_current:
+      pkg['set'] = set_current
     self.send(pkg)
 
   def clear_table(self):
-    pkg={
-      'cmd':self.subentity_name,
-      'table':{'rows':[]},
-    }
-    self.send(pkg)
+    set_message_in_table ('')
 
 
 class BacktraceTable(BaseSubentity):
@@ -109,8 +110,11 @@ class BacktraceTable(BaseSubentity):
     except gdb.error:
       return
     pkg={
-      'cmd':'backtrace',
+      'cmd':'exemplar_create',
+      'table_name':'backtrace',
       'table':backtrace,
+      'id':1024,
+      'set':True
     }
     self.send(pkg)
 
@@ -179,6 +183,8 @@ class RegistersTable(BaseSubentity):
       regs = self.get_registers()
       if regs!=None:
         self.registers_drawn=True
+      else:
+        regs={'rows':[]}
     except gdb.error as e:
       if e.message=="No registers.":
         return
@@ -186,8 +192,11 @@ class RegistersTable(BaseSubentity):
         exc_type, exc_value, exc_traceback = sys.exc_info()
         raise exc_type, exc_value, exc_traceback
     pkg={
-      'cmd':'registers',
+      'cmd':'exemplar_create',
+      'table_name':'registers',
       'table':regs,
+      'id':1024,
+      'set':True,
     }
     self.send(pkg)
     tabdata={}
@@ -229,7 +238,7 @@ class RegistersTable(BaseSubentity):
     return {'rows' : rows_regs}
 
   def update_regnode_pkg (self,node_data):
-    return {'cmd':'update_node','table':'registers', 'node_data':node_data}
+    return {'cmd':'update_node','table_name':'registers', 'node_data':node_data}
 
   def pkgs_update_register(self,regname):
     chunks = self.get_register_chunks(regname)
@@ -338,8 +347,11 @@ class ThreadsTable(BaseSubentity):
   def update_threads(self):
     try:
       self.send({
-        'cmd':'threads',
+        'cmd':'exemplar_create',
+        'table_name':'threads',
         'table':self.get_threads(),
+        'id':1024,
+        'set':True,
       })
     except:
       return
@@ -448,14 +460,19 @@ class LocalvarsTable(BaseSubentity):
 
   def update_localvars(self):
     lvars=self._get_local_vars()
-    pkg={'cmd':'localvars','table':lvars}
+    pkg={ 'cmd':'exemplar_create',
+          'table_name':'localvars',
+          'table':lvars,
+          'id':1024,
+          'set':True,
+        }
     self.send(pkg)
 
   @exec_main
   def _get_local_vars(self):
     variables = self._get_local_vars_1 ()
     if len(variables)==0:
-      return []
+      return  {'rows':[]}
     lvars=[]
     funcname=self._get_frame_funcname(gdb.selected_frame())
     for name,value in variables.iteritems():

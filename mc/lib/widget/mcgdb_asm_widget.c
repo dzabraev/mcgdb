@@ -52,20 +52,11 @@ static void
 mcgdb_asm_dialog_gdbevt (WDialog *h) {
   WTable *wtab = (WTable *)dlg_find_by_id(h,asmtab_id);
   struct gdb_action * act = event_from_gdb;
-  json_t *pkg = act->pkg;
 
   event_from_gdb=NULL;
-
-  switch(act->command) {
-    case MCGDB_TABLE_ASM:
-      pkg_table_package (pkg,wtab,"asm");
-      break;
-    default:
-      wtable_gdbevt_common (wtab, act);
-  }
+  wtable_gdbevt_common (wtab, act);
 
   free_gdb_evt (act);
-
 }
 
 
@@ -129,7 +120,7 @@ mcgdb_asm_dlg(void) {
 
   wtasm = wtable_new (0,0,LINES,COLS);
   wtable_add_table(wtasm,"asm",mcgdb_asm_map);
-  wtable_set_current_table(wtasm, "asm");
+  wtable_set_tab(wtasm, "asm");
   wtable_update_bound(wtasm);
 
   dlg = dlg_create (FALSE, 0, 0, 0, 0, WPOS_FULLSCREEN, FALSE, NULL, mcgdb_asm_dialog_callback,

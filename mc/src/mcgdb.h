@@ -15,19 +15,22 @@ void __message_assert (const char *EX, const char *FILE, int LINE);
 
 #define message_assert(EX) (void)((EX) || (__message_assert (#EX, __FILE__, __LINE__),0))
 
-#define __json_extract(obj,field,func) \
+#define __json_extract(obj,field,extractor,checker) \
 ({\
   json_t *tmp = json_object_get(obj,field);\
   message_assert(tmp!=NULL);\
-  func(tmp);\
+  message_assert(checker(tmp));\
+  extractor(tmp);\
 })
 
 #define __MCGDB_IDENTITY(x) x
+//#define __MCGDB_CONSTTRUE_CHECKER(x) ((void *)1)
 
-#define json_int(obj,field) __json_extract(obj,field,json_integer_value)
-#define json_str(obj,field) __json_extract(obj,field,json_string_value)
-#define json_bool(obj,field) __json_extract(obj,field,json_boolean_value)
-#define json_obj(obj,field) __json_extract(obj,field,__MCGDB_IDENTITY)
+#define json_int(obj,field) __json_extract(obj,field,json_integer_value,json_is_integer)
+#define json_str(obj,field) __json_extract(obj,field,json_string_value,json_is_string)
+#define json_bool(obj,field) __json_extract(obj,field,json_boolean_value,json_is_boolean)
+#define json_obj(obj,field) __json_extract(obj,field,__MCGDB_IDENTITY,json_is_object)
+#define json_arr(obj,field) __json_extract(obj,field,__MCGDB_IDENTITY,json_is_array)
 
 
 

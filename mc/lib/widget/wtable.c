@@ -50,7 +50,10 @@ static Table *      table_copy (const Table *tab);
 static int          table_add_row (Table * tab);
 static void         table_destroy(Table *tab);
 static void         table_clear_rows(Table * tab);
-static void         table_draw(Table * tab, gboolean blank);
+static void         table_draw(Table * tab);
+static void         table_compute_lengths(Table * tab);
+static void         __table_draw(Table * tab, gboolean blank);
+
 static void         table_draw_row (Table * tab, table_row *r, gboolean blank);
 static void         table_update_colwidth(Table * tab);
 static void         table_set_colwidth_formula(Table * tab, int (*formula)(const Table * tab, int ncol));
@@ -111,6 +114,9 @@ wtable_insert_exemplar (WTable *wtab, Table *tab, const char *table_name, gint i
 
 static void
 wtable_update_node(WTable *wtab, json_t *pkg);
+
+static void
+wtable_do_row_visible(WTable *wtab, const char *tabname, int nrow);
 
 
 static void
@@ -175,6 +181,29 @@ get_exemplar(GHashTable *exemplars, gint id) {
 }
 
 static void
+__wtable_exemplar_drop(WTable *wtab, const char *table_name, gint id) {
+  GHashTable * exemplars=wtable_get_exemplars (wtab, table_name);
+  Table *tab = get_exemplar (exemplars, id);
+  Table *curtable = g_hash_table_lookup (wtab->tables, table_name);
+  message_assert (tab!=NULL); /*we try delete not existing table. probably it is error.*/
+  if (curtable==tab) {
+    /*удаление таблицы, которая является текущей для наименования table_name*/
+    g_hash_table_replace (
+      wtab->tables,
+      strdup (table_name),
+      get_exemplar (exemplars,TABID_EMPTY_TABLE));
+  }
+
+  if (tab==wtab->tab) {
+    /*запрос на удаление экземпляра, который отрисовывается сейчас.*/
+    /*ставим на орисовку пустой экземпляр*/
+    wtab->tab = get_exemplar (exemplars,TABID_EMPTY_TABLE);
+  }
+  g_hash_table_remove (exemplars, GINT_TO_POINTER(id));
+  table_destroy (tab);
+}
+
+static void
 wtable_exemplar_drop(WTable *wtab, json_t *pkg) {
 /* pkg = {
 *    'cmd' : 'exemplar_drop'
@@ -184,37 +213,53 @@ wtable_exemplar_drop(WTable *wtab, json_t *pkg) {
 */
   const char *table_name = json_str (pkg, "table_name");
   gint id = json_int(pkg,"id");
-  GHashTable * exemplars=wtable_get_exemplars (wtab, table_name);
-  Table *tab = get_exemplar (exemplars, id);
-  Table *curtable = g_hash_table_lookup (wtab->tables, table_name);
-  if (curtable==tab)
-    g_hash_table_replace (wtab->tables, strdup(table_name), NULL);
-  if (tab==wtab->tab)
-    wtab->tab=NULL;
-  g_hash_table_remove (exemplars, GINT_TO_POINTER(id));
-  table_destroy (tab);
+  __wtable_exemplar_drop(wtab,table_name,id);
 }
 
 
 static void
 wtable_insert_exemplar (WTable *wtab, Table *tab, const char *table_name, gint id) {
-  /*insert exemplar `tab` to `table_name` exemplar set*/
+  /*insert exemplar `tab` to `table_name` exemplars. If exemplar with given id exists, remove old exemplar.*/
   GHashTable * exemplars = wtable_get_exemplars (wtab, table_name);
+  Table *old_tab;
   message_assert (exemplars!=NULL);
+  old_tab = g_hash_table_lookup (exemplars,GINT_TO_POINTER(id));
+  if (old_tab) {
+    if (old_tab) {
+      /*с таким id существовал экземпляр. Наследуем от него row_offset*/
+      tab->row_offset = old_tab->row_offset;
+    }
+    __wtable_exemplar_drop (wtab,table_name,id);
+  }
   g_hash_table_insert (exemplars, GINT_TO_POINTER(id), (gpointer) tab);
 }
 
 
 static void
 wtable_set_current_exemplar(WTable *wtab, const char *table_name, gint id) {
-  /* устанавливает таблицу текущей для наименования table_name */
+  /* устанавливает таблицу текущей для наименования table_name. При этом, если текущее наименование
+   * отрисовки совпадает с table_name, то будет изменена таблица, которая будет отрисовываться.*/
   GHashTable *exemplars = wtable_get_exemplars (wtab,table_name);
-  Table *tab;
+  Table *tab, *old_tab;
   message_assert (exemplars!=NULL);
   tab = get_exemplar (exemplars,id);
   message_assert (tab!=NULL);
-  g_hash_table_replace (wtab->tables, GINT_TO_POINTER(id), (gpointer) tab); /*set current table*/
-  if (wtab->current_table_name==tab->table_name) {
+  old_tab = g_hash_table_lookup (wtab->tables, table_name);
+  if (old_tab->id==id) {
+    /*this table already set for draw*/
+    return;
+  }
+  message_assert (old_tab!=NULL);
+  if (TABLE_IS_TMP(old_tab)) {
+    /*Если таблица, которая была текущей для наименование table_name
+     * была временной, то в этом случае ее нужно удалить. При этом если устанавливается
+     * так же самая таблица, то таблица не удаляется*/
+    __wtable_exemplar_drop (wtab,table_name,old_tab->id);
+  }
+  g_hash_table_replace (wtab->tables, strdup(table_name), (gpointer) tab); /*set current table*/
+  if (!strcmp(wtab->current_table_name,tab->table_name)) {
+    /*Если в данный момент отрисовывается наименование table_name, тогда ставим
+     *данную таблицу на отрисовку*/
     wtab->tab=tab;
     wtab->tab->redraw = REDRAW_TAB;
   }
@@ -233,39 +278,53 @@ wtable_exemplar_set(WTable *wtab, json_t *pkg) {
   wtable_set_current_exemplar (wtab,table_name,id);
 }
 
+static Table *
+__wtable_exemplar_create (WTable *wtab, const char *table_name, gint id, json_t *table) {
+  int ncols;
+  Table *tab;
+  if (!table) {
+    ncols=0;
+  }
+  else {
+   json_t *rows = json_arr (table, "rows");
+    if (json_array_size(rows)==0) /*no rows*/
+      ncols=0;
+    else {
+      ncols = json_array_size(json_arr (json_array_get(rows,0),"columns")); /*length of first row*/
+    }
+  }
+  tab = table_new(table_name, ncols);
+  tab->wtab = wtab;
+  tab->id = id;
+  tab->keymap = wtable_get_tab_keymap(wtab,table_name);
+  if (table) {
+    insert_pkg_json_into_table (table,tab); /*заполнение таблицы данными из пакета*/
+  }
+  wtable_insert_exemplar (wtab, tab, table_name, id);
+  return tab;
+}
+
 static void
 wtable_exemplar_create (WTable *wtab, json_t *pkg) {
 /*
   pkg = {
     'cmd' : 'exemplar_create'
-    'id' : int,
+    'id' : int, #id must be >= 1024
     'table_name' : str,
     'table' : str,
     'set' : Bool, #if True, this exemplar will be set as current for table_name
   }
 */
-  Table *tab;
-  int ncols;
   const char *table_name = json_str (pkg, "table_name");
   gint id = json_int (pkg, "id");
   json_t *table = json_obj (pkg, "table");
-  json_t *rows = json_object_get (table, "rows");
-  /*evaluate table width (columns)*/
-  if (json_array_size(rows)==0) /*no rows*/
-    ncols=0;
-  else {
-    ncols = json_array_size(json_array_get(rows,0));
-  }
-  tab = table_new(table_name, ncols);
-  tab->wtab = wtab;
-  tab->keymap = wtable_get_tab_keymap(wtab,table_name);
-  insert_pkg_json_into_table (table,tab); /*заполнение таблицы данными из пакета*/
 
-  wtable_insert_exemplar (wtab, tab, table_name, id);
+  message_assert (id>=1024);
+
+   __wtable_exemplar_create (wtab, table_name, id, table);
 
   if (json_boolean_value(json_object_get(pkg,"set"))) {
     wtable_set_current_exemplar (wtab,table_name,id);
-    
   }
 }
 
@@ -294,7 +353,6 @@ wtable_gdbevt_common (WTable *wtab, gdb_action_t * act) {
       break;
     case MCGDB_UPDATE_NODE:
       wtable_update_node(wtab,pkg);
-      wtable_draw(wtab);
       handled=TRUE;
       break;
     case MCGDB_DO_ROW_VISIBLE:
@@ -304,7 +362,7 @@ wtable_gdbevt_common (WTable *wtab, gdb_action_t * act) {
     default:
       break;
   }
-  if (wtab->tab && wtab->tab->redraw)
+  if (NEED_REDRAW(wtab))
     wtable_draw(wtab);
   return handled;
 }
@@ -313,9 +371,9 @@ wtable_gdbevt_common (WTable *wtab, gdb_action_t * act) {
 static int
 insert_json_row (json_t *row, Table *tab) {
     int nrow;
-    json_t * columns = json_obj (row,"columns");
+    json_t * columns = json_arr (row,"columns");
     size_t rowsize = json_array_size (columns);
-    message_assert((size_t)tab->ncols==rowsize);
+    message_assert((size_t)(tab->ncols)==rowsize);
     nrow = table_add_row (tab);
     for (int ncol=0;ncol<tab->ncols;ncol++) {
       table_set_cell_text (
@@ -328,11 +386,11 @@ insert_json_row (json_t *row, Table *tab) {
 
 static void
 insert_pkg_json_into_table (json_t *json_tab, Table *tab) {
-  json_t *json_rows = json_obj (json_tab, "rows");
+  json_t *json_rows = json_arr (json_tab, "rows");
   size_t size_rows = json_array_size (json_rows);
   json_t *json_selected_row = json_object_get (json_tab,"selected_row");
   json_t *draw;
-  int selected_row = json_selected_row ? json_integer_value (json_selected_row) : -1;
+  tab->selected_row = json_selected_row ? json_integer_value (json_selected_row) : -1;
   if ((draw = json_object_get (json_tab,"draw_vline"))) {
     tab->draw_vline = json_boolean_value (draw);
   }
@@ -343,32 +401,17 @@ insert_pkg_json_into_table (json_t *json_tab, Table *tab) {
     json_t * row = json_array_get (json_rows,i);
     insert_json_row (row,tab);
   }
-  table_draw (tab,TRUE);
-  if (selected_row>=0)
-    table_do_row_visible(tab,selected_row);
 }
-
-void
-pkg_table_package(json_t *pkg, WTable *wtab, const char *tabname) {
-  /* Данная функция предназначена для обработки
-   * табличных пакетов. Функция вставляет данные из пакета "table_data"
-   * в таблицу tabname
-   */
-  Table *tab = wtable_get_table (wtab,tabname);
-  table_clear_rows(tab);
-  insert_pkg_json_into_table (json_object_get(pkg,"table"), tab);
-  table_draw (tab,TRUE);
-}
-
 
 
 void
 ghfunc_table_update_bounds(__attribute__((unused)) gpointer key, gpointer value, gpointer user_data) {
-  WTable * wtab = WTABLE(user_data);
-  Widget * w = WIDGET(wtab);
+  //WTable * wtab = WTABLE(user_data);
+  //Widget * w = WIDGET(wtab);
   Table  * tab  = TABLE(value);
-  table_update_bounds(tab, w->y+2,w->x+1,w->lines-3,w->cols-2);
-  table_draw (tab,TRUE);
+  tab->lengths_outdated=TRUE;
+  //table_update_bounds(tab, w->y+2,w->x+1,w->lines-3,w->cols-2);
+  //table_compute_lengths (tab);
 }
 
 void
@@ -383,8 +426,8 @@ wtable_update_bound(WTable *wtab) {
 
 void
 wtable_update_node(WTable *wtab, json_t *pkg) {
-  json_t *json_chunk = json_object_get(pkg,"node_data");
-  const char *tabname = json_string_value (json_object_get (pkg,"table"));
+  json_t *json_chunk = json_obj (pkg,"node_data");
+  const char *tabname = json_str (pkg,"table_name");
   Table *tab = wtable_get_table(wtab,tabname);
   message_assert (json_chunk!=NULL);
   table_update_node_json(tab,json_chunk);
@@ -411,26 +454,34 @@ wtable_new (int y, int x, int height, int width)
 }
 
 void
-wtable_add_table(WTable *wtab, const char *tabname, const global_keymap_t * keymap) {
-  g_hash_table_insert (wtab->keymap, (gpointer) strdup(tabname), (gpointer) keymap);
-  g_hash_table_insert (wtab->tables, (gpointer) strdup(tabname), (gpointer) NULL);
+wtable_add_table(WTable *wtab, const char *table_name, const global_keymap_t * keymap) {
+  Table *tab;
+  g_hash_table_insert (wtab->keymap, (gpointer) strdup(table_name), (gpointer) keymap);
   g_hash_table_insert (
     wtab->tables_exemplars,
-    (gpointer) tabname,
+    (gpointer) strdup(table_name),
     (gpointer) g_hash_table_new (g_direct_hash, g_direct_equal));
-  selbar_add_button (wtab->selbar, tabname);
+  selbar_add_button (wtab->selbar, table_name);
+  tab = __wtable_exemplar_create (wtab, table_name, TABID_EMPTY_TABLE, NULL);
+  g_hash_table_insert (wtab->tables, (gpointer) strdup(table_name), (gpointer) tab);
+
 }
 
 void
-wtable_set_current_table(WTable *wtab, const char *tabname) {
+wtable_set_tab(WTable *wtab, const char *tabname) {
+  /*установить вкладку с текстом tabname текущей*/
+  message_assert (wtab!=NULL);
   wtab->tab = g_hash_table_lookup (wtab->tables, tabname);
+  message_assert (wtab->tab != NULL);
   wtab->current_table_name = wtab->tab->table_name;
   selbar_set_current_button(wtab->selbar,tabname);
+  wtab->tab->redraw = TRUE;
 }
 
 Table *
-wtable_get_table(WTable *wtab, const char *tabname) {
-  return g_hash_table_lookup (wtab->tables, tabname);
+wtable_get_table(WTable *wtab, const char *table_name) {
+  message_assert (table_name!=NULL);
+  return g_hash_table_lookup (wtab->tables, table_name);
 }
 
 static gpointer
@@ -796,7 +847,7 @@ table_update_node_json (Table *tab, json_t *json_chunk) {
     drop_childs(node);
     json_to_celltree(tab,node,json_chunk);
   }
-  table_draw (tab,TRUE);
+  tab->lengths_outdated=TRUE;
 }
 
 
@@ -1012,10 +1063,6 @@ table_process_mouse_click(Table *tab, mouse_event_t * event) {
     handled = tab->row_callback(row,nrow,ncol);
   }
 */
-  if (tab->redraw) {
-    table_draw (tab, TRUE);
-    table_draw (tab, FALSE);
-  }
 }
 
 static void
@@ -1333,7 +1380,31 @@ get_row_topbottom(Table * tab, table_row *row, int *t, int *b) {
 */
 
 static void
-table_draw(Table * tab, gboolean blank) {
+table_draw(Table * tab) {
+  /*see __table_draw*/
+  __table_draw(tab,FALSE);
+}
+
+static void
+table_compute_lengths(Table * tab) {
+  /*see __table_draw*/
+  Widget * w = WIDGET(tab->wtab);
+  table_update_bounds(tab, w->y+2,w->x+1,w->lines-3,w->cols-2);
+  __table_draw(tab,TRUE);
+  tab->lengths_outdated=FALSE;
+}
+
+
+static void
+__table_draw(Table * tab, gboolean blank) {
+  /* Отрисовка таблицы разделяется на две части:
+   * 1. Вычисление длин; 2. Непосредственная отрисовка на основле посчитанных длин.
+   * Пункт 1. нужно выполнять только если таблица поменялась или отрисовывается впервые.
+   * Например, при переключении вкладок таблицы остаются неизменными. Поэтому в случае
+   * переключения вкладок для отрисовки таблицы достаточно вызывать __table_draw (tab,FALSE)
+   * В случае, если таблицы была изменена, сначала вызывается __table_draw (tab,TRUE),
+   * потом __table_draw (tab,FALSE)
+   */
   GList *row;
   table_row *r;
   long offset;
@@ -1404,6 +1475,7 @@ table_update_colwidth(Table * tab) {
 static void
 table_update_bounds(Table * tab, long y, long x, long lines, long cols) {
   message_assert (tab!=NULL);
+  tab->lengths_outdated=TRUE;
   tab->x = x;
   tab->y = y;
   tab->lines = lines;
@@ -1416,6 +1488,7 @@ table_update_bounds(Table * tab, long y, long x, long lines, long cols) {
 static Table *
 table_new (const char *table_name, long ncols) {
   Table *tab;
+  message_assert (ncols>=0);
   tab = g_new0(Table,1);
   tab->ncols=ncols;
   tab->nrows=0;
@@ -1427,6 +1500,8 @@ table_new (const char *table_name, long ncols) {
   tab->hnodes = g_hash_table_new (g_direct_hash, g_direct_equal);
   tab->formula = formula_eq_col;
   tab->table_name = strdup(table_name);
+  tab->lengths_outdated=TRUE;
+  tab->selected_row=-1;
   return tab;
 }
 
@@ -1593,7 +1668,7 @@ wtable_callback (Widget * w, __attribute__((unused)) Widget * sender, widget_msg
     default:
       break;
   }
-  if (wtab->tab->redraw & REDRAW_TAB) {
+  if (NEED_REDRAW(wtab)) {
     wtable_draw(wtab);
   }
   widget_move (w, LINES, COLS);
@@ -1629,7 +1704,7 @@ table_do_row_visible(Table *tab, int nrow) {
     //table_draw (tab, FALSE);
 }
 
-void
+static void
 wtable_do_row_visible(WTable *wtab, const char *tabname, int nrow) {
   Table *tab = wtable_get_table(wtab,tabname);
   table_do_row_visible(tab,nrow);
@@ -1637,8 +1712,8 @@ wtable_do_row_visible(WTable *wtab, const char *tabname, int nrow) {
 
 void
 wtable_do_row_visible_json(WTable *wtab, json_t *pkg) {
-  const char *tabname=json_string_value (json_object_get (pkg,"table"));
-  int nrow=json_integer_value (json_object_get (pkg,"nrow"));
+  const char *tabname=json_str (pkg,"table_name");
+  int nrow=json_int (pkg,"nrow");
   message_assert (tabname!=NULL);
   wtable_do_row_visible(wtab,tabname,nrow);
 }
@@ -1650,12 +1725,18 @@ wtable_draw(WTable *wtab) {
   /*Fill widget space default color. If current table!=NULL, draw it.*/
   Table *tab = wtab->tab;
   tty_draw_box (WIDGET(wtab)->y+1, WIDGET(wtab)->x, WIDGET(wtab)->lines-1, WIDGET(wtab)->cols, FALSE);
-  if (tab) {
-    table_add_offset (tab,0); /*make offset valid*/
-    table_draw (tab,FALSE);
-    wtab->tab->redraw = REDRAW_NONE;
-    tty_setcolor(EDITOR_NORMAL_COLOR);
+  if (tab->lengths_outdated) {
+    table_compute_lengths(tab);
   }
+  if (tab->selected_row>=0) {
+    table_do_row_visible(tab,tab->selected_row);
+    tab->selected_row=-1;
+  }
+
+  table_add_offset (tab,0); /*make offset valid*/
+  table_draw (tab);
+  wtab->tab->redraw = REDRAW_NONE;
+  tty_setcolor(EDITOR_NORMAL_COLOR);
   selbar_draw (wtab->selbar);
 }
 
@@ -1779,7 +1860,7 @@ wtable_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
       break;
   }
 
-  if (wtab->tab->redraw & REDRAW_TAB) {
+  if (NEED_REDRAW(wtab)) {
     wtable_draw (wtab);
   }
   tty_gotoyx(LINES, COLS);
@@ -1807,6 +1888,7 @@ selbar_set_current_button(Selbar *selbar, const char *tabname) {
     SelbarButton * btn = SELBAR_BUTTON(button->data);
     if( !strcmp(btn->text,tabname) ) {
       btn->selected=TRUE;
+      selbar->redraw = TRUE;
       return;
     }
     button = button->next;
@@ -1902,8 +1984,7 @@ selbar_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
       button = g_list_find_custom ( selbar->buttons, &click_x, find_button_in_list );
       if (button) {
         SelbarButton *btn = SELBAR_BUTTON(button->data);
-        wtable_set_current_table(wtab,btn->text);
-        selbar->redraw = TRUE;
+        wtable_set_tab(wtab,btn->text);
       }
       break;
     default:

@@ -88,7 +88,7 @@ mcgdb_aux_dialog_gdbevt (WDialog *h) {
       message_assert (wtab!=NULL);
       break;
   }*/
-  tabname = json_str (pkg,"table");
+  tabname = json_str (pkg,"table_name");
   if (wtable_get_table(wtab_vars_regs,tabname)) {
     wtab=wtab_vars_regs;
   }
@@ -203,7 +203,7 @@ mcgdb_aux_dlg(void) {
   );
   wtable_add_table(vars_regs_table,"localvars",mcgdb_aux_map);
   wtable_add_table(vars_regs_table,"registers",mcgdb_aux_map);
-  wtable_set_current_table(vars_regs_table,"localvars");
+  wtable_set_tab(vars_regs_table,"localvars");
   wtable_update_bound(vars_regs_table);
 
   bt_th_table = wtable_new (
@@ -214,7 +214,7 @@ mcgdb_aux_dlg(void) {
   );
   wtable_add_table (bt_th_table,"backtrace",mcgdb_aux_map);
   wtable_add_table (bt_th_table,"threads",mcgdb_aux_map);
-  wtable_set_current_table (bt_th_table,"backtrace");
+  wtable_set_tab (bt_th_table,"backtrace");
   wtable_update_bound(bt_th_table);
 
   aux_dlg = dlg_create (FALSE, 0, 0, 0, 0, WPOS_FULLSCREEN, FALSE, NULL, mcgdb_aux_dialog_callback,

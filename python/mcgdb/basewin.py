@@ -8,7 +8,9 @@ import mcgdb
 from mcgdb.common import  pkgsend,pkgrecv,gdb_print,exec_cmd_in_gdb,gdb_stopped,\
                           error,get_prompt,debug,is_main_thread,exec_main
 
-
+TABID_TEMP=1 #Временный экземпляр таблицы. Используется для выведения пользователю каких-либо сообщений.
+#После того, как экземпляр был сделан текущим, и потом на место текущего экземпляра
+#был установлен другой экземпляр, данный экземпляр будет удален.
 
 
 class BaseWin(object):
