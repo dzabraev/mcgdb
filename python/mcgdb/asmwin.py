@@ -3,7 +3,7 @@
 import gdb
 
 import mcgdb.basewin
-from mcgdb.common import exec_main
+from mcgdb.common import exec_main, gdb_print
 from mcgdb.basewin import BaseWin
 from mcgdb.valuetochunks import ValueToChunks
 
@@ -94,10 +94,17 @@ class AsmWin(BaseWin,ValueToChunks):
       self.update_asm_code()
     return rc
 
+  def tablemsg_rows(self,msg):
+    col={'chunks':[self.text_chunk(msg)]}
+    row={'columns':[col]}
+    rows=[row]
+    return rows
+
+
   def tablemsg(self,msg):
-    return [{'columns':[
-          { 'chunks':[self.text_chunk(msg)] }
-        ]}]
+    rows=self.tablemsg_rows(msg)
+    table = {'rows':rows}
+    return {'cmd':'exemplar_create','table_name':'asm','id':1024,'table':table,'set':True,}
 
 
   def asm_to_chunks(self):
@@ -105,7 +112,7 @@ class AsmWin(BaseWin,ValueToChunks):
       return self.asm_to_chunks_1()
     except gdb.error as e:
       self.selected_asm_op_id = None
-      return self.tablemsg(str(e)),-1
+      return self.tablemsg_rows(str(e)),-1
 
   @exec_main
   def asm_to_chunks_1(self):
@@ -160,7 +167,7 @@ class AsmWin(BaseWin,ValueToChunks):
     try:
       funcname,start_addr,end_addr = self.get_selected_frame_func()
     except gdb.error as e:
-      pkg={'cmd':'exemplar_create','table_name':'asm','id':1024,'table':self.tablemsg(str(e))}
+      pkg=self.tablemsg(str(e))
       self.send(pkg)
       return
     #funcname_loc,start_addr_loc,end_addr_loc = self.get_func_addr_by_location(self.location)
@@ -178,13 +185,13 @@ class AsmWin(BaseWin,ValueToChunks):
       selected_row=None
       if not frame:
         #asm_rows = self.text_chunk('not frame selected')
-        asm_rows = self.tablemsg('not frame selected')
+        asm_rows = self.tablemsg_rows('not frame selected')
       else:
         asm_rows,selected_row = self.asm_to_chunks()
       table={'rows':asm_rows, 'draw_vline':False, 'draw_hline':False}
       if selected_row!=None:
         table['selected_row']=selected_row
-      pkg={'cmd':'exemplar_create','table_name':'asm','id':1024,'table':table,}
+      pkg={'cmd':'exemplar_create','table_name':'asm','id':1024,'table':table,'set':True}
       self.send(pkg)
     elif need_update_current_op:
       if self.selected_asm_op_id!=None:

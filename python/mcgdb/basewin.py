@@ -1,7 +1,7 @@
 #coding=utf8
 
 from abc import abstractmethod, abstractproperty
-import os,socket,ctypes,subprocess
+import os,socket,ctypes,subprocess,time,logging
 import gdb
 
 import mcgdb
@@ -108,6 +108,7 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     pass
 
   def send(self,msg):
+    logging.info('time={time} sender={type} pkgs={pkgs}'.format(type=self.type,pkgs=msg,time=time.time()))
     pkgsend(self.fd,msg)
 
   def recv(self):
