@@ -23,10 +23,12 @@ class AsmWin(BaseWin,ValueToChunks):
     self.start_addr=None
     self.end_addr=None
     self.pc=None
+    self.selected_asm_op_id=None
     self.current_display_blocks=None
     self.need_redisplay_asm=True
     self.reg_disas_line_addr = re.compile('(=>)?\s+(0x[0-9a-fA-F]+)')
     self.reg_find_addr = re.compile('\s0x[0-9a-fA-F]+\s')
+    self.addr_to_row=None
 
   def onclick_breakpoint(self,pkg): pass
 
@@ -104,6 +106,7 @@ class AsmWin(BaseWin,ValueToChunks):
   def tablemsg(self,msg):
     rows=self.tablemsg_rows(msg)
     table = {'rows':rows}
+    self.selected_asm_op_id=None
     return {'cmd':'exemplar_create','table_name':'asm','id':1024,'table':table,'set':True,}
 
 
@@ -183,33 +186,57 @@ class AsmWin(BaseWin,ValueToChunks):
     if need_update_asm_code:
       self.need_redisplay_asm=False
       selected_row=None
-      if not frame:
-        #asm_rows = self.text_chunk('not frame selected')
-        asm_rows = self.tablemsg_rows('not frame selected')
-      else:
-        asm_rows,selected_row = self.asm_to_chunks()
-      table={'rows':asm_rows, 'draw_vline':False, 'draw_hline':False}
-      if selected_row!=None:
-        table['selected_row']=selected_row
-      pkg={'cmd':'exemplar_create','table_name':'asm','id':1024,'table':table,'set':True}
-      self.send(pkg)
-    elif need_update_current_op:
-      if self.selected_asm_op_id!=None:
-        node_data={'id':self.selected_asm_op_id,'selected':False}
-        pkg={'cmd':'update_node','table_name':'asm','node_data':node_data}
+      id,data=self.id_get((start_addr,end_addr))
+      if id==None:
+        self.unselect_asm_op() #убираем красную линию
+        #текущая функция ранее не отрисовывалась. Необходимо создать новый экземпляр таблицы
+        if not frame:
+          #asm_rows = self.text_chunk('not frame selected')
+          asm_rows = self.tablemsg_rows('not frame selected')
+          self.selected_asm_op_id=None
+        else:
+          #генерация таблицы с asm-кодом текущей функции
+          asm_rows,selected_row = self.asm_to_chunks()
+        id=self.id_insert((start_addr,end_addr),{'addr_to_row':self.addr_to_row})
+        table={'rows':asm_rows, 'draw_vline':False, 'draw_hline':False}
+        if selected_row!=None:
+          table['selected_row']=selected_row
+        pkg={'cmd':'exemplar_create','table_name':'asm','id':id,'table':table,'set':True}
         self.send(pkg)
-      self.selected_asm_op_id = frame.pc()
-      node_data={'id':frame.pc(),'selected':True}
-      pkg={'cmd':'update_node','table_name':'asm', 'node_data':node_data}
-      self.send(pkg)
-      pkg={'cmd':'do_row_visible','table_name':'asm', 'nrow':self.addr_to_row[self.selected_asm_op_id]}
-      self.send(pkg)
+      else:
+        #экземпляр таблицы был отрисова ранее.
+        #убираем отметку с текущего экземпляра и загружаем ранее отрисовывавшийся
+        self.unselect_asm_op()
+        self.addr_to_row = data['addr_to_row']
+        self.exemplar_set(id,'asm')
+        self.select_asm_op()
+    elif need_update_current_op:
+      self.unselect_asm_op() #убираем красную линию со строки с инструкцией
+      self.select_asm_op() #помечаем текущую инструкцию красной линией
     self.start_addr=start_addr
     self.end_addr=end_addr
+    if frame:
+      assert self.selected_asm_op_id==frame.pc()
     if frame:
       self.pc=frame.pc()
     else:
       self.pc=None
+
+  def select_asm_op(self):
+    try:
+      frame = gdb.selected_frame()
+      pc=frame.pc()
+      self.select_node(pc,True)
+      self.selected_asm_op_id=pc
+      self.do_row_visible(self.addr_to_row[pc])
+    except gdb.error:
+      pass
+
+  def unselect_asm_op(self):
+    if self.selected_asm_op_id!=None:
+      self.select_node(self.selected_asm_op_id,False)
+      self.selected_asm_op_id=None
+
 
   def gdbevt_stop(self,evt):
     self.update_asm_code()

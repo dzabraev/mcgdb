@@ -67,18 +67,11 @@ mcgdb_aux_dialog_gdbevt (WDialog *h) {
   const char *tabname;
   event_from_gdb=NULL;
 
-/*
   switch(act->command) {
-    case MCGDB_LOCALVARS:
-    case MCGDB_REGISTERS:
-      wtab = wtab_vars_regs;
-      break;
-    case MCGDB_BACKTRACE:
-    case MCGDB_THREADS:
-      wtab = wtab_bt_th;
+    case MCGDB_EXIT:
       break;
     default:
-      tabname = json_str (pkg,"table");
+      tabname = json_str (pkg,"table_name");
       if (wtable_get_table(wtab_vars_regs,tabname)) {
         wtab=wtab_vars_regs;
       }
@@ -86,36 +79,11 @@ mcgdb_aux_dialog_gdbevt (WDialog *h) {
         wtab=wtab_bt_th;
       }
       message_assert (wtab!=NULL);
-      break;
-  }*/
-  tabname = json_str (pkg,"table_name");
-  if (wtable_get_table(wtab_vars_regs,tabname)) {
-    wtab=wtab_vars_regs;
-  }
-  else if (wtable_get_table(wtab_bt_th,tabname)) {
-    wtab=wtab_bt_th;
-  }
-  message_assert (wtab!=NULL);
-  /*
-  switch(act->command) {
-    case MCGDB_LOCALVARS:
-      pkg_table_package (pkg,wtab,"localvars");
-      break;
-    case MCGDB_REGISTERS:
-      pkg_table_package (pkg,wtab,"registers");
-      break;
-    case MCGDB_BACKTRACE:
-      pkg_table_package (pkg,wtab,"backtrace");
-      break;
-    case MCGDB_THREADS:
-      pkg_table_package (pkg,wtab,"threads");
-      break;
-    default:
       wtable_gdbevt_common (wtab, act);
-  }*/
-  wtable_gdbevt_common (wtab, act);
-  free_gdb_evt (act);
+      break;
+  }
 
+  free_gdb_evt (act);
 }
 
 

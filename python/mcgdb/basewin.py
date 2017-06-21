@@ -43,6 +43,9 @@ class BaseWin(object):
     manually=kwargs.pop('manually',False)
     cmd=self.make_runwin_cmd()
     complete_cmd=self.gui_window_cmd.format(cmd=cmd)
+    self.id_exemplar_storage={}
+    self.last_exemplar_id=1024
+
     if manually:
       gdb_print('''Execute manually `{cmd}` for start window'''.format(cmd=cmd))
     else:
@@ -63,6 +66,15 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
   #@abstractproperty
   #def subentities(self):
   #  pass
+
+  def id_get(self,key):
+    return self.id_exemplar_storage.get(key,(None,None))
+  def id_insert(self,key,data):
+    assert key not in self.id_exemplar_storage
+    id=self.last_exemplar_id
+    self.last_exemplar_id+=1
+    self.id_exemplar_storage[key]=(id,data)
+    return id
 
   def make_runwin_cmd(self):
     ''' Данный метод формирует shell-команду для запуска окна с editor.
@@ -218,10 +230,18 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     except:
       pass
 
+  def exemplar_set(self,id,table_name):
+    pkg={'cmd':'exemplar_set','id':id,'table_name':table_name}
+    self.send(pkg)
 
+  def select_node(self,node_id,selected):
+    node_data={'id':node_id,'selected':selected}
+    pkg={'cmd':'update_node','table_name':'asm','node_data':node_data}
+    self.send(pkg)
 
-
-
+  def do_row_visible(self,nrow):
+    pkg={'cmd':'do_row_visible','table_name':'asm', 'nrow':nrow}
+    self.send(pkg)
 
 
 
