@@ -326,7 +326,7 @@ wtable_exemplar_create (WTable *wtab, json_t *pkg) {
 /*
   pkg = {
     'cmd' : 'exemplar_create'
-    'id' : int, #id must be >= 1024
+    'id' : int,
     'table_name' : str,
     'table' : str,
     'set' : Bool, #if True, this exemplar will be set as current for table_name
@@ -335,8 +335,6 @@ wtable_exemplar_create (WTable *wtab, json_t *pkg) {
   const char *table_name = json_str (pkg, "table_name");
   gint id = json_int (pkg, "id");
   json_t *table = json_obj (pkg, "table");
-
-  message_assert (id>=1024);
 
    __wtable_exemplar_create (wtab, table_name, id, table);
 
@@ -1009,11 +1007,13 @@ process_cell_tree_mouse_callbacks (Table *tab, GNode *root, int y, int x) {
         //message_assert (CHUNK(node)->str);
         if (CHUNK(node)->str)
           free (CHUNK(node)->str);
+        drop_childs(node);
         asprintf(&CHUNK(node)->str,"<Wait change: %s>", f);
         json_decref (CHUNK(node)->onclick_data);
         CHUNK(node)->onclick_data=NULL;
         CHUNK(node)->color=EDITOR_NORMAL_COLOR;
         tab->redraw|=REDRAW_TAB;
+        tab->lengths_outdated=TRUE; /*была изменена текстовая строка=>надо пересчитать длины*/
       }
       g_free (f);
       handled=TRUE;
