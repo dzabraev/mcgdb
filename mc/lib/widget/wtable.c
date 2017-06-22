@@ -1135,6 +1135,15 @@ in_printable_area (int colcnt, int left_bound, int right_bound) {
   return colcnt<right_bound && colcnt>=left_bound;
 }
 
+static void
+insert_value_3(GArray *arr, int val, size_t *idx) {
+  if (arr->len <= *idx) {
+    g_array_set_size (arr,arr->len+3);
+  }
+  g_array_index (arr,int,*idx) = val;
+  (*idx)++;
+}
+
 static int
 print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int left_bound, int right_bound, Table * tab, int * rowcnt, gboolean blank) {
   const char * p;
@@ -1149,18 +1158,19 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
    * `x_start`, `x_stop` есть координаты начала и конца строки.
    */
   GArray * coord;
+  size_t coord_idx=0;
   message_assert (tab!=NULL);
   coord = chunk_data->coord;
-  if (blank && coord->len)
-    g_array_remove_range (coord, 0, coord->len);
+  //if (blank && coord->len)
+  //  g_array_remove_range (coord, 0, coord->len);
   p = chunk_data->str;
   if (!p)
     p="???";
   offset=ROW_OFFSET(tab,rowcnt[0]);
   //offset_start = offset;
   if (blank) {
-    g_array_append_val (coord, offset);
-    g_array_append_val (coord, start_pos);
+    insert_value_3 (coord,offset,&coord_idx);
+    insert_value_3 (coord,start_pos,&coord_idx);
   }
   if (!blank)
     tty_gotoyx(offset,start_pos);
@@ -1170,15 +1180,15 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
        *делаем перенос строки.*/
       int colcnt1 = MIN (colcnt,x2);
       if (blank)
-        g_array_append_val (coord, colcnt1);
+        insert_value_3 (coord,colcnt1,&coord_idx);
       rowcnt[0]++;
       offset=ROW_OFFSET(tab,rowcnt[0]);
       if (!blank && offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
         tty_gotoyx(offset,x1);
       colcnt=x1;
       if (blank) {
-        g_array_append_val (coord, offset);
-        g_array_append_val (coord, colcnt);
+        insert_value_3 (coord,offset,&coord_idx);
+        insert_value_3 (coord,colcnt,&coord_idx);
       }
     }
     else if (
@@ -1196,7 +1206,7 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
     newline=FALSE;
     if (!*p) {
       if (blank)
-        g_array_append_val (coord, colcnt);
+        insert_value_3 (coord,colcnt,&coord_idx);
       break;
     }
     switch(*p) {
@@ -1228,22 +1238,14 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
       colcnt++;
     }
   }
+  message_assert (coord->len>=coord_idx);
+  if (blank && (coord_idx < coord->len)) {
+    g_array_remove_range (coord, coord_idx, coord->len - coord_idx);
+  }
   message_assert (coord->len%3==0);
   return colcnt;
 }
 
-/*
-static int
-print_str(const char * str, int x1, int x2, int start_pos, int left_bound, int right_bound, Table * tab, int * rowcnt) {
-  int ret_start_pos;
-  cell_data_t * cell_data = cell_data_new ();
-  cell_data->str = str;
-  ret_start_pos = print_str_chunk(cell_data, x1, x2, start_pos, left_bound, right_bound, tab, rowcnt);
-  cell_data->str = NULL;
-  cell_data_free (cell_data);
-  return ret_start_pos;
-}
-*/
 
 static int
 get_chunk_horiz_shift(cell_data_t * chunk_data) {
@@ -1272,30 +1274,22 @@ print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int r
   else {
     type_code_t type_code = CHUNK(chunk)->type_code;
     GArray * coord = CHUNK(chunk)->coord;
-//    const char *str_begin=0, *str_end=0;
     int horiz_shift = get_chunk_horiz_shift (CHUNK(chunk));
     int start_pos_1;
     int offset;
+    size_t coord_idx=0;
     GNode *child = g_node_first_child (chunk);
 
-//    if (type_code == TYPE_CODE_STRUCT || type_code == TYPE_CODE_UNION) {
-//      str_begin="{\n";
-//      str_end="}\n";
-//    }
-//    else if (type_code == TYPE_CODE_ARRAY) {
-//      str_begin="[\n";
-//      str_end="]\n";
-//    }
-    if (blank && coord->len>0)
-      g_array_remove_range (coord, 0, coord->len);
+    if (blank) {
+      /*здесь длина coord должна быть строго 4*/
+      g_array_set_size (coord,4);
+    }
+    message_assert (coord->len==4);
     offset=ROW_OFFSET(tab,rowcnt[0]);
     if (blank) {
-      g_array_append_val (coord, offset);
-      g_array_append_val (coord, start_pos);
+      g_array_index (coord,int,0) = offset;
+      g_array_index (coord,int,1) = start_pos;
     }
-//    if (str_begin) {
-//      start_pos = print_str(str_begin,x1,x2,start_pos,left_bound,right_bound,tab,rowcnt);
-//    }
     /*если chunk есть структура или массив, то начала печатается открывающая скобка с ПЕРЕНОСОМ строки
      *затем печатается тело структуры или массива, после чего печатается закрыающая скобка. Причем
      *тело печатается со сдвигом вправо.
@@ -1305,14 +1299,13 @@ print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int r
       start_pos_1 = print_chunks (child,x1+horiz_shift,x2+horiz_shift,start_pos_1,left_bound,right_bound,tab,rowcnt,blank);
       child = g_node_next_sibling (child);
     }
-  //  if (str_end)
-  //    start_pos_1 = print_str(str_end,x1,x2,x1,left_bound,right_bound,tab,rowcnt);
     offset=ROW_OFFSET(tab,rowcnt[0]);
     start_pos = (type_code == TYPE_CODE_STRUCT || type_code == TYPE_CODE_ARRAY || type_code == TYPE_CODE_UNION) ? (x1) : (start_pos_1);
     if (blank) {
-      g_array_append_val (coord, offset);
-      g_array_append_val (coord, start_pos);
+      g_array_index (coord,int,2) = offset;
+      g_array_index (coord,int,3) = start_pos;
     }
+    message_assert (coord->len==4);
   }
 
   return start_pos;
