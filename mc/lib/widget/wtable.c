@@ -65,7 +65,8 @@ static void         table_update_node_json (Table *tab, json_t *json_chunk);
 
 static int          formula_eq_col(const Table * tab, int ncol);
 //static int          formula_adapt_col(const Table * tab, int ncol);
-static void         table_do_row_visible(Table *tab, int nrow);
+static void         table_do_row_visible(Table *tab, table_row *row);
+static void         table_do_rownum_visible(Table *tab, int nrow);
 static void         table_set_offset(Table *tab, int off);
 static void         table_add_offset(Table *tab, int off);
 WTable  *           find_wtable (WDialog *h);
@@ -113,7 +114,7 @@ static void
 wtable_insert_exemplar (WTable *wtab, Table *tab, const char *table_name, gint id);
 
 static void
-wtable_update_node(WTable *wtab, json_t *pkg);
+wtable_update_nodes(WTable *wtab, json_t *pkg);
 
 static void
 wtable_do_row_visible(WTable *wtab, const char *tabname, gint id, int nrow);
@@ -366,8 +367,8 @@ wtable_gdbevt_common (WTable *wtab, gdb_action_t * act) {
       wtable_exemplar_copy (wtab,pkg);
       handled=TRUE;
       break;
-    case MCGDB_UPDATE_NODE:
-      wtable_update_node(wtab,pkg);
+    case MCGDB_UPDATE_NODES:
+      wtable_update_nodes(wtab,pkg);
       handled=TRUE;
       break;
     case MCGDB_DO_ROW_VISIBLE:
@@ -424,7 +425,8 @@ ghfunc_table_update_bounds(__attribute__((unused)) gpointer key, gpointer value,
   //WTable * wtab = WTABLE(user_data);
   //Widget * w = WIDGET(wtab);
   Table  * tab  = TABLE(value);
-  tab->lengths_outdated=TRUE;
+  //tab->lengths_outdated=TRUE;
+  tab->tabsize_changed=TRUE;
   //table_update_bounds(tab, w->y+2,w->x+1,w->lines-3,w->cols-2);
   //table_compute_lengths (tab);
 }
@@ -439,13 +441,15 @@ wtable_update_bound(WTable *wtab) {
   selbar->lines = 1;
 }
 
-void
-wtable_update_node(WTable *wtab, json_t *pkg) {
-  json_t *json_chunk = json_obj (pkg,"node_data");
+static void
+wtable_update_nodes(WTable *wtab, json_t *pkg) {
   const char *tabname = json_str (pkg,"table_name");
   Table *tab = wtable_get_table(wtab,tabname);
-  message_assert (json_chunk!=NULL);
-  table_update_node_json(tab,json_chunk);
+  json_t *nodesdata = json_arr(pkg,"nodes");
+  for (size_t idx=0;idx<json_array_size(nodesdata); idx++) {
+    json_t *json_chunk = json_array_get(nodesdata,idx);
+    table_update_node_json(tab,json_chunk);
+  }
 }
 
 WTable *
@@ -521,6 +525,7 @@ table_row_copy(Table *tab, const table_row *row) {
   new_row->ncols=row->ncols;
   new_row->y1 = row->y1;
   new_row->y2 = row->y2;
+  new_row->rowsize_changed = row->rowsize_changed;
   new_row->columns  = (GNode **)g_new0(GNode *, ncols);
   new_row->offset   = (int *)g_new(int, ncols);
   new_row->xl       = (int *)g_new(int, ncols);
@@ -543,6 +548,7 @@ table_row_alloc(long ncols) {
   row->offset   = (int *)g_new(int, ncols);
   row->xl       = (int *)g_new(int, ncols);
   row->xr       = (int *)g_new(int, ncols);
+  row->rowsize_changed=TRUE;
   for (int col=0;col<ncols;col++) {
     row->columns[col] = NULL;
     row->offset[col]=0;
@@ -811,6 +817,7 @@ update_chunk (cell_data_t * data, json_t * json_data) {
 static GNode *
 table_add_node(Table *tab, GNode * parent, json_t *json_data) {
   cell_data_t *data = cell_data_new_from_json (json_data);
+  data->row = CHUNK(parent)->row;
   GNode *node = g_node_append_data (parent,data);
   if (data->id)
     g_hash_table_insert ( tab->hnodes, GINT_TO_POINTER(data->id), node);
@@ -827,12 +834,13 @@ drop_childs_free (GNode *node, gpointer data) {
 
 static void
 drop_childs (GNode *node) {
-  GNode *child = g_node_first_child (node);
+  GNode *child = g_node_first_child (node), *next_child;
   while (child) {
+    next_child = g_node_next_sibling (child);
     g_node_unlink (child);
     g_node_traverse (child,G_IN_ORDER,G_TRAVERSE_ALL,-1,drop_childs_free,0);
     g_node_destroy (child);
-    child = g_node_first_child (node);
+    child = next_child;
   }
 }
 
@@ -862,7 +870,11 @@ table_update_node_json (Table *tab, json_t *json_chunk) {
     drop_childs(node);
     json_to_celltree(tab,node,json_chunk);
   }
-  tab->lengths_outdated=TRUE;
+  tab->rowsize_changed=TRUE;
+  CHUNK(node)->row->rowsize_changed=TRUE;
+  if (json_boolean_value(json_object_get(json_chunk,"visible"))) {
+    tab->selected_row = g_list_index(tab->rows,CHUNK(node)->row);
+  }
 }
 
 
@@ -878,6 +890,7 @@ table_set_cell_text (Table *tab, int nrow, int ncol, json_t *json_data) {
     g_node_destroy (row->columns[ncol]);
   cell_data = cell_data_new_from_json (json_data);
   cell_root = g_node_new (cell_data);
+  CHUNK(cell_root)->row=row;
   row->columns[ncol] = cell_root;
   if (json_object_get (json_data, "id"))
     g_hash_table_insert (tab->hnodes, GINT_TO_POINTER(cell_data->id), cell_root);
@@ -1013,7 +1026,8 @@ process_cell_tree_mouse_callbacks (Table *tab, GNode *root, int y, int x) {
         CHUNK(node)->onclick_data=NULL;
         CHUNK(node)->color=EDITOR_NORMAL_COLOR;
         tab->redraw|=REDRAW_TAB;
-        tab->lengths_outdated=TRUE; /*была изменена текстовая строка=>надо пересчитать длины*/
+        tab->rowsize_changed=TRUE; /*была изменена текстовая строка=>надо пересчитать длины*/
+        CHUNK(node)->row->rowsize_changed=TRUE;
       }
       g_free (f);
       handled=TRUE;
@@ -1277,7 +1291,6 @@ print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int r
     int horiz_shift = get_chunk_horiz_shift (CHUNK(chunk));
     int start_pos_1;
     int offset;
-    size_t coord_idx=0;
     GNode *child = g_node_first_child (chunk);
 
     if (blank) {
@@ -1290,7 +1303,7 @@ print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int r
       g_array_index (coord,int,0) = offset;
       g_array_index (coord,int,1) = start_pos;
     }
-    /*если chunk есть структура или массив, то начала печатается открывающая скобка с ПЕРЕНОСОМ строки
+    /*если chunk есть структура или массив, то сначала печатается открывающая скобка с ПЕРЕНОСОМ строки
      *затем печатается тело структуры или массива, после чего печатается закрыающая скобка. Причем
      *тело печатается со сдвигом вправо.
     */
@@ -1362,6 +1375,7 @@ table_draw_row (Table * tab, table_row *row, gboolean blank) {
     tab->last_row_pos += max_rowcnt;
     row->y2 = ROW_OFFSET(tab,0);
   }
+  row->rowsize_changed=FALSE;
 }
 /*
 static int
@@ -1401,9 +1415,41 @@ table_compute_lengths(Table * tab) {
   Widget * w = WIDGET(tab->wtab);
   table_update_bounds(tab, w->y+2,w->x+1,w->lines-3,w->cols-2);
   __table_draw(tab,TRUE);
-  tab->lengths_outdated=FALSE;
 }
 
+static void
+add_node_y_shift(GNode *node, size_t shift) {
+  GArray *coord = CHUNK(node)->coord;
+  if (coord->len==4) {
+    GNode *child;
+    g_array_index (coord,int,0)+=shift;
+    g_array_index (coord,int,2)+=shift;
+    child = g_node_first_child (node);
+    while (child) {
+      add_node_y_shift (child,shift);
+      child = g_node_next_sibling (child);
+    }
+  }
+  else if (coord->len%3==0) {
+    for (unsigned int i=0;i<coord->len;i+=3) {
+      g_array_index (coord,int,i)+=shift;
+    }
+  }
+  else {
+    message_assert (coord->len%3==0 || coord->len==4);
+  }
+}
+
+static void
+table_row_shift(Table *tab, table_row *row, size_t row_shift) {
+  /*рибавить ко всем нодам строки row_shift*/
+  for(int i=0;i<tab->ncols;i++) {
+    add_node_y_shift(row->columns[i],row_shift);
+  }
+  tab->last_row_pos += row->y2-row->y1;
+  row->y2+=row_shift;
+  row->y1+=row_shift;
+}
 
 static void
 __table_draw(Table * tab, gboolean blank) {
@@ -1419,6 +1465,7 @@ __table_draw(Table * tab, gboolean blank) {
   table_row *r;
   long offset;
   int rtop,rbottom,tt,tb;
+  size_t row_shift=0;
   message_assert (tab!=NULL);
   row = tab->rows;
   tty_fill_region(tab->y,tab->x,tab->lines,tab->cols,' ');
@@ -1429,9 +1476,20 @@ __table_draw(Table * tab, gboolean blank) {
   if (blank) {
     /*ничего не рисуется, только высчитывается длина*/
     while(row) {
+      int y2_saved;
       r = TABROW(row);
-      table_draw_row (tab,r,blank);
-      offset=ROW_OFFSET(tab,0);
+      y2_saved = r->y2;
+      if (r->rowsize_changed || tab->tabsize_changed) {
+        table_draw_row (tab,r,blank);
+      }
+      else if(row_shift) {
+        table_row_shift (tab,r,row_shift);
+      }
+      else {
+        tab->last_row_pos += r->y2-r->y1;
+      }
+      row_shift = (r->y2 - y2_saved);
+      //offset=ROW_OFFSET(tab,0);
       if (tab->draw_hline) {
         tab->last_row_pos++;
       }
@@ -1467,6 +1525,8 @@ __table_draw(Table * tab, gboolean blank) {
     for(int i=1;i<tab->ncols;i++)
       tty_draw_vline(tab->y,tab->colstart[i],mc_tty_frm[MC_TTY_FRM_VERT],tab->lines);
   }
+  tab->tabsize_changed = FALSE;
+  tab->rowsize_changed = FALSE;
 }
 
 static void
@@ -1485,7 +1545,7 @@ table_update_colwidth(Table * tab) {
 static void
 table_update_bounds(Table * tab, long y, long x, long lines, long cols) {
   message_assert (tab!=NULL);
-  tab->lengths_outdated=TRUE;
+  tab->tabsize_changed=FALSE;
   tab->x = x;
   tab->y = y;
   tab->lines = lines;
@@ -1510,7 +1570,8 @@ table_new (const char *table_name, long ncols) {
   tab->hnodes = g_hash_table_new (g_direct_hash, g_direct_equal);
   tab->formula = formula_eq_col;
   tab->table_name = strdup(table_name);
-  tab->lengths_outdated=TRUE;
+  tab->tabsize_changed=TRUE;
+  tab->rowsize_changed=TRUE;
   tab->selected_row=-1;
   return tab;
 }
@@ -1670,7 +1731,6 @@ wtable_callback (Widget * w, __attribute__((unused)) Widget * sender, widget_msg
         case CK_MCGDB_Until:
           mcgdb_shellcmd ("until");
           break;
-
         default:
           break;
       }
@@ -1687,32 +1747,36 @@ wtable_callback (Widget * w, __attribute__((unused)) Widget * sender, widget_msg
 
 
 static void
-table_do_row_visible(Table *tab, int nrow) {
-    table_row * selrow;
-    int off;
+table_do_rownum_visible(Table *tab, int nrow) {
+  table_row * selrow;
+  message_assert (tab!=NULL);
+  message_assert (nrow < tab->nrows);
+  selrow = TABROW(g_list_nth (tab->rows, nrow));
+  table_do_row_visible(tab,selrow);
+}
 
-    message_assert (tab!=NULL);
-    message_assert (nrow < tab->nrows);
+static void
+table_do_row_visible(Table *tab, table_row *selrow) {
+  int off;
 
-    selrow = TABROW(g_list_nth (tab->rows, nrow));
-    if (selrow->y1 <= TAB_TOP(tab) &&  selrow->y2 >= TAB_TOP(tab)) {
-      /* верхняя строка ячейки не видна, нижняя видна
-       * Делаем, что бы верхняя была видна
-       */
-      off = selrow->y1 - (TAB_TOP(tab) + 1);
-    }
-    else if (selrow->y1 <= TAB_BOTTOM(tab) &&  selrow->y2 >= TAB_BOTTOM(tab)) {
-      /*нижняя не видна, верхняя видна*/
-      off = selrow->y2 - (TAB_BOTTOM(tab) - 1);
-    }
-    //else if (TAB_BOTTOM(tab)<=selrow->y1 || TAB_TOP(tab)>=selrow->y2) {
-    else {
-     /*ничего не видно, перемещаем ячейку в центр*/
-     off = (selrow->y2 + selrow->y1)/2 - (TAB_BOTTOM(tab)+TAB_TOP(tab))/2;
-    }
-    table_add_offset (tab,off);
-    tab->redraw=TRUE;
-    //table_draw (tab, FALSE);
+  if (selrow->y1 <= TAB_TOP(tab) &&  selrow->y2 >= TAB_TOP(tab)) {
+    /* верхняя строка ячейки не видна, нижняя видна
+     * Делаем, что бы верхняя была видна
+     */
+    off = selrow->y1 - (TAB_TOP(tab) + 1);
+  }
+  else if (selrow->y1 <= TAB_BOTTOM(tab) &&  selrow->y2 >= TAB_BOTTOM(tab)) {
+    /*нижняя не видна, верхняя видна*/
+    off = selrow->y2 - (TAB_BOTTOM(tab) - 1);
+  }
+  //else if (TAB_BOTTOM(tab)<=selrow->y1 || TAB_TOP(tab)>=selrow->y2) {
+  else {
+   /*ничего не видно, перемещаем ячейку в центр*/
+   off = (selrow->y2 + selrow->y1)/2 - (TAB_BOTTOM(tab)+TAB_TOP(tab))/2;
+  }
+  table_add_offset (tab,off);
+  tab->redraw=TRUE;
+  //table_draw (tab, FALSE);
 }
 
 static void
@@ -1721,7 +1785,7 @@ wtable_do_row_visible(WTable *wtab, const char *tabname, gint id, int nrow) {
   //Table *tab = wtable_get_table(wtab,tabname);
   tab->selected_row = nrow;
   tab->redraw = REDRAW_TAB;
-  table_do_row_visible(tab,nrow);
+  table_do_rownum_visible(tab,nrow);
 }
 
 void
@@ -1740,11 +1804,11 @@ wtable_draw(WTable *wtab) {
   /*Fill widget space default color. If current table!=NULL, draw it.*/
   Table *tab = wtab->tab;
   tty_draw_box (WIDGET(wtab)->y+1, WIDGET(wtab)->x, WIDGET(wtab)->lines-1, WIDGET(wtab)->cols, FALSE);
-  if (tab->lengths_outdated) {
+  if (tab->tabsize_changed || tab->rowsize_changed) {
     table_compute_lengths(tab);
   }
   if (tab->selected_row>=0) {
-    table_do_row_visible(tab,tab->selected_row);
+    table_do_rownum_visible(tab,tab->selected_row);
     tab->selected_row=-1;
   }
 

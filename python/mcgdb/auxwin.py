@@ -237,18 +237,21 @@ class RegistersTable(BaseSubentity):
       rows_regs.append(row)
     return {'rows' : rows_regs}
 
-  def update_regnode_pkg (self,node_data):
-    return {'cmd':'update_node','table_name':'registers', 'node_data':node_data}
+  def update_regnodes (self,nodes_data):
+    return {'cmd':'update_nodes', 'table_name':'registers', 'nodes':nodes_data}
 
-  def pkgs_update_register(self,regname):
+  #def update_regnode_data(self,node_data):
+  #  return {'node_data':node_data}
+
+  def update_register_data(self,regname):
     chunks = self.get_register_chunks(regname)
     chunks_with_id = self.filter_chunks_with_id(chunks)
-    pkgs=[]
+    nodes_data=[]
     for chunk in chunks_with_id:
       assert 'id' in chunk
-      pkgs.append(self.update_regnode_pkg (chunk))
-    assert (len(pkgs)>0)
-    return pkgs
+      #nodes_data.append(self.update_regnode_data (chunk))
+      nodes_data.append(chunk)
+    return nodes_data
 
 
   @exec_main
@@ -258,7 +261,7 @@ class RegistersTable(BaseSubentity):
     if not self.registers_drawn:
       self.update_registers_initial()
       return
-    packages=[]
+    nodesdata=[]
     tabidx,tabdata=INDEX.get(self.subentity_name)
     for regname in self.regnames:
       regvalue = valcache(regname)
@@ -267,9 +270,9 @@ class RegistersTable(BaseSubentity):
       #raise exception:
       #Python Exception <class 'gdb.error'> That operation is not available on integers of more than 8 bytes.:
       if str(tabdata[regname])!=str(regvalue):
-        packages+=self.pkgs_update_register(regname)
+        nodesdata+=self.update_register_data(regname)
         tabdata[regname]=regvalue
-    self.send(packages)
+    self.send(self.update_regnodes(nodesdata))
 
   #GDB EVENTS
   def gdbevt_exited(self,pkg):

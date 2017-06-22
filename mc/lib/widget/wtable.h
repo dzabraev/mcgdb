@@ -59,6 +59,7 @@ typedef struct {
   long y2;
   int *xl;
   int *xr;
+  gboolean rowsize_changed;
 } table_row;
 
 typedef enum table_type_id {
@@ -103,6 +104,7 @@ typedef struct celldata {
   json_t *onclick_data;
   gboolean onclick_user_input;
   gint id;
+  table_row *row;
 } cell_data_t;
 
 typedef struct Table {
@@ -135,11 +137,12 @@ typedef struct Table {
   GHashTable *hnodes;
   char *table_name;
   gint id;
-  gboolean lengths_outdated;
+  gboolean tabsize_changed; /*у таблицы был изменен размер*/
+  gboolean rowsize_changed; /*в таблицы была изменана хотя бы одна строка. Например, пакетом update_node или waittext'ом*/
 } Table;
 
 #define TABLE_IS_TMP(tab) ((tab)->id==TABID_TMP)
-#define NEED_REDRAW(wtab) ((wtab)->tab->lengths_outdated || (wtab)->tab->redraw)
+#define NEED_REDRAW(wtab) ((wtab)->tab->tabsize_changed || (wtab)->tab->rowsize_changed || (wtab)->tab->redraw)
 
 typedef struct WTable
 {

@@ -70,6 +70,8 @@ mcgdb_aux_dialog_gdbevt (WDialog *h) {
   switch(act->command) {
     case MCGDB_EXIT:
       break;
+    case MCGDB_NONE:
+      break;
     default:
       tabname = json_str (pkg,"table_name");
       if (wtable_get_table(wtab_vars_regs,tabname)) {

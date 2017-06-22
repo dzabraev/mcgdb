@@ -234,9 +234,9 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     pkg={'cmd':'exemplar_set','id':id,'table_name':table_name}
     self.send(pkg)
 
-  def select_node(self,node_id,selected):
+  def select_node(self,tabname,node_id,selected):
     node_data={'id':node_id,'selected':selected}
-    pkg={'cmd':'update_node','table_name':'asm','node_data':node_data}
+    pkg={'cmd':'update_nodes', 'table_name':tabname, 'nodes':[node_data]}
     self.send(pkg)
 
   def do_row_visible(self,nrow):

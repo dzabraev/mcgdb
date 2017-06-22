@@ -170,6 +170,7 @@ class AsmWin(BaseWin,ValueToChunks):
     try:
       funcname,start_addr,end_addr = self.get_selected_frame_func()
     except gdb.error as e:
+      self.unselect_asm_op()
       pkg=self.tablemsg(str(e))
       self.send(pkg)
       return
@@ -193,6 +194,7 @@ class AsmWin(BaseWin,ValueToChunks):
         if not frame:
           #asm_rows = self.text_chunk('not frame selected')
           asm_rows = self.tablemsg_rows('not frame selected')
+          self.unselect_asm_op()
           self.selected_asm_op_id=None
         else:
           #генерация таблицы с asm-кодом текущей функции
@@ -226,7 +228,7 @@ class AsmWin(BaseWin,ValueToChunks):
     try:
       frame = gdb.selected_frame()
       pc=frame.pc()
-      self.select_node(pc,True)
+      self.select_node('asm',pc,True)
       self.selected_asm_op_id=pc
       self.do_row_visible(self.addr_to_row[pc])
     except gdb.error:
@@ -234,8 +236,25 @@ class AsmWin(BaseWin,ValueToChunks):
 
   def unselect_asm_op(self):
     if self.selected_asm_op_id!=None:
-      self.select_node(self.selected_asm_op_id,False)
+      self.select_node('asm',self.selected_asm_op_id,False)
       self.selected_asm_op_id=None
+
+  def update_asm_op(self):
+    data=[]
+    if self.selected_asm_op_id:
+      data.append({'id':self.selected_asm_op_id,'selected':False})
+      self.selected_asm_op_id=None
+    pc=None
+    try:
+      frame = gdb.selected_frame()
+      pc=frame.pc()
+      data.append({'id':pc,'selected':True,'visible':True})
+      self.selected_asm_op_id=pc
+    except gdb.error:
+      pass
+    if data:
+      pkg={'cmd':'update_nodes', 'table_name':'asm', 'nodes':data}
+      self.send(pkg)
 
 
   def gdbevt_stop(self,evt):

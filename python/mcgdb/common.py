@@ -28,8 +28,9 @@ if os.path.exists(LOG_FILENAME):
 debug_messages=False
 level = logging.CRITICAL
 #level = logging.WARNING
-#level = logging.INFO
 #level = logging.DEBUG
+#level = logging.INFO
+
 logging.basicConfig(filename=LOG_FILENAME,format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
 
 

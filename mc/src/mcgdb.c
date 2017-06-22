@@ -287,8 +287,8 @@ get_command_num(json_t *pkg) {
     else if (compare_cmd("error_message")) {
       return MCGDB_ERROR_MESSAGE;
     }
-    else if (compare_cmd("update_node")) {
-      return MCGDB_UPDATE_NODE;
+    else if (compare_cmd("update_nodes")) {
+      return MCGDB_UPDATE_NODES;
     }
     else if (compare_cmd("do_row_visible")) {
       return MCGDB_DO_ROW_VISIBLE;
