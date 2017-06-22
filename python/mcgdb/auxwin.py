@@ -31,7 +31,7 @@ class BaseSubentity(ValueToChunks):
     self.send(pkg)
 
   def clear_table(self):
-    set_message_in_table ('')
+    self.set_message_in_table ('')
 
 
 class BacktraceTable(BaseSubentity):
