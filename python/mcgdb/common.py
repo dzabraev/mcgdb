@@ -25,10 +25,10 @@ LOG_FILENAME='/tmp/mcgdb.log'
 if os.path.exists(LOG_FILENAME):
   os.remove(LOG_FILENAME)
 #debug_messages=True
-debug_messages=True
+debug_messages=False
 level = logging.CRITICAL
-level = logging.WARNING
-level = logging.INFO
+#level = logging.WARNING
+#level = logging.INFO
 #level = logging.DEBUG
 logging.basicConfig(filename=LOG_FILENAME,format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
 
@@ -692,13 +692,21 @@ class GEThread(object):
     if cmd=='check_breakpoint':
       breakpoint_queue.process()
     else:
+      died_entity=[]
       for fd in self.fte:
         entity=self.fte[fd]
-        res = entity.process_pkg (pkg)
+        try:
+          res = entity.process_pkg (pkg)
+        except OSError:
+          #windows was closed
+          died_entity.append(fd)
+          res=None
         if res:
           if debug_messages:
             logging.info('time={time} sender={type} pkgs={pkgs}'.format(type=entity.type,pkgs=res,time=time.time()))
           self.entities_evt_queue+=res
+      for fd in died_entity:
+        del self.fte[fd]
 
 
   def __call__(self):
