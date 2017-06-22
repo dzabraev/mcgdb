@@ -151,11 +151,11 @@ class ValueToChunks(object):
     return onclick_data
 
 
-  def make_subarray_name(self,value,valuepath,**kwargs):
+  def make_subarray_name(self,value,valuepath,slice_clickable=True,**kwargs):
     funcname = kwargs.get('funcname')
     n1,n2=self.user_slice.get((funcname,valuepath),(0,2))
-    slice_chunk=self.make_slice_chunk(n1,n2,valuepath,funcname)
-    
+    slice_kwargs={}
+    slice_chunk=self.make_slice_chunk(n1,n2,valuepath,funcname,slice_clickable=slice_clickable)
     chunks = [{'str':'*(','name':'varname'}]+\
     self.changable_value_to_chunks(value,valuepath,**kwargs)+\
     [{'str':')','name':'varname'}]+\
@@ -178,7 +178,8 @@ class ValueToChunks(object):
       return False
     return True
 
-  def array_to_chunks (self, value, name, n1, n2, path, deref_depth, **kwargs):
+  def array_to_chunks (self, value, name, n1, n2, path, deref_depth, 
+      slice_clickable=True, **kwargs):
     ''' Конвертация массива или указателя, который указывает на массив в json-дерево.
 
         Args:
@@ -210,7 +211,7 @@ class ValueToChunks(object):
         chunks.append({'str':' '})
 
     if type(name) is str:
-      slice_chunk = self.make_slice_chunk(n1,n2,path,funcname)
+      slice_chunk = self.make_slice_chunk(n1,n2,path,funcname,slice_clickable=slice_clickable)
       varname=[
         {'str':name,'name':'varname'},
         slice_chunk,
@@ -464,6 +465,7 @@ class ValueToChunks(object):
             **already_deref (set): множество, состоящее из целых чисел. Кадое число трактуется, как адрес.
                 Для каждого адреса из данного множества разыменование производиться не будет.
             **print_typename (bool): True-->типы печатаются False-->не печатаются.
+            **slice_clickable (bool) : Если False, то slice делается некликательным. По умолчанию True.
     '''
     path=name
     deref_depth=0
@@ -652,7 +654,7 @@ class ValueToChunks(object):
 #    n1,n2 = self.user_slice.get((funcname,path),(0,None))
 #    return self.make_slice_chunk(n1,n2,path,funcname)
 
-  def make_slice_chunk(self,n1,n2,path,funcname):
+  def make_slice_chunk(self,n1,n2,path,funcname,slice_clickable=True):
     chunks=[]
     chunks.append({'str':'[','name':'slice'})
     if n2==None:
@@ -662,20 +664,23 @@ class ValueToChunks(object):
       chunks.append({'str':':',     'name':'slice'})
       chunks.append({'str':str(n2), 'name':'slice'})
     chunks.append({'str':']','name':'slice'})
-    onclick_data={
-      'cmd':'onclick',
-      'onclick':'change_slice',
-      'path':path,
-      'funcname':funcname,
-      'input_text':'enter new slice N or N:M',
-      'parent_id' : self.path_id(path),
-      'subentity_dst' : self.subentity_name,
-    }
     slice_chunk={
       'chunks':chunks,
-      'onclick_data':onclick_data,
-      'onclick_user_input':True,
     }
+
+    if slice_clickable:
+      onclick_data={
+        'cmd':'onclick',
+        'onclick':'change_slice',
+        'path':path,
+        'funcname':funcname,
+        'input_text':'enter new slice N or N:M',
+        'parent_id' : self.path_id(path),
+        'subentity_dst' : self.subentity_name,
+      }
+      slice_chunk['onclick_data']=onclick_data,
+      slice_chunk['onclick_user_input']=True,
+
     return slice_chunk
 
   def integer_as_struct_chunks(self,value,name,**kwargs):

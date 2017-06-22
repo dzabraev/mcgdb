@@ -222,7 +222,7 @@ class RegistersTable(BaseSubentity):
       if regvalue.type.strip_typedefs().code==gdb.TYPE_CODE_INT:
         chunks += self.integer_as_struct_chunks(regvalue,regname)
       else:
-        chunks += self.value_to_chunks(regvalue,regname, integer_mode='hex', disable_dereference=True, max_deref_depth=None)
+        chunks += self.value_to_chunks(regvalue,regname, integer_mode='hex', disable_dereference=True, max_deref_depth=None,slice_clickable=False)
     except:
       gdb_print(regname+'\n')
       raise
