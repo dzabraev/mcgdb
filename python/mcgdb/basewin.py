@@ -6,14 +6,14 @@ import gdb
 
 import mcgdb
 from mcgdb.common import  pkgsend,pkgrecv,gdb_print,exec_cmd_in_gdb,gdb_stopped,\
-                          error,get_prompt,debug,is_main_thread,exec_main
+                          error,get_prompt,debug,is_main_thread,exec_main,TablePackages
 
 TABID_TMP=1 #Временный экземпляр таблицы. Используется для выведения пользователю каких-либо сообщений.
 #После того, как экземпляр был сделан текущим, и потом на место текущего экземпляра
 #был установлен другой экземпляр, данный экземпляр будет удален.
 
 
-class BaseWin(object):
+class BaseWin(TablePackages):
   def __init__(self, **kwargs):
     '''
         Args:
@@ -229,19 +229,6 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
       self.send({'cmd':'error_message','message':message})
     except:
       pass
-
-  def exemplar_set(self,id,table_name):
-    pkg={'cmd':'exemplar_set','id':id,'table_name':table_name}
-    self.send(pkg)
-
-  def select_node(self,tabname,node_id,selected):
-    node_data={'id':node_id,'selected':selected}
-    pkg={'cmd':'update_nodes', 'table_name':tabname, 'nodes':[node_data]}
-    self.send(pkg)
-
-  def do_row_visible(self,nrow):
-    pkg={'cmd':'do_row_visible','table_name':'asm', 'nrow':nrow}
-    self.send(pkg)
 
 
 

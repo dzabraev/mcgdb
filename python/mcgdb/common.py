@@ -897,6 +897,19 @@ class McgdbMain(object):
     self.__send_color ('color_bp_wait_insert',text_color,background_color,attr)
 
 
+class TablePackages(object):
+  def exemplar_set(self,id,table_name):
+    pkg={'cmd':'exemplar_set','id':id,'table_name':table_name}
+    self.send(pkg)
+
+  def select_node(self,tabname,node_id,selected):
+    node_data={'id':node_id,'selected':selected}
+    pkg={'cmd':'update_nodes', 'table_name':tabname, 'nodes':[node_data]}
+    self.send(pkg)
+
+  def do_row_visible(self,nrow):
+    pkg={'cmd':'do_row_visible','table_name':'asm', 'nrow':nrow}
+    self.send(pkg)
 
 
 

@@ -7,12 +7,13 @@ import traceback
 
 
 from mcgdb.basewin import BaseWin,TABID_TMP
-from mcgdb.common  import gdb_stopped,inferior_alive,gdb_print
+from mcgdb.common  import gdb_stopped,inferior_alive,gdb_print, TablePackages
 from mcgdb.valuetochunks import check_chunks, ValueToChunks
-from mcgdb.common  import exec_main, valcache, INDEX, INDEX_tmp
+from mcgdb.common  import exec_main, valcache, INDEX, INDEX_tmp, \
+                    get_this_thread_num
 
 
-class BaseSubentity(ValueToChunks):
+class BaseSubentity(ValueToChunks, TablePackages):
   @exec_main
   def __init__(self,INDEX=None,**kwargs):
     self.send = kwargs['send']
@@ -163,7 +164,8 @@ class RegistersTable(BaseSubentity):
   def __init__(self, **kwargs):
     self.regnames=[]
     self.regex_split = re.compile('\s*([^\s]+)\s+([^\s+]+)\s+(.*)')
-    self.registers_drawn=False
+    self.registers_drawn=[] #Список идентификаторов потоков, для которых была произведена первичная отрисовка регистров
+    self.current_thread_num=None #Идентификатор потока. Регистры этого потока отрисованы в данный момент в удаленном окне
     regtab = gdb.execute('maint print registers',False,True).split('\n')[1:]
     for reg in regtab:
       if reg=="*1: Register type's name NULL.":
@@ -179,10 +181,13 @@ class RegistersTable(BaseSubentity):
 
   @exec_main
   def update_registers_initial(self):
+    thnum = get_this_thread_num()
+    if thnum==None:
+      return
     try:
       regs = self.get_registers()
       if regs!=None:
-        self.registers_drawn=True
+        self.registers_drawn.append(thnum)
       else:
         regs={'rows':[]}
     except gdb.error as e:
@@ -195,7 +200,7 @@ class RegistersTable(BaseSubentity):
       'cmd':'exemplar_create',
       'table_name':'registers',
       'table':regs,
-      'id':1024,
+      'id':1024+thnum,
       'set':True,
     }
     self.send(pkg)
@@ -206,7 +211,8 @@ class RegistersTable(BaseSubentity):
       except gdb.error:
         regval = None
       tabdata[regname]=regval
-    INDEX(self.subentity_name,tabdata)
+    INDEX((self.subentity_name,thnum),tabdata)
+    self.current_thread_num = thnum
 
   @exec_main
   def get_registers(self):
@@ -240,9 +246,6 @@ class RegistersTable(BaseSubentity):
   def update_regnodes (self,nodes_data):
     return {'cmd':'update_nodes', 'table_name':'registers', 'nodes':nodes_data}
 
-  #def update_regnode_data(self,node_data):
-  #  return {'node_data':node_data}
-
   def update_register_data(self,regname):
     chunks = self.get_register_chunks(regname)
     chunks_with_id = self.filter_chunks_with_id(chunks)
@@ -258,11 +261,18 @@ class RegistersTable(BaseSubentity):
   def update_registers(self):
     if not gdb_stopped():
       return
-    if not self.registers_drawn:
+    thnum = get_this_thread_num()
+    if not thnum in self.registers_drawn:
       self.update_registers_initial()
       return
+    gdb_print('THNUM={}\n'.format(thnum))
+    if thnum!=self.current_thread_num:
+      #поток был изменен. Необходимо изменить экземпляр таблицы регистров
+      #в граф. окне.
+      self.exemplar_set(1024+thnum,'registers')
+      self.current_thread_num = thnum
     nodesdata=[]
-    tabidx,tabdata=INDEX.get(self.subentity_name)
+    tabidx,tabdata=INDEX.get((self.subentity_name,thnum))
     for regname in self.regnames:
       regvalue = valcache(regname)
       #register value cast to string because by default
@@ -272,7 +282,8 @@ class RegistersTable(BaseSubentity):
       if str(tabdata[regname])!=str(regvalue):
         nodesdata+=self.update_register_data(regname)
         tabdata[regname]=regvalue
-    self.send(self.update_regnodes(nodesdata))
+    if nodesdata:
+      self.send(self.update_regnodes(nodesdata))
 
   #GDB EVENTS
   def gdbevt_exited(self,pkg):
