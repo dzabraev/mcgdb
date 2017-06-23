@@ -6,7 +6,7 @@ import re,sys,ctypes
 import traceback
 
 
-from mcgdb.basewin import BaseWin,TABID_TEMP
+from mcgdb.basewin import BaseWin,TABID_TMP
 from mcgdb.common  import gdb_stopped,inferior_alive,gdb_print
 from mcgdb.valuetochunks import check_chunks, ValueToChunks
 from mcgdb.common  import exec_main, valcache, INDEX, INDEX_tmp
@@ -19,7 +19,7 @@ class BaseSubentity(ValueToChunks):
     self.send_error = kwargs['send_error']
     super(BaseSubentity,self).__init__(INDEX,**kwargs)
 
-  def set_message_in_table(self,msg,id=TABID_TEMP,set_current=True):
+  def set_message_in_table(self,msg,id=TABID_TMP,set_current=True):
     pkg={
       'cmd':'exemplar_create',
       'table':{'rows':[{'columns':[{'chunks':[{'str':msg}]}]}]},

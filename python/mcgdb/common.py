@@ -24,12 +24,13 @@ mcgdb_main=None
 LOG_FILENAME='/tmp/mcgdb.log'
 if os.path.exists(LOG_FILENAME):
   os.remove(LOG_FILENAME)
-#debug_messages=True
-debug_messages=False
-level = logging.CRITICAL
-#level = logging.WARNING
-#level = logging.DEBUG
-#level = logging.INFO
+
+if 'debug' in os.environ or 'DEBUG' in os.environ:
+  level = logging.INFO
+  debug_messages=True
+else:
+  level = logging.CRITICAL
+  debug_messages = False
 
 logging.basicConfig(filename=LOG_FILENAME,format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
 
