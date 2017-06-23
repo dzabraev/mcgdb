@@ -29,7 +29,10 @@ class AsmWin(BaseWin,ValueToChunks):
     self.reg_disas_line_addr = re.compile('(=>)?\s+(0x[0-9a-fA-F]+)')
     self.reg_find_addr = re.compile('\s0x[0-9a-fA-F]+\s')
     self.addr_to_row=None
-    self.cur_displayed_succ = False #current asm code was drawed successfully ?
+    self.cur_displayed_succ = False #данный флаг имеет значение True тогда и только тогда,
+    #когда asm для текущей позиции исполнения был успешно отправлен на отрисовку. Данный флаг
+    #используется для определения того, нужно ли уставить/убирать текущую позицию исполнения
+    #в граф. окне.
 
   def onclick_breakpoint(self,pkg): pass
 
