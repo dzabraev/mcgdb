@@ -265,7 +265,6 @@ class RegistersTable(BaseSubentity):
     if not thnum in self.registers_drawn:
       self.update_registers_initial()
       return
-    gdb_print('THNUM={}\n'.format(thnum))
     if thnum!=self.current_thread_num:
       #поток был изменен. Необходимо изменить экземпляр таблицы регистров
       #в граф. окне.
