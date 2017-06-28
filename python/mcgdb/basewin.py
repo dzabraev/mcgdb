@@ -76,6 +76,11 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     self.id_exemplar_storage[key]=(id,data)
     return id
 
+  def id_update(self,key,new_data):
+    (id,data)=self.id_exemplar_storage[key]
+    self.id_exemplar_storage[key] = (id,new_data)
+    return id
+
   def make_runwin_cmd(self):
     ''' Данный метод формирует shell-команду для запуска окна с editor.
         Команда формируется на основе self.listen_port

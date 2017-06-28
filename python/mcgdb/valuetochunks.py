@@ -466,6 +466,7 @@ class ValueToChunks(object):
                 Для каждого адреса из данного множества разыменование производиться не будет.
             **print_typename (bool): True-->типы печатаются False-->не печатаются.
             **slice_clickable (bool) : Если False, то slice делается некликательным. По умолчанию True.
+            **printed_variables (list)
     '''
     path=name
     deref_depth=0

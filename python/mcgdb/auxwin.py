@@ -471,15 +471,55 @@ class LocalvarsTable(BaseSubentity):
   def process_connection(self):
     self.update_localvars()
 
+  def get_lvars_diff(self,data):
+    need_update=[]
+    new_data=[]
+    for path,value in data:
+      new_value = valcache(path)
+      new_data.append(path,new_value)
+      if unicode(value) != unicode(new_value):
+        chunks = self.filter_chunks_with_id(self.value_to_chunks(new_value))
+        need_update.append(chunks)
+    return tuple(new_data),need_update
+
   def update_localvars(self):
-    lvars=self._get_local_vars()
-    pkg={ 'cmd':'exemplar_create',
-          'table_name':'localvars',
-          'table':lvars,
-          'id':1024,
-          'set':True,
-        }
+    block_key = self.get_this_block_key()
+    id,data = self.id_get(block_key)
+    if id!=None:
+      #множество переменных, которые соотв. данному блоку было отрисовано ранее.
+      #сравниваем значения отрис. ранее и значение перем. сейчас. Разницу отправляем
+      #в граф. окно для перерисовки части таблицы
+      new_data,need_update=self.get_lvars_diff(data)
+      self.id_update(block_key,new_data)
+      pkg={'cmd':'update_nodes', 'table_name':'localvars', 'nodes':need_update}
+    else:
+      printed_variables,lvars=self._get_local_vars()
+      id = self.id_insert(block_key,printed_variables)
+      pkg={ 'cmd':'exemplar_create',
+            'table_name':'localvars',
+            'table':lvars,
+            'id':id,
+            'set':True,
+          }
     self.send(pkg)
+
+  @exec_main
+  def get_this_block_key(self):
+    variables = []
+    funcname=self._get_frame_funcname(gdb.selected_frame())
+    while block:
+      for symbol in block:
+        if (symbol.is_argument or symbol.is_variable):
+            name = symbol.name
+            if name not in variables:
+              variable=valcache(symbol.value(frame))
+              variables.append( (name,variable.type.strip_typedefs().code) )
+      if block.function:
+        break
+      block = block.superblock
+    key=(funcname,tuple(variables))
+    return key
+
 
   @exec_main
   def _get_local_vars(self):
@@ -488,13 +528,14 @@ class LocalvarsTable(BaseSubentity):
       return  {'rows':[]}
     lvars=[]
     funcname=self._get_frame_funcname(gdb.selected_frame())
+    printed_variables=[]
     for name,value in variables.iteritems():
-      chunks = self.value_to_chunks(value,name,funcname=funcname)
+      chunks = self.value_to_chunks(value,name,funcname=funcname,printed_variables=printed_variables)
       check_chunks(chunks)
       col = {'chunks':chunks}
       row = {'columns':[col]}
       lvars.append(row)
-    return {'rows':lvars}
+    return printed_variables,{'rows':lvars}
 
   def _get_local_vars_1(self):
     try:
