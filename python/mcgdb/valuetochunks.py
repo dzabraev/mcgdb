@@ -10,6 +10,25 @@ from mcgdb.common import    exec_main, gdb_print, gdb_stopped, \
                             valcache, stringify_value, \
                             get_this_thread_num, get_this_frame_num
 
+
+class VarNode(object):
+  def __init__(self,value=None,path=None,expand=None,user_slice=None,depth=-1,name=None,name_creator=None):
+    self.childs=[]
+    self.value = value
+    self.path = path
+    self.expand = expand
+    self.user_slice = user_slice
+    self.depth=depth
+    self.name=name
+    self.name_creator = name_creator #функция, которая формирует имя переменной на основе ее значения.
+                                     #Применяется для печати многомерных массивов.
+
+  def add_node(self,value=None,path=None,expand=None,user_slice=None,name=None,name_creator=None):
+    node=VarNode(value,path,expand,user_slice,depth=self.depth+1,name=name,name_creator=name_creator)
+    self.childs.append(node)
+    return node
+
+
 def check_chunks(chunks):
   if type(chunks) not in (dict,list):
     gdb_print ('bad chunks: `{}`\n'.format(chunks))
@@ -179,7 +198,7 @@ class ValueToChunks(object):
     return True
 
   def array_to_chunks (self, value, name, n1, n2, path, deref_depth, 
-      slice_clickable=True, **kwargs):
+      slice_clickable=True, vartree=None, **kwargs):
     ''' Конвертация массива или указателя, который указывает на массив в json-дерево.
 
         Args:
@@ -269,10 +288,22 @@ class ValueToChunks(object):
         self.path_id(path_idx,value_idx)
         value_idx_name = name_lambda(value_idx,path_idx,**kwargs)
         if elem_as_array:
-          array_data_chunks__1=self.pointer_data_to_chunks(value_idx,value_idx_name,path_idx,deref_depth,**kwargs)
+          varnode = vartree.add_node(
+            value_idx,
+            path_idx,
+            self.expand_variable.get((funcname,path_idx)),
+            self.user_slice.get((funcname,path_idx)),
+            name_creator=name_lambda,
+          ) if vartree else None
+          array_data_chunks__1=self.pointer_data_to_chunks(value_idx,value_idx_name,path_idx,deref_depth,vartree=varnode,**kwargs)
+          id=self.path_id(path_idx,value_idx)
         else:
-          array_data_chunks__1=self.value_to_chunks_1(value_idx,value_idx_name,path_idx,deref_depth,**kwargs)
-        array_data_chunks.append({'chunks':array_data_chunks__1,'id':self.path_id(path_idx,value_idx)})
+          array_data_chunks__1=self.value_to_chunks_1(value_idx,value_idx_name,path_idx,deref_depth,vartree=vartree,**kwargs)
+          id=None #id было добавлено в value_to_chunks
+        chs = {'chunks':array_data_chunks__1}
+        if id!=None:
+          chs['id']=id
+        array_data_chunks.append(chs)
         if delimiter and i!=n22-1:
           array_data_chunks.append(delimiter)
       array_data_chunks.append({'str':'\n'})
@@ -450,7 +481,7 @@ class ValueToChunks(object):
 
 
 
-  def value_to_chunks(self,value,name=None,**kwargs):
+  def value_to_chunks(self,value,name=None,vartree=None,**kwargs):
     ''' Конвертирование gdb.Value в json-дерево.
 
         Args:
@@ -458,7 +489,7 @@ class ValueToChunks(object):
             name (str): Имя, которое используется для печати NAME = VALUE. Если не задано,
                 то напечатается просто VALUE.
             **funcname (str): имя функции, в контексте которой value конвертируется в json.
-            **max_deref_depth (int, default=3): Данный параметр используется для ограничения dereference указателей.
+            **max_deref_depth (int, default=0): Данный параметр используется для ограничения dereference указателей.
                 В рамках преобразования, которое делает данная функция для каждого указателя будет напечатан не только
                 адрес, но и значение памяти. Если представить список из миллиона элементов, то, очевидно, что весь
                 список печатать не надо.
@@ -466,7 +497,7 @@ class ValueToChunks(object):
                 Для каждого адреса из данного множества разыменование производиться не будет.
             **print_typename (bool): True-->типы печатаются False-->не печатаются.
             **slice_clickable (bool) : Если False, то slice делается некликательным. По умолчанию True.
-            **printed_variables (list)
+            **vartree : Дерево для value
     '''
     path=name
     deref_depth=0
@@ -477,7 +508,7 @@ class ValueToChunks(object):
       kwargs['already_deref'] = set()
     if 'max_deref_depth' not in kwargs:
       kwargs['max_deref_depth']=0
-    return self.value_to_chunks_1(value,name,path,deref_depth,**kwargs)
+    return self.value_to_chunks_1(value,name,path,deref_depth,vartree=vartree,**kwargs)
 
   def value_withstr_to_chunks(self,value,name,path,deref_depth,**kwargs):
     chunks=[]
@@ -563,7 +594,7 @@ class ValueToChunks(object):
     else:
       return [{'str':str(value.type),'name':'datatype'}]
 
-  def value_to_chunks_1(self,value,name,path,deref_depth,**kwargs):
+  def value_to_chunks_1(self,value,name,path,deref_depth,vartree=None,**kwargs):
     ''' Конвертирование gdb.Value в json-дерево. Рекурсия.
         Дополнительное описание см. в функции `value_to_chunks`
 
@@ -586,14 +617,24 @@ class ValueToChunks(object):
             **disable_dereference (bool): Если True, то dereference делаться не будет. По умолчанию False.
 
     '''
+    assert 'already_deref' in kwargs
+    assert 'max_deref_depth' in kwargs
+    assert 'funcname' in kwargs
+    funcname = kwargs['funcname']
     self.path_id(path,value)
+    varnode = vartree.add_node(
+      value,
+      path,
+      self.expand_variable.get((funcname,path)),
+      self.user_slice.get((funcname,path)),
+      name=name,
+    ) if vartree else None
     chunks=[]
     type_code = value.type.strip_typedefs().code
     type_str = str(value.type.strip_typedefs())
-    funcname=kwargs.get('funcname')
     print_typename=kwargs.get('print_typename',True)
     if type_code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION):
-      chunks+=self.struct_to_chunks(value,name,path,deref_depth,**kwargs)
+      chunks+=self.struct_to_chunks(value,name,path,deref_depth,vartree=varnode,**kwargs)
     elif type_code==gdb.TYPE_CODE_ARRAY:
       array_addr = value.address
       if array_addr!=None:
@@ -614,7 +655,7 @@ class ValueToChunks(object):
             n2 = min(n2,n2_orig)
         else:
           n1,n2 = n1_orig,n2_orig
-        chunks += self.array_to_chunks (value, name, n1, n2, path, deref_depth, **kwargs)
+        chunks += self.array_to_chunks (value, name, n1, n2, path, deref_depth, vartree=varnode, **kwargs)
     elif type_code==gdb.TYPE_CODE_PTR:
       if re.match('.*char \*$',type_str):
         #строку печатаем по-другому в сравнении с обычным pointer
@@ -632,7 +673,7 @@ class ValueToChunks(object):
           if value.dereference().type.strip_typedefs().code==gdb.TYPE_CODE_FUNC:
             is_funct_ptr=True
           else:
-            pointer_data_chunks = self.pointer_data_to_chunks (value, name, path, deref_depth, **kwargs)
+            pointer_data_chunks = self.pointer_data_to_chunks (value, name, path, deref_depth, vartree=varnode, **kwargs)
         if is_funct_ptr:
           pointer_chunks = self.functionptr_to_chunks(value, name, path, deref_depth, **kwargs)
         else:
@@ -679,8 +720,8 @@ class ValueToChunks(object):
         'parent_id' : self.path_id(path),
         'subentity_dst' : self.subentity_name,
       }
-      slice_chunk['onclick_data']=onclick_data,
-      slice_chunk['onclick_user_input']=True,
+      slice_chunk['onclick_data']=onclick_data
+      slice_chunk['onclick_user_input']=True
 
     return slice_chunk
 
@@ -773,6 +814,46 @@ class ValueToChunks(object):
         ok+=self.filter_chunks_with_id(chunk['chunks'])
     return ok
 
+  def valeq(self,newval,oldval):
+    return unicode(newval)==unicode(oldval)
 
+  def get_diff_varnode(self,varnode,diff,funcname):
+    for idx,child in enumerate(varnode.childs):
+      path=child.path
+      new_value = valcache(path)
+      if not self.valeq(new_value,child.value) or \
+         self.expand_variable.get((funcname,path))!=child.expand  or \
+         self.user_slice.get((funcname,path))!=child.user_slice:
+        vartree=VarNode()
+        if child.name_creator:
+          name = child.name_creator(new_value,path)
+        else:
+          name = child.name
+        chunks = self.value_to_chunks_1(
+          new_value,
+          name,
+          child.path,
+          varnode.depth,
+          vartree=vartree,
+          funcname=funcname,
+          already_deref=set(),
+          max_deref_depth=0,
+        )
+        assert len(vartree.childs)==1
+        varnode.childs[idx] = vartree.childs[0] #vartree имеет ровно одного потомка на первом уровне
+        assert len(chunks)==1
+        chunk=chunks[0]
+        assert 'id' in chunk
+        diff.append(chunk)
+      else:
+        self.get_diff_varnode(child,diff,funcname)
+
+  def get_diff_and_update_vartree(self,vartree):
+    funcname = gdb.selected_frame().name()
+    diff = []
+    #gdb_print(unicode(self.INDEX.index_data)+'\n')
+    self.get_diff_varnode(vartree,diff,funcname)
+    #gdb_print('\n\n\n'+unicode(self.INDEX.index_data)+'\n')
+    return diff
 
 

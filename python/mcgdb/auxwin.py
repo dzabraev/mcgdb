@@ -6,9 +6,9 @@ import re,sys,ctypes
 import traceback
 
 
-from mcgdb.basewin import BaseWin,TABID_TMP
+from mcgdb.basewin import BaseWin,TABID_TMP, StorageId
 from mcgdb.common  import gdb_stopped,inferior_alive,gdb_print, TablePackages
-from mcgdb.valuetochunks import check_chunks, ValueToChunks
+from mcgdb.valuetochunks import check_chunks, ValueToChunks, VarNode
 from mcgdb.common  import exec_main, valcache, INDEX, INDEX_tmp, \
                     get_this_thread_num
 
@@ -287,7 +287,7 @@ class RegistersTable(BaseSubentity):
   #GDB EVENTS
   def gdbevt_exited(self,pkg):
     self.clear_table()
-    self.registers_drawn=False
+    self.registers_drawn=[]
 
   def gdbevt_stop(self,pkg):
     return self.update_registers()
@@ -461,52 +461,50 @@ class ThreadsTable(BaseSubentity):
 
 
 
-class LocalvarsTable(BaseSubentity):
+class LocalvarsTable(StorageId,BaseSubentity):
   subentity_name='localvars'
 
   @exec_main
   def __init__(self,**kwargs):
-    super(LocalvarsTable,self).__init__(INDEX_tmp,**kwargs)
+    super(LocalvarsTable,self).__init__(INDEX,**kwargs)
 
   def process_connection(self):
     self.update_localvars()
 
-  def get_lvars_diff(self,data):
-    need_update=[]
-    new_data=[]
-    for path,value in data:
-      new_value = valcache(path)
-      new_data.append(path,new_value)
-      if unicode(value) != unicode(new_value):
-        chunks = self.filter_chunks_with_id(self.value_to_chunks(new_value))
-        need_update.append(chunks)
-    return tuple(new_data),need_update
-
+  @exec_main
   def update_localvars(self):
-    block_key = self.get_this_block_key()
-    id,data = self.id_get(block_key)
+    try:
+      block_key = self.get_this_block_key()
+    except gdb.error:
+      return
+    id,vartree = self.id_get(block_key)
     if id!=None:
       #множество переменных, которые соотв. данному блоку было отрисовано ранее.
       #сравниваем значения отрис. ранее и значение перем. сейчас. Разницу отправляем
       #в граф. окно для перерисовки части таблицы
-      new_data,need_update=self.get_lvars_diff(data)
-      self.id_update(block_key,new_data)
-      pkg={'cmd':'update_nodes', 'table_name':'localvars', 'nodes':need_update}
+      need_update = self.get_diff_and_update_vartree(vartree)
+      if len(need_update)>0:
+        pkg={'cmd':'update_nodes', 'table_name':'localvars', 'nodes':need_update}
+      else:
+        pkg = None
     else:
-      printed_variables,lvars=self._get_local_vars()
-      id = self.id_insert(block_key,printed_variables)
+      vartree,lvars=self._get_local_vars()
+      id = self.id_insert(block_key,vartree)
       pkg={ 'cmd':'exemplar_create',
             'table_name':'localvars',
             'table':lvars,
             'id':id,
             'set':True,
           }
-    self.send(pkg)
+    if pkg:
+      self.send(pkg)
 
   @exec_main
   def get_this_block_key(self):
     variables = []
-    funcname=self._get_frame_funcname(gdb.selected_frame())
+    frame=gdb.selected_frame()
+    funcname=self._get_frame_funcname(frame)
+    block = frame.block()
     while block:
       for symbol in block:
         if (symbol.is_argument or symbol.is_variable):
@@ -528,14 +526,14 @@ class LocalvarsTable(BaseSubentity):
       return  {'rows':[]}
     lvars=[]
     funcname=self._get_frame_funcname(gdb.selected_frame())
-    printed_variables=[]
+    vartree=VarNode()
     for name,value in variables.iteritems():
-      chunks = self.value_to_chunks(value,name,funcname=funcname,printed_variables=printed_variables)
+      chunks = self.value_to_chunks(value,name,funcname=funcname,vartree=vartree)
       check_chunks(chunks)
       col = {'chunks':chunks}
       row = {'columns':[col]}
       lvars.append(row)
-    return printed_variables,{'rows':lvars}
+    return vartree,{'rows':lvars}
 
   def _get_local_vars_1(self):
     try:
@@ -565,9 +563,6 @@ class LocalvarsTable(BaseSubentity):
 
   @exec_main
   def onclick_expand_variable(self,pkg):
-    #gdb_print(gdb.selected_frame().name()+'\n')
-    if gdb.selected_frame().name()=='sem_wait':
-      traceback.print_stack()
     self.docheckpkg(pkg)
     super(LocalvarsTable,self).onclick_expand_variable(pkg)
     self.update_localvars()

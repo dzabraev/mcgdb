@@ -13,7 +13,29 @@ TABID_TMP=1 #Временный экземпляр таблицы. Исполь�
 #был установлен другой экземпляр, данный экземпляр будет удален.
 
 
-class BaseWin(TablePackages):
+class StorageId(object):
+  def __init__(self,*args,**kwargs):
+    self.id_exemplar_storage={}
+    self.last_exemplar_id=1024
+    super(StorageId,self).__init__(*args,**kwargs)
+
+  def id_get(self,key):
+    return self.id_exemplar_storage.get(key,(None,None))
+
+  def id_insert(self,key,data):
+    assert key not in self.id_exemplar_storage
+    id=self.last_exemplar_id
+    self.last_exemplar_id+=1
+    self.id_exemplar_storage[key]=(id,data)
+    return id
+
+  def id_update(self,key,new_data):
+    (id,data)=self.id_exemplar_storage[key]
+    self.id_exemplar_storage[key] = (id,new_data)
+    return id
+
+
+class BaseWin(TablePackages,StorageId):
   def __init__(self, **kwargs):
     '''
         Args:
@@ -43,9 +65,7 @@ class BaseWin(TablePackages):
     manually=kwargs.pop('manually',False)
     cmd=self.make_runwin_cmd()
     complete_cmd=self.gui_window_cmd.format(cmd=cmd)
-    self.id_exemplar_storage={}
-    self.last_exemplar_id=1024
-
+    
     if manually:
       gdb_print('''Execute manually `{cmd}` for start window'''.format(cmd=cmd))
     else:
@@ -67,19 +87,6 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
   #def subentities(self):
   #  pass
 
-  def id_get(self,key):
-    return self.id_exemplar_storage.get(key,(None,None))
-  def id_insert(self,key,data):
-    assert key not in self.id_exemplar_storage
-    id=self.last_exemplar_id
-    self.last_exemplar_id+=1
-    self.id_exemplar_storage[key]=(id,data)
-    return id
-
-  def id_update(self,key,new_data):
-    (id,data)=self.id_exemplar_storage[key]
-    self.id_exemplar_storage[key] = (id,new_data)
-    return id
 
   def make_runwin_cmd(self):
     ''' Данный метод формирует shell-команду для запуска окна с editor.

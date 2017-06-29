@@ -22,7 +22,8 @@ main_thread_ident=threading.current_thread().ident
 mcgdb_main=None
 
 LOG_FILENAME='/tmp/mcgdb.log'
-if os.path.exists(LOG_FILENAME):
+
+if 'DEBUG' in os.environ and os.path.exists(LOG_FILENAME):
   os.remove(LOG_FILENAME)
 
 if 'debug' in os.environ or 'DEBUG' in os.environ:

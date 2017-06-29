@@ -759,6 +759,7 @@ cell_data_new_from_json (json_t * json_chunk) {
       data->color = tty_try_alloc_color_pair2 ("red", "black", "bold", FALSE);
   }
   if ((onclick_data=json_object_get (json_chunk,"onclick_data"))) {
+    message_assert (json_is_object(onclick_data));
     json_incref (onclick_data);
     data->onclick_data = onclick_data;
   }
@@ -802,6 +803,7 @@ update_chunk (cell_data_t * data, json_t * json_data) {
   if (json_object_get(json_data,"onclick_data")) {
     json_decref (data->onclick_data);
     data->onclick_data = cell_data->onclick_data;
+    message_assert (json_is_object(data->onclick_data));
   }
   //update_prop(data,cell_data,json_data,str);
   //update_prop(data,cell_data,json_data,proposed_text,free);
@@ -991,7 +993,7 @@ process_cell_tree_mouse_callbacks (Table *tab, GNode *root, int y, int x) {
       if (CHUNK(node)->onclick_user_input) {
         f = input_dialog (
           _("Change variable"),
-          json_string_value (json_object_get (onclick_data, "input_text")),
+          json_str (onclick_data, "input_text"),
           "mc.edit.change-variable",
            CHUNK(node)->proposed_text ? CHUNK(node)->proposed_text  : CHUNK(node)->str,
           INPUT_COMPLETE_NONE);

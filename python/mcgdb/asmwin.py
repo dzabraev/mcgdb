@@ -132,8 +132,9 @@ class AsmWin(BaseWin,ValueToChunks):
       #  return self.text_chunk(str(err))
       #if dl[0]!=None:
       #  return self.text_chunk(dl[0])
-      sal=dl[1][0]
-      start_addr,end_addr = sal.pc,sal.last
+      #sal=dl[1][0]
+      #start_addr,end_addr = sal.pc,sal.last
+      pass
     else:
       _,start_addr,end_addr = self.get_selected_frame_func()
     assert start_addr!=None
