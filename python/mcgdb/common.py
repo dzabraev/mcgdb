@@ -278,7 +278,7 @@ def is_python_version_correct():
 
 
 def pkgsend(fd,msgs):
-  debug('SEND: {}'.format(str(msgs)))
+  #debug('SEND: {}'.format(str(msgs)))
   smsg=''
   if not type(msgs) in (list,tuple):
     msgs=[msgs]

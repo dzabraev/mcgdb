@@ -12,7 +12,7 @@ from mcgdb.common import    exec_main, gdb_print, gdb_stopped, \
 
 
 class VarNode(object):
-  def __init__(self,value=None,path=None,expand=None,user_slice=None,depth=-1,name=None,name_creator=None):
+  def __init__(self,value=None,path=None,expand=None,user_slice=None,depth=-1,name=None,tochunks=None):
     self.childs=[]
     self.value = value
     self.path = path
@@ -20,11 +20,10 @@ class VarNode(object):
     self.user_slice = user_slice
     self.depth=depth
     self.name=name
-    self.name_creator = name_creator #функция, которая формирует имя переменной на основе ее значения.
-                                     #Применяется для печати многомерных массивов.
+    self.tochunks=tochunks
 
-  def add_node(self,value=None,path=None,expand=None,user_slice=None,name=None,name_creator=None):
-    node=VarNode(value,path,expand,user_slice,depth=self.depth+1,name=name,name_creator=name_creator)
+  def add_node(self,value=None,path=None,expand=None,user_slice=None,name=None,tochunks=None):
+    node=VarNode(value,path,expand,user_slice,depth=self.depth+1,name=name,tochunks=tochunks)
     self.childs.append(node)
     return node
 
@@ -265,15 +264,12 @@ class ValueToChunks(object):
     deref_type_code = deref_value.type.strip_typedefs().code
     deref_type_str  = str(deref_value.type.strip_typedefs())
     if deref_type_code==gdb.TYPE_CODE_PTR and not re.match('.*((char \*)|(void \*))$',deref_type_str) and not is_incomplete_type_ptr(deref_value):
-      name_lambda = lambda value,valuepath,**kwargs : self.make_subarray_name(value,valuepath,**kwargs)
       elem_as_array=True
     else:
-      name_lambda = lambda value,valuepath,**kwargs : None
       elem_as_array=False
 
     arr_elem_size=deref_value.type.strip_typedefs().sizeof
     arr_size=n2-n1+1 if n2!=None else 1
-    #if value_addr==None or self.possible_read_memory(value_addr,arr_elem_size*arr_size):
     if value_addr==None or self.is_array_fetchable(value,n1,n2):
       if 'delimiter' in kwargs:
         delimiter=kwargs['delimiter']
@@ -286,19 +282,11 @@ class ValueToChunks(object):
         path_idx = '{path}[{idx}]'.format(path=path,idx=i)
         value_idx = valcache(value[i])
         self.path_id(path_idx,value_idx)
-        value_idx_name = name_lambda(value_idx,path_idx,**kwargs)
         if elem_as_array:
-          varnode = vartree.add_node(
-            value_idx,
-            path_idx,
-            self.expand_variable.get((funcname,path_idx)),
-            self.user_slice.get((funcname,path_idx)),
-            name_creator=name_lambda,
-          ) if vartree else None
-          array_data_chunks__1=self.pointer_data_to_chunks(value_idx,value_idx_name,path_idx,deref_depth,vartree=varnode,**kwargs)
+          array_data_chunks__1=self.subarray_pointer_data_chunks(value_idx,path_idx,deref_depth,vartree=vartree,**kwargs)
           id=self.path_id(path_idx,value_idx)
         else:
-          array_data_chunks__1=self.value_to_chunks_1(value_idx,value_idx_name,path_idx,deref_depth,vartree=vartree,**kwargs)
+          array_data_chunks__1=self.value_to_chunks_1(value_idx,None,path_idx,deref_depth,vartree=vartree,**kwargs)
           id=None #id было добавлено в value_to_chunks
         chs = {'chunks':array_data_chunks__1}
         if id!=None:
@@ -322,6 +310,25 @@ class ValueToChunks(object):
       })
     else:
       chunks.append({'str':'[CantAccsMem]'})
+    return chunks
+
+  def subarray_pointer_data_chunks(self,value,path,depth,vartree=None,**kwargs):
+    '''Данная функция применяется для случая, когда обрабатывается массив указателей. value элемент такого массива.
+       На выходе получается строка вида int * *(0x613ed0)[0:2] = [<Expand>],
+    '''
+    name = self.make_subarray_name(value,path,**kwargs)
+    funcname=gdb.selected_frame().name()
+    if vartree:
+      varnode=vartree.add_node(
+        value,
+        path,
+        self.expand_variable.get((funcname,path)),
+        self.user_slice.get((funcname,path)),
+        tochunks = lambda value,_,path,depth,**kwargs : self.subarray_pointer_data_chunks(value,path,depth,**kwargs),
+      )
+    else:
+      varnode=None
+    chunks = [{'id':self.path_id(path,value),'chunks':self.pointer_data_to_chunks(value,name,path,depth,vartree=varnode,**kwargs)}]
     return chunks
 
   def pointer_data_to_chunks (self,value,name,path,deref_depth, **kwargs):
@@ -698,14 +705,10 @@ class ValueToChunks(object):
 
   def make_slice_chunk(self,n1,n2,path,funcname,slice_clickable=True):
     chunks=[]
-    chunks.append({'str':'[','name':'slice'})
     if n2==None:
-      chunks.append({'str':str(n1), 'name':'slice'})
+      chunks.append({'str':'[{idx}]'.format(idx=n1), 'name':'slice'})
     else:
-      chunks.append({'str':str(n1), 'name':'slice'})
-      chunks.append({'str':':',     'name':'slice'})
-      chunks.append({'str':str(n2), 'name':'slice'})
-    chunks.append({'str':']','name':'slice'})
+      chunks.append({'str':'[{idx1}:{idx2}]'.format(idx1=n1,idx2=n2), 'name':'slice'})
     slice_chunk={
       'chunks':chunks,
     }
@@ -825,13 +828,13 @@ class ValueToChunks(object):
          self.expand_variable.get((funcname,path))!=child.expand  or \
          self.user_slice.get((funcname,path))!=child.user_slice:
         vartree=VarNode()
-        if child.name_creator:
-          name = child.name_creator(new_value,path)
+        if child.tochunks:
+          tochunks = child.tochunks
         else:
-          name = child.name
-        chunks = self.value_to_chunks_1(
+          tochunks = self.value_to_chunks_1
+        chunks = tochunks (
           new_value,
-          name,
+          child.name,
           child.path,
           varnode.depth,
           vartree=vartree,
@@ -855,5 +858,4 @@ class ValueToChunks(object):
     self.get_diff_varnode(vartree,diff,funcname)
     #gdb_print('\n\n\n'+unicode(self.INDEX.index_data)+'\n')
     return diff
-
 
