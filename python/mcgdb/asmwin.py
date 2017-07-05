@@ -3,13 +3,14 @@
 import gdb
 
 import mcgdb.basewin
-from mcgdb.common import exec_main, gdb_print
+from mcgdb.common import exec_main, gdb_print, INDEX
 from mcgdb.basewin import BaseWin, TABID_TMP
 from mcgdb.valuetochunks import ValueToChunks
 
+
 import re
 
-class AsmWin(BaseWin,ValueToChunks):
+class AsmWin(ValueToChunks,BaseWin):
   '''Окно для отображение ассемблерного кода.
   '''
 
@@ -18,7 +19,7 @@ class AsmWin(BaseWin,ValueToChunks):
 
   @exec_main
   def __init__(self,**kwargs):
-    super(AsmWin,self).__init__(**kwargs)
+    super(AsmWin,self).__init__(INDEX,**kwargs)
     self.location=kwargs.get('location') #display only this function.
     self.start_addr=None
     self.end_addr=None

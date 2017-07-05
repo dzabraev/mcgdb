@@ -81,12 +81,7 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
         gdb_print('''\nCan't open gui window({type}). execute manually: `{cmd}`\n'''.format(cmd=cmd,type=self.type))
     if not hasattr(self,'subentities'):
       self.subentities={}
-    #super(BaseWin,self).__init__(**kwargs)
-
-  #@abstractproperty
-  #def subentities(self):
-  #  pass
-
+    super(BaseWin,self).__init__(**kwargs)
 
   def make_runwin_cmd(self):
     ''' Данный метод формирует shell-команду для запуска окна с editor.

@@ -69,6 +69,7 @@ class ValueToChunks(object):
       'change_slice'    :   [],
       'change_variable' :   [],
     }
+    super(ValueToChunks,self).__init__(**kwargs)
 
 
   def text_chunk(self,string,**kwargs):

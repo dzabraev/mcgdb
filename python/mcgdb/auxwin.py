@@ -13,12 +13,12 @@ from mcgdb.common  import exec_main, valcache, INDEX, INDEX_tmp, \
                     get_this_thread_num
 
 
-class BaseSubentity(ValueToChunks, TablePackages):
+class BaseSubentity(TablePackages):
   @exec_main
-  def __init__(self,INDEX=None,**kwargs):
-    self.send = kwargs['send']
-    self.send_error = kwargs['send_error']
-    super(BaseSubentity,self).__init__(INDEX,**kwargs)
+  def __init__(self,**kwargs):
+    self.send = kwargs.pop('send')
+    self.send_error = kwargs.pop('send_error')
+    super(BaseSubentity,self).__init__(**kwargs)
 
   def set_message_in_table(self,msg,id=TABID_TMP,set_current=True):
     pkg={
@@ -35,11 +35,11 @@ class BaseSubentity(ValueToChunks, TablePackages):
     self.set_message_in_table ('')
 
 
-class BacktraceTable(BaseSubentity):
+class BacktraceTable(ValueToChunks,BaseSubentity):
   subentity_name='backtrace'
 
   def __init__(self,**kwargs):
-    super(BacktraceTable,self).__init__(**kwargs)
+    super(BacktraceTable,self).__init__(INDEX,**kwargs)
 
   def process_connection(self):
     return self.update_backtrace()
@@ -157,7 +157,7 @@ class BacktraceTable(BaseSubentity):
 
 
 
-class RegistersTable(BaseSubentity):
+class RegistersTable(ValueToChunks, BaseSubentity):
   subentity_name='registers'
 
   @exec_main
@@ -331,12 +331,12 @@ class RegistersTable(BaseSubentity):
 
 
 
-class ThreadsTable(BaseSubentity):
+class ThreadsTable(ValueToChunks, BaseSubentity):
   subentity_name='threads'
 
   @exec_main
   def __init__(self, **kwargs):
-    super(ThreadsTable,self).__init__(**kwargs)
+    super(ThreadsTable,self).__init__(INDEX, **kwargs)
 
   def process_connection(self):
     return self.update_threads()
@@ -459,65 +459,22 @@ class ThreadsTable(BaseSubentity):
     self.update_threads()
 
 
-
-
-class LocalvarsTable(StorageId,BaseSubentity):
-  subentity_name='localvars'
+class BlockLocalvarsTable(ValueToChunks):
+  '''Локальные переменные для конкретного блока'''
 
   @exec_main
   def __init__(self,**kwargs):
-    super(LocalvarsTable,self).__init__(INDEX,**kwargs)
-
-  def process_connection(self):
-    self.update_localvars()
+    super(BlockLocalvarsTable,self).__init__(INDEX,**kwargs)
 
   @exec_main
-  def update_localvars(self):
-    try:
-      block_key = self.get_this_block_key()
-    except gdb.error:
-      return
-    id,vartree = self.id_get(block_key)
-    if id!=None:
-      #множество переменных, которые соотв. данному блоку было отрисовано ранее.
-      #сравниваем значения отрис. ранее и значение перем. сейчас. Разницу отправляем
-      #в граф. окно для перерисовки части таблицы
-      need_update = self.get_diff_and_update_vartree(vartree)
-      if len(need_update)>0:
-        pkg={'cmd':'update_nodes', 'table_name':'localvars', 'nodes':need_update}
-      else:
-        pkg = None
-    else:
-      vartree,lvars=self._get_local_vars()
-      id = self.id_insert(block_key,vartree)
-      pkg={ 'cmd':'exemplar_create',
-            'table_name':'localvars',
-            'table':lvars,
-            'id':id,
-            'set':True,
-          }
-    if pkg:
-      self.send(pkg)
+  def get_localvars(self):
+    vartree,lvars=self._get_local_vars()
+    self.vartree = vartree
+    return lvars
 
   @exec_main
-  def get_this_block_key(self):
-    variables = []
-    frame=gdb.selected_frame()
-    funcname=self._get_frame_funcname(frame)
-    block = frame.block()
-    while block:
-      for symbol in block:
-        if (symbol.is_argument or symbol.is_variable):
-            name = symbol.name
-            if name not in variables:
-              variable=valcache(symbol.value(frame))
-              variables.append( (name,variable.type.strip_typedefs().code) )
-      if block.function:
-        break
-      block = block.superblock
-    key=(funcname,tuple(variables))
-    return key
-
+  def need_update(self):
+    return self.get_diff_and_update_vartree(self.vartree)
 
   @exec_main
   def _get_local_vars(self):
@@ -557,6 +514,60 @@ class LocalvarsTable(StorageId,BaseSubentity):
         break
       block = block.superblock
     return variables
+
+
+
+
+class LocalvarsTable(StorageId,BaseSubentity):
+  subentity_name='localvars'
+
+  @exec_main
+  def __init__(self,**kwargs):
+    super(LocalvarsTable,self).__init__(**kwargs)
+    self.current_table_id=None
+
+  def process_connection(self):
+    self.update_localvars()
+
+  @exec_main
+  def get_this_block_key(self):
+    blk=gdb.selected_frame().block()
+    return (gdb.selected_thread().ptid[1],blk.start,blk.end)
+
+  @exec_main
+  def update_localvars(self):
+    try:
+      key = self.get_this_block_key()
+    except (gdb.error,RuntimeError):
+      self.set_message_in_table('variables not available')
+      self.current_table_id=None
+      return
+    id,block = self.id_get(key)
+    if id!=None:
+      #множество переменных, которые соотв. данному блоку было отрисовано ранее.
+      #сравниваем значения отрис. ранее и значение перем. сейчас. Разницу отправляем
+      #в граф. окно для перерисовки части таблицы
+      if self.current_table_id!=id:
+        #блок изменился
+        self.exemplar_set(id,self.subentity_name)
+      need_update = block.need_update()
+      if need_update:
+        pkg={'cmd':'update_nodes', 'table_name':'localvars', 'nodes':need_update}
+      else:
+        pkg=None
+    else:
+      #создаем таблицу для блока
+      block = BlockLocalvarsTable()
+      id = self.id_insert(key,block)
+      pkg={ 'cmd':'exemplar_create',
+            'table_name':'localvars',
+            'table':block.get_localvars(),
+            'id':id,
+            'set':True,
+      }
+    self.current_table_id=id
+    if pkg:
+      self.send(pkg)
 
   def docheckpkg(self,pkg):
     return self.INDEX.get_by_idx(pkg['parent_id'])
