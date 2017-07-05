@@ -422,13 +422,8 @@ insert_pkg_json_into_table (json_t *json_tab, Table *tab) {
 
 void
 ghfunc_table_update_bounds(__attribute__((unused)) gpointer key, gpointer value, gpointer user_data) {
-  //WTable * wtab = WTABLE(user_data);
-  //Widget * w = WIDGET(wtab);
   Table  * tab  = TABLE(value);
-  //tab->lengths_outdated=TRUE;
   tab->tabsize_changed=TRUE;
-  //table_update_bounds(tab, w->y+2,w->x+1,w->lines-3,w->cols-2);
-  //table_compute_lengths (tab);
 }
 
 void
@@ -1547,12 +1542,10 @@ table_update_colwidth(Table * tab) {
 static void
 table_update_bounds(Table * tab, long y, long x, long lines, long cols) {
   message_assert (tab!=NULL);
-  tab->tabsize_changed=FALSE;
   tab->x = x;
   tab->y = y;
   tab->lines = lines;
   tab->cols  = cols;
-  tab->colstart[0] = x;
   table_update_colwidth(tab);
 }
 
