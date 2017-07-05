@@ -63,6 +63,7 @@ class ValueToChunks(object):
     self.converters['hex_to_long'] = lambda x: long(x,16)
     self.path_id_thread_depend = kwargs.pop('thread_depend',True)
     self.path_id_frame_depend  = kwargs.pop('frame_depend',True)
+    self.force_update={}
     self.on_cbs={
       'expand_variable':    [],
       'collapse_variable':  [],
@@ -107,6 +108,7 @@ class ValueToChunks(object):
     funcname=pkg['funcname']
     user_input = pkg['user_input']
     match=self.slice_regex.match(user_input)
+    self.force_update[path]=True
     if match:
       grps=match.groups()
       n1=int(grps[0])
@@ -134,6 +136,7 @@ class ValueToChunks(object):
       self.send_error('inferior not alive')
       return None
     path=pkg['path']
+    self.force_update[path]=True
     user_input = pkg['user_input']
     value=valcache(path)
     if 'converter' in pkg:
@@ -826,8 +829,9 @@ class ValueToChunks(object):
       path=child.path
       new_value = valcache(path)
       if not self.valeq(new_value,child.value) or \
-         self.expand_variable.get((funcname,path))!=child.expand  or \
-         self.user_slice.get((funcname,path))!=child.user_slice:
+          self.force_update.pop(path,False) or \
+          self.expand_variable.get((funcname,path))!=child.expand  or \
+          self.user_slice.get((funcname,path))!=child.user_slice:
         vartree=VarNode()
         if child.tochunks:
           tochunks = child.tochunks

@@ -525,6 +525,7 @@ class LocalvarsTable(StorageId,BaseSubentity):
   def __init__(self,**kwargs):
     super(LocalvarsTable,self).__init__(**kwargs)
     self.current_table_id=None
+    self.current_block=None
 
   def process_connection(self):
     self.update_localvars()
@@ -541,6 +542,7 @@ class LocalvarsTable(StorageId,BaseSubentity):
     except (gdb.error,RuntimeError):
       self.set_message_in_table('variables not available')
       self.current_table_id=None
+      self.current_block=None
       return
     id,block = self.id_get(key)
     if id!=None:
@@ -565,35 +567,38 @@ class LocalvarsTable(StorageId,BaseSubentity):
             'id':id,
             'set':True,
       }
+    assert id!=None
+    assert block!=None
     self.current_table_id=id
+    self.current_block=block
     if pkg:
       self.send(pkg)
 
   def docheckpkg(self,pkg):
-    return self.INDEX.get_by_idx(pkg['parent_id'])
+    return INDEX.get_by_idx(pkg['parent_id'])
 
   @exec_main
   def onclick_expand_variable(self,pkg):
     self.docheckpkg(pkg)
-    super(LocalvarsTable,self).onclick_expand_variable(pkg)
+    self.current_block.onclick_expand_variable(pkg)
     self.update_localvars()
 
   @exec_main
   def onclick_collapse_variable(self,pkg):
     self.docheckpkg(pkg)
-    super(LocalvarsTable,self).onclick_collapse_variable(pkg)
+    self.current_block.onclick_collapse_variable(pkg)
     self.update_localvars()
 
   @exec_main
   def onclick_change_slice(self,pkg):
     self.docheckpkg(pkg)
-    super(LocalvarsTable,self).onclick_change_slice(pkg)
+    self.current_block.onclick_change_slice(pkg)
     self.update_localvars()
 
   @exec_main
   def onclick_change_variable(self,pkg):
     self.docheckpkg(pkg)
-    super(LocalvarsTable,self).onclick_change_variable(pkg)
+    self.current_block.onclick_change_variable(pkg)
     self.update_localvars()
 
   def gdbevt_exited(self,pkg):
