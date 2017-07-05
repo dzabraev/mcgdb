@@ -55,6 +55,13 @@ int main(void) {
   } test_utf8;
   test_utf8.s = "тест кодировки abdc";
   char charbuf[4]="abc";
+  {
+    int block1=1;
+    int block2=2;
+    {
+      int block3=3;
+    }
+  }
   unsigned char ucharbuf[4]="uns";
   const char const_charbuf[4]="def";
   const char* m_char_ptrbuf[2];
