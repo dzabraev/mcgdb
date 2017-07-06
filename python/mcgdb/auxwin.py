@@ -174,7 +174,7 @@ class RegistersTable(ValueToChunks, BaseSubentity):
       if len(reg)>0 and reg[0] and reg[0]!="''" and len(reg[0])>0:
         regname='$'+reg[0]
         self.regnames.append(regname)
-    super(RegistersTable,self).__init__(INDEX,thread_depend=False,frame_depend=False, **kwargs)
+    super(RegistersTable,self).__init__(INDEX,**kwargs)
 
   def process_connection(self):
     return self.update_registers_initial()

@@ -11,6 +11,65 @@ from mcgdb.common import    exec_main, gdb_print, gdb_stopped, \
                             get_this_thread_num, get_this_frame_num, \
                             mcgdbBaseException
 
+class Path(object):
+  ''' Данный класс используется для представления пути до переменной
+      Например, this[0].cpzero или this[0]._vptr.Cache
+      Данный класс был создан для обработки путей типа this[0]._vptr.Cache.
+      Особенность this[0]._vptr.Cache в том, что пути this[0]._vptr не существует,
+      а this[0]._vptr.Cache существует
+  '''
+  def __init__(self,path=[],path_id=None):
+    if path_id!=None:
+      path=INDEX.get_by_idx(path_id)
+      self.copy(path)
+    else:
+      self.path=path
+    self.id()
+
+  def copy(self,path):
+    self.path = path.path
+
+  def append(self,name):
+    ''' Если name является строкой, то xxx.name; если name есть int, то будет xxx[name]
+        Данный метод возвращает новый Path, где к новому объекту добавлен name
+    '''
+    if not type(name) is int:
+      name = name.strip()
+    new_path = self.path.copy()
+    new_path.append(name)
+    return Path(new_path)
+
+  def __str__(self):
+    ''' Вернуть значение path в печатном виде'''
+    if not self.path:
+      return ''
+    strpath=self.path[0]
+    for name in self.path[1:]:
+      if type(name) is int:
+        #берется элемент массива ptr[0]
+        strpath = '{}[{}]'.format(strpath,name)
+      else:
+        strpath = strpath+'.'+name
+    return strpath
+
+  def value(self):
+    ''' Вернуть gdb.Value, которое соответствует path'''
+    value = gdb.parse_and_eval(self.path[0])
+    for name in self.path[1:]:
+      value = value[name]
+    return valcache(value)
+
+  def id(self):
+    key=tuple(self.path)
+    return INDEX.insert(key)
+
+  def assign(self,new_value):
+    gdb_cmd='set variable {path}={new_value}'.format(path=str(self),new_value=new_value)
+    try:
+      gdb.execute(gdb_cmd)
+    except Exception as e:
+      raise mcgdbBaseException(str(e))
+
 
 class VarNode(object):
   def __init__(self,value=None,path=None,expand=None,user_slice=None,depth=-1,name=None,tochunks=None):
@@ -66,8 +125,6 @@ class ValueToChunks(object):
     self.INDEX=INDEX
     self.converters['bin_to_long'] = lambda x: long(x,2)
     self.converters['hex_to_long'] = lambda x: long(x,16)
-    self.path_id_thread_depend = kwargs.pop('thread_depend',True)
-    self.path_id_frame_depend  = kwargs.pop('frame_depend',True)
     self.force_update={} #Если пользователь меняет значение переменной, то сюда помещается
     #path измененной переменной. Все path помещенные сюда попадут в diff между настоящим и предыдущем состоянием.
     #Смысл данной переменной в том, что если пользователь инициировал операцию изменения переменной,
@@ -90,37 +147,17 @@ class ValueToChunks(object):
     d.update({'str':string})
     return d
 
-  def path_id(self,path,value=None):
-    key=[]
-    if self.path_id_thread_depend:
-      key.append(get_this_thread_num())
-    if self.path_id_frame_depend:
-      key.append(get_this_frame_num())
-    key.append(path)
-    key=tuple(key)
-    if value!=None:
-      return self.INDEX(key,value)
-    else:
-      idx=self.INDEX.get(key)[0]
-      assert idx!=None
-      return idx
 
   def onclick_expand_variable(self,pkg):
-    path=pkg['path']
-    funcname=pkg['funcname']
-    self.expand_variable[(funcname,path)]=True
+    self.expand_variable[pkg['path_id']]=True
 
   def onclick_collapse_variable(self,pkg):
-    path=pkg['path']
-    funcname=pkg['funcname']
-    self.expand_variable[(funcname,path)]=False
+    self.expand_variable[pkg['path_id']]=False
 
   def onclick_change_slice(self,pkg):
-    path=pkg['path']
-    funcname=pkg['funcname']
+    path_id=pkg['path_id']
     user_input = pkg['user_input']
     match=self.slice_regex.match(user_input)
-    self.force_update[path]=True
     if match:
       grps=match.groups()
       n1=int(grps[0])
@@ -130,7 +167,8 @@ class ValueToChunks(object):
         n2=None
       if n2!=None and n1>=n2:
         raise mcgdbBaseException('bad input: right bound must be greater than left')
-      self.user_slice[(funcname,path)] = (n1,n2)
+      self.user_slice[path_id] = (n1,n2)
+      self.force_update[path_id]=True
     else:
       raise mcgdbBaseException('bad input: {}'.format(user_input))
 
@@ -143,10 +181,11 @@ class ValueToChunks(object):
       raise mcgdbBaseException('inferior running')
     if not inferior_alive ():
       raise mcgdbBaseException('inferior not alive')
-    path=pkg['path']
-    self.force_update[path]=True
+    path_id=pkg['path_id']
+    self.force_update[path_id]=True
     user_input = pkg['user_input']
-    value=valcache(path)
+    path = Path(id=path_id)
+    value=path.value()
     if 'converter' in pkg:
       new_value = self.converters.get(pkg['converter'])(user_input)
     elif value.type.strip_typedefs().code in (gdb.TYPE_CODE_INT,gdb.TYPE_CODE_PTR):
@@ -156,12 +195,8 @@ class ValueToChunks(object):
         raise mcgdbBaseException(str(e))
     else:
       new_value = user_input
-    gdb_cmd='set variable {path}={new_value}'.format(path=path,new_value=new_value)
-    try:
-      gdb.execute(gdb_cmd)
-    except Exception as e:
-      raise mcgdbBaseException(str(e))
-      return None
+    path.assign(new_value)
+
     #при изменении переменной будет сгенерировано событие
     #gdb.events.memory_changed. При обработке данного события
     #должны быть обновлены переменные.
@@ -401,6 +436,16 @@ class ValueToChunks(object):
         ),
       }]
 
+  def stringify_type(self,type):
+    ''' type есть значение value.type'''
+    valuetype1 = str(type)
+    valuetype2 = str(type.strip_typedefs())
+    if valuetype1==valuetype2:
+      valuetype=valuetype1
+    else:
+      valuetype='{} aka {}'.format(valuetype1,valuetype2)
+    return valuetype
+
   def changable_value_to_chunks(self,value,path,**kwargs):
     if kwargs.get('enable_additional_text',False)==True:
       valuestr  = cached_stringify_value(value,path,**kwargs)
@@ -410,12 +455,7 @@ class ValueToChunks(object):
       kwargs['enable_additional_text']=False
       strvalue_pure=stringify_value(value,**kwargs)
       kwargs['proposed_text'] = strvalue_pure
-    valuetype1 = str(value.type)
-    valuetype2 = str(value.type.strip_typedefs())
-    if valuetype1==valuetype2:
-      valuetype=valuetype1
-    else:
-      valuetype='{} aka {}'.format(valuetype1,valuetype2)
+    valuetype = self.stringify_type(value.type)
     return self.changable_strvalue_to_chunks(valuestr,path,valuetype,**kwargs)
 
   def changable_strvalue_to_chunks(self,valuestr,path,valuetype,**kwargs):
@@ -475,14 +515,14 @@ class ValueToChunks(object):
       value_path='{path}.{field_name}'.format(path=path,field_name=field_name)
       try:
         field_value = valcache(value[field_name])
-        data_chunks+=self.value_to_chunks_1(field_value,field_name,value_path,deref_depth,**kwargs)
-        data_chunks.append({'str':'\n'})
       except gdb.error as e:
         #В C++ имеет место быть исключение вида
         #   Python Exception <class 'gdb.error'> cannot resolve overloaded method `DeviceExc': no arguments supplied:
         #while dereference this
         data_chunks.append({'str':str(e)+'\n'})
         continue
+      data_chunks+=self.value_to_chunks_1(field_value,field_name,value_path,deref_depth,**kwargs)
+      data_chunks.append({'str':'\n'})
     if type_code==gdb.TYPE_CODE_STRUCT:
       chunks1.append({'chunks':data_chunks,'type_code':'TYPE_CODE_STRUCT'})
     elif type_code==gdb.TYPE_CODE_UNION:
@@ -520,7 +560,7 @@ class ValueToChunks(object):
             **slice_clickable (bool) : Если False, то slice делается некликательным. По умолчанию True.
             **vartree : Дерево для value
     '''
-    path=name
+    path=Path(['name'])
     deref_depth=0
     already_deref = set()
     if 'funcname' not in kwargs:
@@ -541,9 +581,26 @@ class ValueToChunks(object):
   def ptrval_to_ulong(self,value):
     return ctypes.c_ulong(long(value)).value
 
+  def method_to_chunks(self,value, name, path, deref_depth, **kwargs):
+    chunks=[]
+    s=unicode(value)
+    re.match(r'({[^}]+}) ([^ ]) (<[^>]+>)')
+    if kwargs.get('print_typename',True):
+      chunks+=self.value_type_to_chunks(value,**kwargs)
+      chunks.append({'str':' '})
+    chunks+=self.name_to_chunks(name)
+
+
   def functionptr_to_chunks(self,value, name, path, deref_depth, **kwargs):
     chunks=[]
-    func_addr = self.ptrval_to_ulong(value)
+    type_code = value.type.strip_typedefs().code
+    if type_code == gdb.TYPE_CODE_METHOD:
+      #Workaround: get address of class method
+      s=unicode(value)
+      idx=re.search('0x[0-9A-Fa-f]+',s).regs[0]
+      func_addr = long(s[int(idx[0]):int(idx[1])],0)
+    else:
+      func_addr = self.ptrval_to_ulong(value)
     function=None
     try:
       block=gdb.block_for_pc (func_addr)
@@ -563,8 +620,9 @@ class ValueToChunks(object):
         chunks+=self.value_type_to_chunks(value,**kwargs)
         chunks.append({'str':' '})
       chunks+=self.name_to_chunks(name)
-    #chunks.append({'str':hex(func_addr)[:-1]})
-    chunks+=self.changable_value_to_chunks(value,path,**kwargs)
+    #chunks+=self.changable_value_to_chunks(value,path,**kwargs)
+    valuetype = self.stringify_type(value.type)
+    chunks+=self.changable_strvalue_to_chunks(str(func_addr),path,valuetype,**kwargs)
     chunks.append({'str':' '})
     chunks.append({'str':'<{}>'.format(func_name)})
     return chunks
@@ -677,7 +735,7 @@ class ValueToChunks(object):
         else:
           n1,n2 = n1_orig,n2_orig
         chunks += self.array_to_chunks (value, name, n1, n2, path, deref_depth, vartree=varnode, **kwargs)
-    elif type_code==gdb.TYPE_CODE_PTR:
+    elif type_code == gdb.TYPE_CODE_PTR:
       if re.match('.*char \*$',type_str):
         #строку печатаем по-другому в сравнении с обычным pointer
         if name:
@@ -691,7 +749,7 @@ class ValueToChunks(object):
         pointer_data_chunks = []
         if not value.is_optimized_out and not re.match('.*void \*$',type_str) and not is_incomplete_type_ptr(value):
           #все OK
-          if value.dereference().type.strip_typedefs().code==gdb.TYPE_CODE_FUNC:
+          if value.dereference().type.strip_typedefs().code == gdb.TYPE_CODE_FUNC:
             is_funct_ptr=True
           else:
             pointer_data_chunks = self.pointer_data_to_chunks (value, name, path, deref_depth, vartree=varnode, **kwargs)
@@ -703,6 +761,8 @@ class ValueToChunks(object):
         if len(pointer_data_chunks) > 0:
           chunks+=[{'str':'\n'}]
           chunks+=pointer_data_chunks
+    elif type_code in (gdb.TYPE_CODE_METHOD,):
+      chunks += self.functionptr_to_chunks(value, name, path, deref_depth, **kwargs)
     else:
       if  name!=None:
         if print_typename:
@@ -712,10 +772,6 @@ class ValueToChunks(object):
       chunks+=self.changable_value_to_chunks(value,path,**kwargs)
     res_chunk={'chunks':chunks, 'id':self.path_id(path)}
     return [res_chunk]
-
-#  def make_slice_chunk_auto(self,path,funcname):
-#    n1,n2 = self.user_slice.get((funcname,path),(0,None))
-#    return self.make_slice_chunk(n1,n2,path,funcname)
 
   def make_slice_chunk(self,n1,n2,path,funcname,slice_clickable=True):
     chunks=[]

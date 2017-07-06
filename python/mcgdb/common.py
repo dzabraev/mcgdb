@@ -213,6 +213,9 @@ class GdbValueCache(object):
         valcache1=value
     return valcache1
 
+  def __call__(self,*args,**kwargs):
+    return self.valcache(*args,**kwargs)
+
   def add_valcache_byaddr(self,value):
     addr=valueaddress_to_ulong(value.address)
     if addr==None:
@@ -225,7 +228,7 @@ class GdbValueCache(object):
 
 value_cache = GdbValueCache()
 cached_stringify_value = value_cache.cached_stringify_value
-valcache = value_cache.valcache
+valcache = value_cache
 
 
 
