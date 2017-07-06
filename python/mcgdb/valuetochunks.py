@@ -56,7 +56,11 @@ def is_incomplete_type_ptr(value):
 class ValueToChunks(object):
   def __init__(self,INDEX, **kwargs):
     self.slice_regex=re.compile('^(-?\d+)([:, ](-?\d+))?$')
-    self.user_slice={}
+    self.user_slice={} # Данная переменная хранит информацию о том,
+    # что если встречается указатель ptr, то сколько элементов указателя
+    # ptr[0], ptr[1], ... нужно печатать. key=path, value=(n1,n2).
+    #n1,n2 задает диапазон, включая оба конца. Если n2 есть None, то печатается строго
+    #один элемент ptr[n1]
     self.expand_variable={}
     self.converters={}
     self.INDEX=INDEX
