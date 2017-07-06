@@ -10,7 +10,7 @@ from mcgdb.basewin import BaseWin,TABID_TMP, StorageId
 from mcgdb.common  import gdb_stopped,inferior_alive,gdb_print, TablePackages
 from mcgdb.valuetochunks import check_chunks, ValueToChunks, VarNode
 from mcgdb.common  import exec_main, valcache, INDEX, INDEX_tmp, \
-                    get_this_thread_num
+                    get_this_thread_num, mcgdbBaseException
 
 
 class BaseSubentity(TablePackages):
@@ -47,9 +47,11 @@ class BacktraceTable(ValueToChunks,BaseSubentity):
   @exec_main
   def _select_frame_1(self,nframe):
     if not gdb_stopped():
-      return 'inferior running'
+      self.send_error('inferior running')
+      return
     if not inferior_alive ():
-      return 'inferior not alive'
+      self.send_error('inferior not alive')
+      return
     n_cur_frame=0
     frame = gdb.newest_frame ()
     while frame:
@@ -58,15 +60,13 @@ class BacktraceTable(ValueToChunks,BaseSubentity):
         return
       n_cur_frame+=1
       frame = frame.older()
-    return "can't find frame #{}".format(nframe)
+    self.send_error("can't find frame #{}".format(nframe))
+    return
 
   def onclick_select_frame(self,pkg):
     nframe = pkg['nframe']
-    res=self._select_frame_1(nframe)
-    if res!=None:
-      self.send_error(res)
-    else:
-      return [{'cmd':'mcgdbevt','mcgdbevt':'frame', 'data':{}}]
+    self._select_frame_1(nframe)
+    return [{'cmd':'mcgdbevt','mcgdbevt':'frame', 'data':{}}]
 
 
   @exec_main
@@ -278,7 +278,7 @@ class RegistersTable(ValueToChunks, BaseSubentity):
       #gdb.Value will be cast into long or int and python will
       #raise exception:
       #Python Exception <class 'gdb.error'> That operation is not available on integers of more than 8 bytes.:
-      if str(tabdata[regname])!=str(regvalue):
+      if self.force_update.get(regname,False) or str(tabdata[regname])!=str(regvalue):
         nodesdata+=self.update_register_data(regname)
         tabdata[regname]=regvalue
     if nodesdata:
@@ -321,11 +321,17 @@ class RegistersTable(ValueToChunks, BaseSubentity):
     self.update_registers()
 
   def onclick_change_slice(self,pkg):
-    super(RegistersTable,self).onclick_change_slice(pkg)
+    try:
+      super(RegistersTable,self).onclick_change_slice(pkg)
+    except mcgdbBaseException as e:
+      self.send_error(str(e))
     self.update_registers()
 
   def onclick_change_variable(self,pkg):
-    super(RegistersTable,self).onclick_change_variable(pkg)
+    try:
+      super(RegistersTable,self).onclick_change_variable(pkg)
+    except mcgdbBaseException as e:
+      self.send_error(str(e))
     self.update_registers()
 
 
@@ -460,7 +466,19 @@ class ThreadsTable(ValueToChunks, BaseSubentity):
 
 
 class BlockLocalvarsTable(ValueToChunks):
-  '''Локальные переменные для конкретного блока'''
+  ''' Локальные переменные для конкретного блока
+
+      Для каждого встреченного блока создается объект типа BlockLocalvarsTable.
+      Каждый блок характеризуется адресом начала, адресом конца и номером треда.
+
+      В рамках LocalvarsTable хранятся экземпляры BlockLocalvarsTable.
+      Если встречается ранее не встречавшийся блок, тогда создается новый экземпляр данного класса.
+      Если встречается ранее встречавшийся блок, тогда в граф. окно отправляется команда, согласно которой
+      текущей таблицей должна быть назначена таблица, соотв. текущему блоку. После этого вычисляется разница
+      значений переменных для блока в предыдущий момент времени и в текущей момент. Вычисленная разница
+      отправляется в граф. окно для обновления таблицы с лок. перменными.
+  '''
+  subentity_name='localvars'
 
   @exec_main
   def __init__(self,**kwargs):
@@ -592,13 +610,19 @@ class LocalvarsTable(StorageId,BaseSubentity):
   @exec_main
   def onclick_change_slice(self,pkg):
     self.docheckpkg(pkg)
-    self.current_block.onclick_change_slice(pkg)
+    try:
+      self.current_block.onclick_change_slice(pkg)
+    except mcgdbBaseException as e:
+      self.send_error(str(e))
     self.update_localvars()
 
   @exec_main
   def onclick_change_variable(self,pkg):
     self.docheckpkg(pkg)
-    self.current_block.onclick_change_variable(pkg)
+    try:
+      self.current_block.onclick_change_variable(pkg)
+    except mcgdbBaseException as e:
+      self.send_error(str(e))
     self.update_localvars()
 
   def gdbevt_exited(self,pkg):

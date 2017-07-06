@@ -8,7 +8,8 @@ from abc import abstractmethod, abstractproperty
 from mcgdb.common import    exec_main, gdb_print, gdb_stopped, \
                             inferior_alive, cached_stringify_value, \
                             valcache, stringify_value, \
-                            get_this_thread_num, get_this_frame_num
+                            get_this_thread_num, get_this_frame_num, \
+                            mcgdbBaseException
 
 
 class VarNode(object):
@@ -63,7 +64,14 @@ class ValueToChunks(object):
     self.converters['hex_to_long'] = lambda x: long(x,16)
     self.path_id_thread_depend = kwargs.pop('thread_depend',True)
     self.path_id_frame_depend  = kwargs.pop('frame_depend',True)
-    self.force_update={}
+    self.force_update={} #Если пользователь меняет значение переменной, то сюда помещается
+    #path измененной переменной. Все path помещенные сюда попадут в diff между настоящим и предыдущем состоянием.
+    #Смысл данной переменной в том, что если пользователь инициировал операцию изменения переменной,
+    #и передал то же значение, что и было, иными словами переменная не изменится; При всяком изменении
+    #у пользователя в окне появляется <Wait change: ...>. Если насильно не перерисовать переменную, то
+    #Wait change так и будет висеть.
+    if not hasattr(self,'subentity_name'):
+      self.subentity_name = kwargs.pop('subentity_name')
     self.on_cbs={
       'expand_variable':    [],
       'collapse_variable':  [],
@@ -117,12 +125,10 @@ class ValueToChunks(object):
       else:
         n2=None
       if n2!=None and n1>=n2:
-        self.send_error('bad input: right bound must be greater than left')
-        return
+        raise mcgdbBaseException('bad input: right bound must be greater than left')
       self.user_slice[(funcname,path)] = (n1,n2)
     else:
-      self.send_error('bad input: {}'.format(user_input))
-      return
+      raise mcgdbBaseException('bad input: {}'.format(user_input))
 
   @exec_main
   def onclick_change_variable(self,pkg):
@@ -130,11 +136,9 @@ class ValueToChunks(object):
     #Поскольку после введения данных у пользователя
     #отображается <Wait change: ... >, и это сообщение надо заменить предыдущим значением.
     if not gdb_stopped():
-      self.send_error('inferior running')
-      return None
+      raise mcgdbBaseException('inferior running')
     if not inferior_alive ():
-      self.send_error('inferior not alive')
-      return None
+      raise mcgdbBaseException('inferior not alive')
     path=pkg['path']
     self.force_update[path]=True
     user_input = pkg['user_input']
@@ -145,23 +149,18 @@ class ValueToChunks(object):
       try:
         new_value=long(gdb.parse_and_eval(user_input))
       except Exception as e:
-        self.send_error(str(e))
-        return None
+        raise mcgdbBaseException(str(e))
     else:
       new_value = user_input
     gdb_cmd='set variable {path}={new_value}'.format(path=path,new_value=new_value)
     try:
       gdb.execute(gdb_cmd)
     except Exception as e:
-      self.send_error(str(e))
+      raise mcgdbBaseException(str(e))
       return None
     #при изменении переменной будет сгенерировано событие
     #gdb.events.memory_changed. При обработке данного события
     #должны быть обновлены переменные.
-
-  @abstractproperty
-  def subentity_name(self):
-    pass
 
   def base_onclick_data(self,cmdname,**kwargs):
     onclick_data = {
@@ -469,10 +468,17 @@ class ValueToChunks(object):
     data_chunks=[]
     for field in value.type.strip_typedefs().fields():
       field_name = field.name
-      field_value = valcache(value[field_name])
       value_path='{path}.{field_name}'.format(path=path,field_name=field_name)
-      data_chunks+=self.value_to_chunks_1(field_value,field_name,value_path,deref_depth,**kwargs)
-      data_chunks.append({'str':'\n'})
+      try:
+        field_value = valcache(value[field_name])
+        data_chunks+=self.value_to_chunks_1(field_value,field_name,value_path,deref_depth,**kwargs)
+        data_chunks.append({'str':'\n'})
+      except gdb.error as e:
+        #В C++ имеет место быть исключение вида
+        #   Python Exception <class 'gdb.error'> cannot resolve overloaded method `DeviceExc': no arguments supplied:
+        #while dereference this
+        data_chunks.append({'str':str(e)+'\n'})
+        continue
     if type_code==gdb.TYPE_CODE_STRUCT:
       chunks1.append({'chunks':data_chunks,'type_code':'TYPE_CODE_STRUCT'})
     elif type_code==gdb.TYPE_CODE_UNION:

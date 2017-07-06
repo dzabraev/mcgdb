@@ -35,7 +35,12 @@ else:
 
 logging.basicConfig(filename=LOG_FILENAME,format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
 
+class mcgdbBaseException(Exception):
+  def __init__(self, value):
+    self.value = value
 
+  def __str__(self):
+    return str(self.value)
 
 def exec_main(f):
   def decorated(*args,**kwargs):

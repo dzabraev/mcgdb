@@ -6,7 +6,8 @@ import gdb
 
 import mcgdb
 from mcgdb.common import  pkgsend,pkgrecv,gdb_print,exec_cmd_in_gdb,gdb_stopped,\
-                          error,get_prompt,debug,is_main_thread,exec_main,TablePackages
+                          error,get_prompt,debug,is_main_thread,exec_main,TablePackages, \
+                          mcgdbBaseException
 
 TABID_TMP=1 #Временный экземпляр таблицы. Используется для выведения пользователю каких-либо сообщений.
 #После того, как экземпляр был сделан текущим, и потом на место текущего экземпляра
@@ -200,7 +201,11 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     for subsentity in destinations:
       if hasattr(subsentity,method_name):
         cb=getattr(subsentity,method_name)
-        ret=cb(pkg)
+        try:
+          ret=cb(pkg)
+        except mcgdbBaseException as e:
+          self.send_error(str(e))
+          ret=None
         if ret:
           assert type(ret) in (list,tuple)
           ret_pkgs+=ret
