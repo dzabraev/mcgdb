@@ -89,6 +89,7 @@ Selbar *find_selbar (WDialog *h);
 static  Selbar *selbar_new (int y, int x, int height, int width);
 void    selbar_add_button(Selbar *selbar, const char * text);
 void    ghfunc_table_update_bounds(__attribute__((unused)) gpointer key, gpointer value, gpointer user_data);
+void    ghfunc_tables_update_bounds(__attribute__((unused)) gpointer key, gpointer value, gpointer user_data);
 static void     selbar_set_current_button(Selbar *selbar, const char *tabname);
 static void     selbar_draw (Selbar *bar);
 static void     reset_selected (gpointer data, gpointer user_data);
@@ -426,10 +427,18 @@ ghfunc_table_update_bounds(__attribute__((unused)) gpointer key, gpointer value,
   tab->tabsize_changed=TRUE;
 }
 
+
+void
+ghfunc_tables_update_bounds(__attribute__((unused)) gpointer key, gpointer value, gpointer user_data) {
+  g_hash_table_foreach ((GHashTable *)(value), ghfunc_table_update_bounds, user_data);
+}
+
 void
 wtable_update_bound(WTable *wtab) {
+  /* Данная функция устанавливает флаг для всех таблиц, сигнализирующий о том, что если
+   * таблица будет отрисовываться, то для нее необходимо сначала сделать table_compute_lengths */
   Selbar *selbar = wtab->selbar;
-  g_hash_table_foreach (wtab->tables, ghfunc_table_update_bounds, wtab);
+  g_hash_table_foreach (wtab->tables_exemplars, ghfunc_tables_update_bounds, NULL);
   selbar->x     = WIDGET(wtab)->x;
   selbar->y     = WIDGET(wtab)->y;
   selbar->cols  = WIDGET(wtab)->cols;
