@@ -738,8 +738,12 @@ class GEThread(object):
       for fd in ready_rfds:
         if fd in self.wait_connection.keys():
           entity=self.wait_connection[fd]
-          ok=entity.process_connection()
-          del self.wait_connection[fd]
+          try:
+            ok=entity.process_connection()
+            del self.wait_connection[fd]
+          except OSError as e:
+            gdb_print('Error while opening window: {}\n'.format(str(e)))
+            ok=False
           if ok:
             self.fte[entity.fd]=entity
             #entity.gdb_update_current_frame(self.exec_filename,self.exec_line)
