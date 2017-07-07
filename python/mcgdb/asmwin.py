@@ -10,7 +10,7 @@ from mcgdb.valuetochunks import ValueToChunks
 
 import re
 
-class AsmWin(ValueToChunks,BaseWin):
+class AsmWin(BaseWin,ValueToChunks):
   '''Окно для отображение ассемблерного кода.
   '''
 
@@ -19,7 +19,7 @@ class AsmWin(ValueToChunks,BaseWin):
 
   @exec_main
   def __init__(self,**kwargs):
-    super(AsmWin,self).__init__(INDEX,**kwargs)
+    super(AsmWin,self).__init__(subentity_name=None,**kwargs)
     self.location=kwargs.get('location') #display only this function.
     self.start_addr=None
     self.end_addr=None

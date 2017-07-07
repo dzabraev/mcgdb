@@ -11,94 +11,142 @@ from mcgdb.common import    exec_main, gdb_print, gdb_stopped, \
                             get_this_thread_num, get_this_frame_num, \
                             mcgdbBaseException, INDEX
 
-def Path(path=[],path_id=None,value=None):
-  class _Path(object):
-    ''' Данный класс используется для представления пути до переменной
-        Например, this[0].cpzero или this[0]._vptr.Cache
-        Данный класс был создан для обработки путей типа this[0]._vptr.Cache.
-        Особенность this[0]._vptr.Cache в том, что пути this[0]._vptr не существует,
-        а this[0]._vptr.Cache существует
-    '''
-    def __init__(self,path=[],path_id=None,value=None):
-      self.value=value
-      self.path=path
-      self.__id()
 
 
-    @property
-    def parent(self):
-      if not self.path:
-        return None
-      return Path(self.path[:-1])
-
-    def append(self,name):
-      ''' Если name является строкой, то xxx.name; если name есть int, то будет xxx[name]
-          Данный метод возвращает новый Path, где к новому объекту добавлен name
-      '''
-      if not type(name) is int:
-        name = name.strip()
-      new_path = copy.copy(self.path)
-      new_path.append(name)
-      return Path(new_path)
-
-    def __str__(self):
-      ''' Вернуть значение path в печатном виде'''
-      if not self.path:
-        return ''
-      strpath=self.path[0]
-      for name in self.path[1:]:
-        if type(name) is int:
-          #берется элемент массива ptr[0]
-          strpath = '{}[{}]'.format(strpath,name)
-        else:
-          strpath = strpath+'.'+name
-      return strpath
-
-    def value(self):
-      ''' Вернуть gdb.Value, которое соответствует path'''
-      value = gdb.parse_and_eval(self.path[0])
-      for name in self.path[1:]:
-        value = value[name]
-      return valcache(value)
-
-    def __id(self):
-      key=tuple(self.path)
-      self.id = INDEX.insert(key,self)
-
-    def assign(self,new_value):
-      gdb_cmd='set variable {path}={new_value}'.format(path=str(self),new_value=new_value)
-      try:
-        gdb.execute(gdb_cmd)
-      except Exception as e:
-        raise mcgdbBaseException(str(e))
-  #END OF _Path definition
-  if path_id!=None:
-    key,path_object = INDEX.get_by_idx(path_id)
-    assert path_object!=None
-    return path_object
-  if path:
-    id,path_object = INDEX.get(tuple(path))
-    return path_object
-  return _Path(path=path,value=value)
-
-
-
-class VarNode(object):
-  def __init__(self,value=None,expand=None,user_slice=None,
-                    name=None,tochunks=None,parent=None,):
-    self.childs=[]
-    self.value = value
-    self.path = path
-    self.expand = expand
-    self.user_slice = user_slice
+class Node(object):
+  ''' Данный класс используется для представления пути до переменной
+      Например, this[0].cpzero или this[0]._vptr.Cache
+      Данный класс был создан для обработки путей типа this[0]._vptr.Cache.
+      Особенность this[0]._vptr.Cache в том, что пути this[0]._vptr не существует,
+      а this[0]._vptr.Cache существует
+  '''
+  def __init__(self,name,parent,base=None):
     self.name=name
-    self.tochunks=tochunks
-    self.parnt=parent
+    self.parent=parent
+    if base:
+      self.base=base
+    else:
+      self.base=parent.base
+    self.childs={}
+    self.base.id_seq+=1
+    self.id=self.base.id_seq
+    self.base.nodes[self.id] = self
+    if self.parent:
+      self.do_capture()
+      self.parent.childs[name]=self
 
-  def add_node(self,value=None,expand=None,user_slice=None,name=None,tochunks=None):
-    node=VarNode(value=value,expand_user=expand,user_slice=user_slice,name=name,tochunks=tochunks,parent=self.)
-    self.childs.append(node)
-    return node
+  def do_capture(self):
+    self.saved_img =self.get_value_img(self.value())
+    self.saved_data = self.base.capture(self.id)
+
+  def get_value_img(self,value):
+    try:
+      return unicode(value)
+    except Exception as e:
+      return str(e)
+
+  def is_changed_upd(self):
+    old_img  = self.saved_img
+    old_data = self.saved_data
+    self.do_capture() #update saved_{img,data}
+    new_img  = self.saved_img
+    new_data = self.saved_data
+    return not self.base.equals(old_img,old_data,new_img,new_data)
+
+  def append(self,name,tochunks=None):
+    ''' Если name является строкой, то xxx.name; если name есть int, то будет xxx[name]
+        Данный метод возвращает новый Path, где к новому объекту добавлен name
+    '''
+    if not type(name) is int:
+      name = name.strip()
+    child = self.childs.get(name)
+    if child:
+      child.do_capture()
+    else:
+      child = Node(name=name,parent=self)
+    child.tochunks=tochunks
+    return child
+
+  def path_from_root(self):
+    assert self.parent!=None
+    s=[self.name]
+    parent=self.parent
+    #в корне дерева ничего не хранится, поэтому parent.parent
+    while parent.parent:
+      s.append(parent.name)
+      parent=parent.parent
+    s.reverse()
+    return s
+
+  def __str__(self):
+    ''' Вернуть значение path в печатном виде'''
+    parent=self.parent
+    path=self.path_from_root()
+    strpath=path[0]
+    assert type(path[0]) is str
+    for name in path[1:]:
+      if type(name) is int:
+        #берется элемент массива ptr[0]
+        strpath = '{}[{}]'.format(strpath,name)
+      else:
+        strpath = strpath+'.'+name
+    return strpath
+
+  def value(self):
+    ''' Вернуть gdb.Value, которое соответствует path'''
+    path=self.path_from_root()
+    value = gdb.parse_and_eval(path[0])
+    for name in path[1:]:
+      value = value[name]
+    return valcache(value)
+
+  def assign(self,new_value):
+    gdb_cmd='set variable {path}={new_value}'.format(path=str(self),new_value=new_value)
+    try:
+      gdb.execute(gdb_cmd)
+    except Exception as e:
+      raise mcgdbBaseException(str(e))
+
+
+class BasePath(object):
+  def __init__(self, capture, equals):
+    self.nodes={} # nodes[path_id] = node
+    self.id_seq=0
+    self.capture=capture
+    self.equals = equals
+    self.root = Node(base=self,name=None, parent=None)
+
+  def Path(self, name=None, path_id=None, path=None):
+    if path_id:
+      return self.nodes[path_id]
+    elif name:
+      return self.root.append(name=name)
+    elif path:
+      node=self.root
+      for name in path:
+        node=node.childs[name]
+      return node
+    else:
+      return self.root
+
+  def __diff(self,node,res):
+    for child in node.childs.values():
+      if child.is_changed_upd():
+        res.append(child)
+      else:
+        self.__diff(child,res)
+
+  def diff(self,node=None):
+    if not node:
+      node=self.root
+    if node.parent and node.is_changed_upd():
+      return [node]
+    res=[]
+    self.__diff(node,res)
+    return res
+
+
+
 
 
 def check_chunks(chunks):
@@ -120,12 +168,16 @@ def check_chunks(chunks):
 
 
 def is_incomplete_type_ptr(value):
-  return  value.type.target().strip_typedefs().code in (gdb.TYPE_CODE_VOID,) or ( #typedef T1 void; T1 *x
+  try:
+    voidtype=value.type.target().strip_typedefs().code in (gdb.TYPE_CODE_VOID,)
+  except RuntimeError:
+    voidtype=False
+  return   voidtype or ( #typedef T1 void; T1 *x
           value.type.strip_typedefs().code==gdb.TYPE_CODE_PTR and \
           value.type.strip_typedefs().target().strip_typedefs().code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION) and \
           len(value.type.strip_typedefs().target().strip_typedefs().fields())==0)
 
-class ValueToChunks(object):
+class ValueToChunks(BasePath):
   def __init__(self, **kwargs):
     self.slice_regex=re.compile('^(-?\d+)([:, ](-?\d+))?$')
     self.user_slice={} # Данная переменная хранит информацию о том,
@@ -151,7 +203,9 @@ class ValueToChunks(object):
       'change_slice'    :   [],
       'change_variable' :   [],
     }
-    super(ValueToChunks,self).__init__(**kwargs)
+    capture=lambda id:(self.expand_variable.get(id), self.user_slice.get(id))
+    equals=lambda old_img,old_data,new_img,new_data:  old_img==new_img and old_data==new_data
+    super(ValueToChunks,self).__init__(capture=capture,equals=equals,**kwargs)
 
 
   def text_chunk(self,string,**kwargs):
@@ -159,20 +213,38 @@ class ValueToChunks(object):
     d.update({'str':string})
     return d
 
+  def map_nodes_to_chunks(self,nodes):
+    mapped=[]
+    for node in nodes:
+      if node.tochunks:
+        func=node.tochunks
+      else:
+        func=self.value_to_chunks_1
+      chunks=func(value=node.value(), name=str(node.name), path=node)
+      assert len(chunks)==1
+      mapped.append(chunks[0])
+    return mapped
 
+  @exec_main
+  def diff(self,node=None):
+    return self.map_nodes_to_chunks(super(ValueToChunks,self).diff(node=node))
+
+  @exec_main
   def onclick_expand_variable(self,pkg):
-    path = Path(path_id=pkg['path_id'])
+    path = self.Path(path_id=pkg['path_id'])
     self.expand_variable[path.id]=True
-    return path
+    return self.diff(path)
 
+  @exec_main
   def onclick_collapse_variable(self,pkg):
-    path = Path(path_id=pkg['path_id'])
+    path = self.Path(path_id=pkg['path_id'])
     self.expand_variable[path.id]=False
-    return path
+    return self.diff(path)
 
+  @exec_main
   def onclick_change_slice(self,pkg):
     path_id=pkg['path_id']
-    path=Path(path_id=path_id)
+    path=self.Path(path_id=path_id)
     user_input = pkg['user_input']
     match=self.slice_regex.match(user_input)
     if match:
@@ -188,7 +260,7 @@ class ValueToChunks(object):
       self.force_update[path_id]=True
     else:
       raise mcgdbBaseException('bad input: {}'.format(user_input))
-    return path
+    return self.diff(path)
 
   @exec_main
   def onclick_change_variable(self,pkg):
@@ -202,7 +274,7 @@ class ValueToChunks(object):
     path_id=pkg['path_id']
     self.force_update[path_id]=True
     user_input = pkg['user_input']
-    path = Path(path_id=path_id)
+    path = self.Path(path_id=path_id)
     value=path.value()
     if 'converter' in pkg:
       new_value = self.converters.get(pkg['converter'])(user_input)
@@ -217,7 +289,7 @@ class ValueToChunks(object):
     #gdb.events.memory_changed. При обработке данного события
     #должны быть обновлены переменные.
     path.assign(new_value)
-    return path
+    return self.diff(path)
 
   def base_onclick_data(self,cmdname,**kwargs):
     onclick_data = {
@@ -263,7 +335,7 @@ class ValueToChunks(object):
 
 
   def array_to_chunks (self, value, name, n1, n2, path,
-      slice_clickable=True, vartree=None, **kwargs):
+      slice_clickable=True, **kwargs):
     ''' Конвертация массива или указателя, который указывает на массив в json-дерево.
 
         Args:
@@ -283,8 +355,6 @@ class ValueToChunks(object):
     '''
     chunks=[]
     assert name!=None
-    assert path!=None
-    already_deref=kwargs.get('already_deref')
 
     type_code=value.type.strip_typedefs().code
     if name:
@@ -309,21 +379,10 @@ class ValueToChunks(object):
         value_addr = value.address
       except gdb.MemoryError:
         value_addr=None
-    is_already_deref = value_addr!=None and value_addr in already_deref
-    #Если было так: 
-    #   int ** ptr[0] = [Expand]
-    #И пользователь нажал на expand, то что бы не было
-    #   int ** ptr[0] = [
-    #       <Expand>
-    #   ]
-    # т.е. если массив содержит один элемент, то его сразу же нужно раскрывать, и не заставлять пользователя
-    # второй раз нажимать на expand.
+
     if not self.expand_variable.get(path.id):
       chunks += self.collapsed_array_to_chunks(path,**kwargs)
       return chunks
-
-    if value_addr!=None:
-      already_deref.add(value_addr)
 
     chunks1=[]
     array_data_chunks=[]
@@ -347,13 +406,20 @@ class ValueToChunks(object):
         else:
           delimiter={'str':',\n'}
       for i in range(n1,n22):
-        path_idx =  path.append(i)
         value_idx = valcache(value[i])
         if elem_as_array:
-          array_data_chunks__1=self.subarray_pointer_data_chunks(value_idx,path_idx,vartree=vartree,**kwargs)
+          tochunks=lambda value,name,path,**kwargs : self.subarray_pointer_data_chunks(value,path,**kwargs)
+        else:
+          tochunks=None
+        path_idx = path.append(
+          name=i,
+          tochunks=tochunks,
+        )
+        if elem_as_array:
+          array_data_chunks__1=self.subarray_pointer_data_chunks(value_idx,path_idx,**kwargs)
           id=path_idx.id
         else:
-          array_data_chunks__1=self.value_to_chunks_1(value_idx,None,path_idx,vartree=vartree,**kwargs)
+          array_data_chunks__1=self.value_to_chunks_1(value_idx,None,path_idx,**kwargs)
           id=None #id было добавлено в value_to_chunks
         chs = {'chunks':array_data_chunks__1}
         if id!=None: #Данное id приписывается узлу дерева в граф. окне. При помощи данного id осуществляется операция обновления дерева
@@ -379,23 +445,13 @@ class ValueToChunks(object):
       chunks.append({'str':'[CantAccsMem]'})
     return chunks
 
-  def subarray_pointer_data_chunks(self,value,path,vartree=None,**kwargs):
+  def subarray_pointer_data_chunks(self,value,path,**kwargs):
     '''Данная функция применяется для случая, когда обрабатывается массив указателей. value элемент такого массива.
        На выходе получается строка вида int * *(0x613ed0)[0:2] = [<Expand>],
        где значение в скобках это значение value
     '''
     name = self.make_subarray_name(value,path,**kwargs)
-    if vartree:
-      varnode=vartree.add_node(
-        value,
-        path,
-        self.expand_variable.get(path.id),
-        self.user_slice.get(path.id),
-        tochunks = lambda value,_,path,**kwargs : self.subarray_pointer_data_chunks(value,path,**kwargs),
-      )
-    else:
-      varnode=None
-    chunks = [{'id':path.id,'chunks':self.pointer_data_to_chunks(value,name,path,vartree=varnode,**kwargs)}]
+    chunks = [{'id':path.id,'chunks':self.pointer_data_to_chunks(value,name,path,**kwargs)}]
     return chunks
 
   def pointer_data_to_chunks (self,value,name,path, **kwargs):
@@ -498,7 +554,6 @@ class ValueToChunks(object):
     return [res]
 
   def struct_to_chunks(self,value,name,path, **kwargs):
-    already_deref = kwargs['already_deref']
     type_code = value.type.strip_typedefs().code
     chunks=[]
     if name:
@@ -510,23 +565,19 @@ class ValueToChunks(object):
     value_addr = value.address
     #except gdb.MemoryError:
     #  value_addr=None
-    is_already_deref = value_addr!=None and value_addr in already_deref
     collapsed=self.expand_variable.get(path.id)
     expand_single = self.expand_single_array_elem(path)
     if (collapsed==False) or (collapsed==None and not expand_single):
       chunks += self.collapsed_struct_to_chunks(path, **kwargs)
       return chunks
 
-    if value_addr!=None:
-      already_deref.add(value_addr)
-
     chunks1=[]
     data_chunks=[]
     for field in value.type.strip_typedefs().fields():
       field_name = field.name
-      value_path=path.append(field.name)
       try:
         field_value = valcache(value[field_name])
+        value_path=path.append(name=field_name)
       except gdb.error as e:
         #В C++ имеет место быть исключение вида
         #   Python Exception <class 'gdb.error'> cannot resolve overloaded method `DeviceExc': no arguments supplied:
@@ -555,27 +606,19 @@ class ValueToChunks(object):
 
 
 
-  def value_to_chunks(self,value,name=None,vartree=None,**kwargs):
+  def value_to_chunks(self,value,name,**kwargs):
     ''' Конвертирование gdb.Value в json-дерево.
 
         Args:
             value (gdb.Value): значение, которое нужно сконвертировать в json
             name (str): Имя, которое используется для печати NAME = VALUE. Если не задано,
                 то напечатается просто VALUE.
-            **already_deref (set): множество, состоящее из целых чисел. Кадое число трактуется, как адрес.
-                Для каждого адреса из данного множества разыменование производиться не будет.
             **print_typename (bool): True-->типы печатаются False-->не печатаются.
             **slice_clickable (bool) : Если False, то slice делается некликательным. По умолчанию True.
-            **vartree : Дерево для value
     '''
-    if name:
-      path=Path([name])
-    else:
-      path=Path()
-    already_deref = set()
-    if 'already_deref' not in kwargs:
-      kwargs['already_deref'] = set()
-    return self.value_to_chunks_1(value,name,path,vartree=vartree,**kwargs)
+    assert name!=None
+    path=self.Path(name=name)
+    return self.value_to_chunks_1(value,name,path,**kwargs)
 
   def value_withstr_to_chunks(self,value,name,path,**kwargs):
     chunks=[]
@@ -615,7 +658,6 @@ class ValueToChunks(object):
         chunks+=self.value_type_to_chunks(value,**kwargs)
         chunks.append({'str':' '})
       chunks+=self.name_to_chunks(name)
-    #chunks+=self.changable_value_to_chunks(value,path,**kwargs)
     valuetype = self.stringify_type(value.type)
     chunks+=self.changable_strvalue_to_chunks(str(func_addr),path,valuetype,**kwargs)
     chunks.append({'str':' '})
@@ -668,7 +710,7 @@ class ValueToChunks(object):
     else:
       return [{'str':str(value.type),'name':'datatype'}]
 
-  def value_to_chunks_1(self,value,name,path,vartree=None,**kwargs):
+  def value_to_chunks_1(self,value,name,path,**kwargs):
     ''' Конвертирование gdb.Value в json-дерево. Рекурсия.
         Дополнительное описание см. в функции `value_to_chunks`
 
@@ -680,28 +722,15 @@ class ValueToChunks(object):
                 "s.y.a", для элемента массива A1 path = "s.arr[1]"
             path_name (str): Применяется для формирования path. Совпадает с именем переменной, за исключением
                 элементов массивов. Для A0 path_name будет arr[0]. Для массива arr path_name="arr".
-            **already_deref (set): мн-во указателей, которые уже были разменованы. Если была напечатана структура или массив,
-                которая определена статически, то будет взят адрес данной структуры и помещен в данное множество.
-                Рассмотрим двунапр. данное мн-во
-                предотвр. ситуацию, когда процесс разыменования дошел до конца списка, а потом начал разыменовывать указатели
-                на предыдущие элементы, потом вновь разыменовывать next-элементы....
             **disable_dereference (bool): Если True, то dereference делаться не будет. По умолчанию False.
 
     '''
-    assert 'already_deref' in kwargs
-    varnode = vartree.add_node(
-      value,
-      path,
-      self.expand_variable.get(path.id),
-      self.user_slice.get(path.id),
-      name=name,
-    ) if vartree else None
     chunks=[]
     type_code = value.type.strip_typedefs().code
     type_str = str(value.type.strip_typedefs())
     print_typename=kwargs.get('print_typename',True)
     if type_code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION):
-      chunks+=self.struct_to_chunks(value,name,path,vartree=varnode,**kwargs)
+      chunks+=self.struct_to_chunks(value,name,path,**kwargs)
     elif type_code==gdb.TYPE_CODE_ARRAY:
       array_addr = value.address
       if array_addr!=None:
@@ -722,7 +751,7 @@ class ValueToChunks(object):
         else:
           n1,n2 = n1_orig,n2_orig
         self.user_slice[path.id] = (n1,n2)
-        chunks += self.array_to_chunks (value, name, n1, n2, path, vartree=varnode, **kwargs)
+        chunks += self.array_to_chunks (value, name, n1, n2, path, **kwargs)
     elif type_code == gdb.TYPE_CODE_PTR:
       if re.match('.*char \*$',type_str):
         #строку печатаем по-другому в сравнении с обычным pointer
@@ -740,7 +769,7 @@ class ValueToChunks(object):
           if value.dereference().type.strip_typedefs().code == gdb.TYPE_CODE_FUNC:
             is_funct_ptr=True
           else:
-            pointer_data_chunks = self.pointer_data_to_chunks (value, name, path, vartree=varnode, **kwargs)
+            pointer_data_chunks = self.pointer_data_to_chunks (value, name, path, **kwargs)
         if is_funct_ptr:
           pointer_chunks = self.functionptr_to_chunks(value, name, path, **kwargs)
         else:
@@ -785,7 +814,8 @@ class ValueToChunks(object):
     return slice_chunk
 
   def integer_as_struct_chunks(self,value,name,**kwargs):
-    path = Path([name]) if name else Path()
+    assert name!=None
+    path = self.Path(name)
     return self.integer_as_struct_chunks_1(value,name,path,**kwargs)
 
   def integer_as_struct_chunks_1(self,value,name,path,**kwargs):
@@ -873,40 +903,7 @@ class ValueToChunks(object):
         ok+=self.filter_chunks_with_id(chunk['chunks'])
     return ok
 
-  def valeq(self,newval,oldval):
-    return unicode(newval)==unicode(oldval)
 
-  def get_diff_varnode(self,varnode,diff):
-    for idx,child in enumerate(varnode.childs):
-      path=child.path
-      new_value = path.value()
-      if not self.valeq(new_value,child.value) or \
-          self.force_update.pop(path,False) or \
-          self.expand_variable.get(path.id)!=child.expand  or \
-          self.user_slice.get(path.id)!=child.user_slice:
-        vartree=VarNode()
-        if child.tochunks:
-          tochunks = child.tochunks
-        else:
-          tochunks = self.value_to_chunks_1
-        chunks = tochunks (
-          new_value,
-          child.name,
-          child.path,
-          vartree=vartree,
-          already_deref=set(),
-        )
-        assert len(vartree.childs)==1
-        varnode.childs[idx] = vartree.childs[0] #vartree имеет ровно одного потомка на первом уровне
-        assert len(chunks)==1
-        chunk=chunks[0]
-        assert 'id' in chunk
-        diff.append(chunk)
-      else:
-        self.get_diff_varnode(child,diff)
 
-  def get_diff_and_update_vartree(self):
-    diff = []
-    self.get_diff_varnode(self.vartree,diff)
-    return diff
+
 

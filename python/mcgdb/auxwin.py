@@ -8,7 +8,7 @@ import traceback
 
 from mcgdb.basewin import BaseWin,TABID_TMP, StorageId
 from mcgdb.common  import gdb_stopped,inferior_alive,gdb_print, TablePackages
-from mcgdb.valuetochunks import check_chunks, ValueToChunks, VarNode
+from mcgdb.valuetochunks import check_chunks, ValueToChunks
 from mcgdb.common  import exec_main, valcache, INDEX, INDEX_tmp, \
                     get_this_thread_num, mcgdbBaseException
 
@@ -26,6 +26,9 @@ class BaseSubentity(TablePackages):
     self.send = kwargs.pop('send')
     self.send_error = kwargs.pop('send_error')
     super(BaseSubentity,self).__init__(**kwargs)
+
+  @property
+  def subentity_name(self):raise NotImplementedError
 
   def set_message_in_table(self,msg,id=TABID_TMP,set_current=True):
     pkg={
@@ -46,18 +49,20 @@ class BaseSubentity(TablePackages):
 class SubentityUpdate(BaseSubentity,StorageId):
   @exec_main
   def __init__(self,**kwargs):
-    super(LocalvarsTable,self).__init__(**kwargs)
+    super(SubentityUpdate,self).__init__(**kwargs)
     self.current_table_id=None
     self.current_values=None
 
-  def get_key(self):
-    raise NotImplementedError
+  def get_key(self): raise NotImplementedError
+
+  @property
+  def values_class(self):raise NotImplementedError
+
+  @property
+  def subentity_name(self):raise NotImplementedError
 
   def get_values_class(self):
     return self.values_class
-
-  def __init__(self,*args,**kwargs):
-    super(SubentityUpdate,self).__init__(*args,**kwargs)
 
   @exec_main
   def update_values(self):
@@ -99,30 +104,31 @@ class SubentityUpdate(BaseSubentity,StorageId):
     if pkg:
       self.send(pkg)
 
+  @exec_main
   def process_connection(self):
     self.update_values()
 
   @exec_main
   def onclick_expand_variable(self,pkg):
-    if hasattr(self.current_values,onclick_expand_variable):
+    if hasattr(self.current_values,'onclick_expand_variable'):
       need_update=self.current_values.onclick_expand_variable(pkg)
       if need_update:
-        self.send(self.pkg_update_nodes(need_update))
+        self.send(self.pkg_update_nodes(self.subentity_name,need_update))
 
   @exec_main
   def onclick_collapse_variable(self,pkg):
-    if hasattr(self.current_values,onclick_collapse_variable):
+    if hasattr(self.current_values,'onclick_collapse_variable'):
       need_update=self.current_values.onclick_collapse_variable(pkg)
       if need_update:
-        self.send(self.pkg_update_nodes(need_update))
+        self.send(self.pkg_update_nodes(self.subentity_name,need_update))
 
   @exec_main
   def onclick_change_slice(self,pkg):
     try:
-      if hasattr(self.current_values,onclick_change_slice)
+      if hasattr(self.current_values,'onclick_change_slice'):
         need_update=self.current_values.onclick_change_slice(pkg)
         if need_update:
-          self.send(self.pkg_update_nodes(need_update))
+          self.send(self.pkg_update_nodes(self.subentity_name,need_update))
     except mcgdbBaseException as e:
       self.send_error(str(e))
 
@@ -130,10 +136,10 @@ class SubentityUpdate(BaseSubentity,StorageId):
   @exec_main
   def onclick_change_variable(self,pkg):
     try:
-      if hasattr(self.current_values,onclick_change_variable):
+      if hasattr(self.current_values,'onclick_change_variable'):
         need_update = self.current_values.onclick_change_variable(pkg)
         if need_update:
-          self.send(self.pkg_update_nodes(need_update))
+          self.send(self.pkg_update_nodes(self.subentity_name,need_update))
     except mcgdbBaseException as e:
       self.send_error(str(e))
 
@@ -167,7 +173,7 @@ class SubentityUpdate(BaseSubentity,StorageId):
 
 
 
-class BacktraceTable(ValueToChunks,BaseSubentity):
+class BacktraceTable(BaseSubentity,ValueToChunks):
   subentity_name='backtrace'
 
   def __init__(self,**kwargs):
@@ -315,7 +321,7 @@ class ThreadRegs(ValuesExemplar,ValueToChunks):
     for regname in self.regnames:
       regvalue = valcache(regname)
       self.regvals[regname] = str(regvalue)
-      chunks=self.get_register_chunks(regname)
+      chunks=self.get_register_chunks(regname=regname, regvalue=regvalue)
       col  = {'chunks' : chunks}
       row  = {'columns' : [col]}
       rows_regs.append(row)
@@ -344,7 +350,8 @@ class ThreadRegs(ValuesExemplar,ValueToChunks):
       #raise exception:
       #Python Exception <class 'gdb.error'> That operation is not available on integers of more than 8 bytes.:
       if self.regvals[regname]!=str(regvalue):
-        nodesdata+=self.get_register_chunks(regname)
+        chunks=self.get_register_chunks(regname=regname, regvalue=regvalue)
+        nodesdata+=self.filter_chunks_with_id(chunks)
         self.regvals[regname]=str(regvalue)
     return nodesdata
 
@@ -353,6 +360,7 @@ class RegistersTable(SubentityUpdate):
   subentity_name='registers'
   values_class = ThreadRegs
 
+  @exec_main
   def get_key(self):
     thnum = get_this_thread_num()
     if thnum==None:
@@ -360,7 +368,7 @@ class RegistersTable(SubentityUpdate):
     return 1024+thnum
 
 
-class ThreadsTable(ValueToChunks, BaseSubentity):
+class ThreadsTable(BaseSubentity,ValueToChunks):
   subentity_name='threads'
 
   @exec_main
@@ -509,31 +517,28 @@ class BlockLocalvarsTable(ValuesExemplar,ValueToChunks):
 
   @exec_main
   def get_table(self):
-    vartree,lvars=self._get_local_vars()
-    self.vartree = vartree
-    return lvars
+    return self.get_local_vars()
 
   @exec_main
   def need_update(self):
-    return self.get_diff_and_update_vartree(self.vartree)
+    return self.diff()
 
   @exec_main
-  def _get_local_vars(self):
-    variables = self._get_local_vars_1 ()
+  def get_local_vars(self):
+    variables = self.get_local_vars_1 ()
     if len(variables)==0:
       return  {'rows':[]}
     lvars=[]
     funcname=self._get_frame_funcname(gdb.selected_frame())
-    vartree=VarNode()
     for name,value in variables.iteritems():
-      chunks = self.value_to_chunks(value,name,funcname=funcname,vartree=vartree)
+      chunks = self.value_to_chunks(value,name)
       check_chunks(chunks)
       col = {'chunks':chunks}
       row = {'columns':[col]}
       lvars.append(row)
-    return vartree,{'rows':lvars}
+    return {'rows':lvars}
 
-  def _get_local_vars_1(self):
+  def get_local_vars_1(self):
     try:
       frame = gdb.selected_frame()
     except gdb.error:
