@@ -13,6 +13,13 @@ from mcgdb.common  import exec_main, valcache, INDEX, INDEX_tmp, \
                     get_this_thread_num, mcgdbBaseException
 
 
+class ValuesExemplar(object):
+  def get_table(self):
+    raise NotImplementedError
+  def need_update(self):
+    raise NotImplementedError
+
+
 class BaseSubentity(TablePackages):
   @exec_main
   def __init__(self,**kwargs):
@@ -33,6 +40,131 @@ class BaseSubentity(TablePackages):
 
   def clear_table(self):
     self.set_message_in_table ('')
+
+
+
+class SubentityUpdate(BaseSubentity,StorageId):
+  @exec_main
+  def __init__(self,**kwargs):
+    super(LocalvarsTable,self).__init__(**kwargs)
+    self.current_table_id=None
+    self.current_values=None
+
+  def get_key(self):
+    raise NotImplementedError
+
+  def get_values_class(self):
+    return self.values_class
+
+  def __init__(self,*args,**kwargs):
+    super(SubentityUpdate,self).__init__(*args,**kwargs)
+
+  @exec_main
+  def update_values(self):
+    try:
+      key = self.get_key()
+    except (gdb.error,RuntimeError):
+      self.set_message_in_table('not available')
+      self.current_table_id=None
+      self.current_values=None
+      return
+    id,values = self.id_get(key)
+    if id!=None:
+      #множество переменных, которые соотв. данному блоку было отрисовано ранее.
+      #сравниваем значения отрис. ранее и значение перем. сейчас. Разницу отправляем
+      #в граф. окно для перерисовки части таблицы
+      if self.current_table_id!=id:
+        #блок изменился
+        self.exemplar_set(id,self.subentity_name)
+      need_update = values.need_update()
+      if need_update:
+        pkg=self.pkg_update_nodes(self.subentity_name, need_update)
+      else:
+        pkg=None
+    else:
+      #создаем таблицу для блока
+      values_class = self.get_values_class()
+      values = values_class()
+      id = self.id_insert(key,values)
+      try:
+        table = values.get_table()
+        pkg=self.pkg_exemplar_create(self.subentity_name,table,id)
+      except RuntimeError:
+        pkg=None
+        self.key_drop(key)
+    assert id!=None
+    assert values!=None
+    self.current_table_id=id
+    self.current_values=values
+    if pkg:
+      self.send(pkg)
+
+  def process_connection(self):
+    self.update_values()
+
+  @exec_main
+  def onclick_expand_variable(self,pkg):
+    if hasattr(self.current_values,onclick_expand_variable):
+      need_update=self.current_values.onclick_expand_variable(pkg)
+      if need_update:
+        self.send(self.pkg_update_nodes(need_update))
+
+  @exec_main
+  def onclick_collapse_variable(self,pkg):
+    if hasattr(self.current_values,onclick_collapse_variable):
+      need_update=self.current_values.onclick_collapse_variable(pkg)
+      if need_update:
+        self.send(self.pkg_update_nodes(need_update))
+
+  @exec_main
+  def onclick_change_slice(self,pkg):
+    try:
+      if hasattr(self.current_values,onclick_change_slice)
+        need_update=self.current_values.onclick_change_slice(pkg)
+        if need_update:
+          self.send(self.pkg_update_nodes(need_update))
+    except mcgdbBaseException as e:
+      self.send_error(str(e))
+
+
+  @exec_main
+  def onclick_change_variable(self,pkg):
+    try:
+      if hasattr(self.current_values,onclick_change_variable):
+        need_update = self.current_values.onclick_change_variable(pkg)
+        if need_update:
+          self.send(self.pkg_update_nodes(need_update))
+    except mcgdbBaseException as e:
+      self.send_error(str(e))
+
+
+  def gdbevt_exited(self,pkg):
+    self.clear_table()
+  def gdbevt_stop(self,pkg):
+    self.update_values()
+  def gdbevt_new_objfile(self,pkg):
+    self.update_values()
+  def gdbevt_clear_objfiles(self,pkg):
+    self.update_values()
+  def gdbevt_memory_changed(self,pkg):
+    self.update_values()
+  def gdbevt_register_changed(self,pkg):
+    self.update_values()
+
+  def shellcmd_up(self,pkg):
+    self.update_values()
+  def shellcmd_down(self,pkg):
+    self.update_values()
+  def shellcmd_thread(self,pkg):
+    self.update_values()
+
+  def mcgdbevt_frame(self,pkg):
+    self.update_values()
+
+  def mcgdbevt_thread(self,pkg):
+    self.update_values()
+
+
 
 
 class BacktraceTable(ValueToChunks,BaseSubentity):
@@ -155,16 +287,14 @@ class BacktraceTable(ValueToChunks,BaseSubentity):
     self.update_backtrace()
 
 
-
-
-class RegistersTable(ValueToChunks, BaseSubentity):
+class ThreadRegs(ValuesExemplar,ValueToChunks):
   subentity_name='registers'
 
   @exec_main
-  def __init__(self, **kwargs):
+  def __init__(self,**kwargs):
+    self.regvals={}
     self.regnames=[]
     self.regex_split = re.compile('\s*([^\s]+)\s+([^\s+]+)\s+(.*)')
-    self.registers_drawn=[] #Список идентификаторов потоков, для которых была произведена первичная отрисовка регистров
     self.current_thread_num=None #Идентификатор потока. Регистры этого потока отрисованы в данный момент в удаленном окне
     regtab = gdb.execute('maint print registers',False,True).split('\n')[1:]
     for reg in regtab:
@@ -174,55 +304,25 @@ class RegistersTable(ValueToChunks, BaseSubentity):
       if len(reg)>0 and reg[0] and reg[0]!="''" and len(reg[0])>0:
         regname='$'+reg[0]
         self.regnames.append(regname)
-    super(RegistersTable,self).__init__(**kwargs)
+    super(ThreadRegs,self).__init__(**kwargs)
 
-  def process_connection(self):
-    return self.update_registers_initial()
 
   @exec_main
-  def update_registers_initial(self):
-    thnum = get_this_thread_num()
-    if thnum==None:
-      return
-    try:
-      regs = self.get_registers()
-      if regs!=None:
-        self.registers_drawn.append(thnum)
-      else:
-        regs={'rows':[]}
-    except gdb.error as e:
-      if e.message=="No registers.":
-        return
-      else:
-        exc_type, exc_value, exc_traceback = sys.exc_info()
-        raise exc_type, exc_value, exc_traceback
-    pkg={
-      'cmd':'exemplar_create',
-      'table_name':'registers',
-      'table':regs,
-      'id':1024+thnum,
-      'set':True,
-    }
-    self.send(pkg)
-    tabdata={}
-    for regname in self.regnames:
-      try:
-        regval = valcache(regname)
-      except gdb.error:
-        regval = None
-      tabdata[regname]=regval
-    INDEX((self.subentity_name,thnum),tabdata)
-    self.current_thread_num = thnum
-
-  @exec_main
-  def get_registers(self):
+  def get_table(self):
     if not gdb_stopped() or not inferior_alive ():
-      return
-    return self._get_registers()
+      raise RuntimeError
+    rows_regs=[]
+    for regname in self.regnames:
+      regvalue = valcache(regname)
+      self.regvals[regname] = str(regvalue)
+      chunks=self.get_register_chunks(regname)
+      col  = {'chunks' : chunks}
+      row  = {'columns' : [col]}
+      rows_regs.append(row)
+    return {'rows' : rows_regs}
 
   @exec_main
-  def get_register_chunks(self,regname):
-    regvalue = valcache(regname)
+  def get_register_chunks(self,regname,regvalue):
     chunks=[]
     try:
       if regvalue.type.strip_typedefs().code==gdb.TYPE_CODE_INT:
@@ -234,107 +334,30 @@ class RegistersTable(ValueToChunks, BaseSubentity):
       raise
     return chunks
 
-  def _get_registers(self):
-    rows_regs=[]
-    for regname in self.regnames:
-      chunks=self.get_register_chunks(regname)
-      col  = {'chunks' : chunks}
-      row  = {'columns' : [col]}
-      rows_regs.append(row)
-    return {'rows' : rows_regs}
-
-  def update_regnodes (self,nodes_data):
-    return {'cmd':'update_nodes', 'table_name':'registers', 'nodes':nodes_data}
-
-  def update_register_data(self,regname):
-    chunks = self.get_register_chunks(regname)
-    chunks_with_id = self.filter_chunks_with_id(chunks)
-    nodes_data=[]
-    for chunk in chunks_with_id:
-      assert 'id' in chunk
-      #nodes_data.append(self.update_regnode_data (chunk))
-      nodes_data.append(chunk)
-    return nodes_data
-
-
   @exec_main
-  def update_registers(self):
-    if not gdb_stopped():
-      return
-    thnum = get_this_thread_num()
-    if not thnum in self.registers_drawn:
-      self.update_registers_initial()
-      return
-    if thnum!=self.current_thread_num:
-      #поток был изменен. Необходимо изменить экземпляр таблицы регистров
-      #в граф. окне.
-      self.exemplar_set(1024+thnum,'registers')
-      self.current_thread_num = thnum
+  def need_update(self):
     nodesdata=[]
-    tabidx,tabdata=INDEX.get((self.subentity_name,thnum))
     for regname in self.regnames:
       regvalue = valcache(regname)
       #register value cast to string because by default
       #gdb.Value will be cast into long or int and python will
       #raise exception:
       #Python Exception <class 'gdb.error'> That operation is not available on integers of more than 8 bytes.:
-      if self.force_update.get(regname,False) or str(tabdata[regname])!=str(regvalue):
-        nodesdata+=self.update_register_data(regname)
-        tabdata[regname]=regvalue
-    if nodesdata:
-      self.send(self.update_regnodes(nodesdata))
-
-  #GDB EVENTS
-  def gdbevt_exited(self,pkg):
-    self.clear_table()
-    self.registers_drawn=[]
-
-  def gdbevt_stop(self,pkg):
-    return self.update_registers()
-
-  def gdbevt_register_changed(self,pkg):
-    return self.update_registers()
-
-  #SHELL COMMANDS
-  def shellcmd_up(self,pkg):
-    return self.update_registers()
-
-  def shellcmd_down(self,pkg):
-    return self.update_registers()
-
-  def shellcmd_thread(self,pkg):
-    return self.update_registers()
-
-  #MCGDB EVENTS
-  def mcgdbevt_frame(self,pkg):
-    return self.update_registers()
-
-  def mcgdbevt_thread(self,pkg):
-    return self.update_registers()
-
-  def onclick_expand_variable(self,pkg):
-    super(RegistersTable,self).onclick_expand_variable(pkg)
-    self.update_registers()
-
-  def onclick_collapse_variable(self,pkg):
-    super(RegistersTable,self).onclick_collapse_variable(pkg)
-    self.update_registers()
-
-  def onclick_change_slice(self,pkg):
-    try:
-      super(RegistersTable,self).onclick_change_slice(pkg)
-    except mcgdbBaseException as e:
-      self.send_error(str(e))
-    self.update_registers()
-
-  def onclick_change_variable(self,pkg):
-    try:
-      super(RegistersTable,self).onclick_change_variable(pkg)
-    except mcgdbBaseException as e:
-      self.send_error(str(e))
-    self.update_registers()
+      if self.regvals[regname]!=str(regvalue):
+        nodesdata+=self.get_register_chunks(regname)
+        self.regvals[regname]=str(regvalue)
+    return nodesdata
 
 
+class RegistersTable(SubentityUpdate):
+  subentity_name='registers'
+  values_class = ThreadRegs
+
+  def get_key(self):
+    thnum = get_this_thread_num()
+    if thnum==None:
+      raise RuntimeError
+    return 1024+thnum
 
 
 class ThreadsTable(ValueToChunks, BaseSubentity):
@@ -465,7 +488,7 @@ class ThreadsTable(ValueToChunks, BaseSubentity):
     self.update_threads()
 
 
-class BlockLocalvarsTable(ValueToChunks):
+class BlockLocalvarsTable(ValuesExemplar,ValueToChunks):
   ''' Локальные переменные для конкретного блока
 
       Для каждого встреченного блока создается объект типа BlockLocalvarsTable.
@@ -485,7 +508,7 @@ class BlockLocalvarsTable(ValueToChunks):
     super(BlockLocalvarsTable,self).__init__(**kwargs)
 
   @exec_main
-  def get_localvars(self):
+  def get_table(self):
     vartree,lvars=self._get_local_vars()
     self.vartree = vartree
     return lvars
@@ -535,115 +558,14 @@ class BlockLocalvarsTable(ValueToChunks):
 
 
 
-
-class LocalvarsTable(StorageId,BaseSubentity):
+class LocalvarsTable(SubentityUpdate):
   subentity_name='localvars'
+  values_class = BlockLocalvarsTable
 
   @exec_main
-  def __init__(self,**kwargs):
-    super(LocalvarsTable,self).__init__(**kwargs)
-    self.current_table_id=None
-    self.current_block=None
-
-  def process_connection(self):
-    self.update_localvars()
-
-  @exec_main
-  def get_this_block_key(self):
+  def get_key(self):
     blk=gdb.selected_frame().block()
     return (gdb.selected_thread().ptid[1],blk.start,blk.end)
-
-  @exec_main
-  def update_localvars(self):
-    try:
-      key = self.get_this_block_key()
-    except (gdb.error,RuntimeError):
-      self.set_message_in_table('variables not available')
-      self.current_table_id=None
-      self.current_block=None
-      return
-    id,block = self.id_get(key)
-    if id!=None:
-      #множество переменных, которые соотв. данному блоку было отрисовано ранее.
-      #сравниваем значения отрис. ранее и значение перем. сейчас. Разницу отправляем
-      #в граф. окно для перерисовки части таблицы
-      if self.current_table_id!=id:
-        #блок изменился
-        self.exemplar_set(id,self.subentity_name)
-      need_update = block.need_update()
-      if need_update:
-        pkg={'cmd':'update_nodes', 'table_name':'localvars', 'nodes':need_update}
-      else:
-        pkg=None
-    else:
-      #создаем таблицу для блока
-      block = BlockLocalvarsTable()
-      id = self.id_insert(key,block)
-      pkg={ 'cmd':'exemplar_create',
-            'table_name':'localvars',
-            'table':block.get_localvars(),
-            'id':id,
-            'set':True,
-      }
-    assert id!=None
-    assert block!=None
-    self.current_table_id=id
-    self.current_block=block
-    if pkg:
-      self.send(pkg)
-
-  @exec_main
-  def onclick_expand_variable(self,pkg):
-    self.current_block.onclick_expand_variable(pkg)
-    self.update_localvars()
-
-  @exec_main
-  def onclick_collapse_variable(self,pkg):
-    self.current_block.onclick_collapse_variable(pkg)
-    self.update_localvars()
-
-  @exec_main
-  def onclick_change_slice(self,pkg):
-    try:
-      self.current_block.onclick_change_slice(pkg)
-    except mcgdbBaseException as e:
-      self.send_error(str(e))
-    self.update_localvars()
-
-  @exec_main
-  def onclick_change_variable(self,pkg):
-    try:
-      self.current_block.onclick_change_variable(pkg)
-    except mcgdbBaseException as e:
-      self.send_error(str(e))
-    self.update_localvars()
-
-  def gdbevt_exited(self,pkg):
-    self.clear_table()
-  def gdbevt_stop(self,pkg):
-    self.update_localvars()
-  def gdbevt_new_objfile(self,pkg):
-    self.update_localvars()
-  def gdbevt_clear_objfiles(self,pkg):
-    self.update_localvars()
-  def gdbevt_memory_changed(self,pkg):
-    self.update_localvars()
-  def gdbevt_register_changed(self,pkg):
-    self.update_localvars()
-
-  def shellcmd_up(self,pkg):
-    self.update_localvars()
-  def shellcmd_down(self,pkg):
-    self.update_localvars()
-  def shellcmd_thread(self,pkg):
-    self.update_localvars()
-
-  def mcgdbevt_frame(self,pkg):
-    self.update_localvars()
-
-  def mcgdbevt_thread(self,pkg):
-    self.update_localvars()
-
 
 
 

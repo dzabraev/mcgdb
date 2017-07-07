@@ -920,11 +920,21 @@ class TablePackages(object):
     pkg={'cmd':'update_nodes', 'table_name':tabname, 'nodes':[node_data]}
     self.send(pkg)
 
+
   def do_row_visible(self,nrow):
     pkg={'cmd':'do_row_visible','table_name':'asm', 'nrow':nrow}
     self.send(pkg)
 
+  def pkg_exemplar_create(self,tabname,tabdata,id,set=True):
+      pkg={ 'cmd':'exemplar_create',
+            'table_name':tabname,
+            'table':tabdata,
+            'id':id,
+            'set':set,
+      }
+      return pkg
 
-
+  def pkg_update_nodes(self,tabname,need_update):
+    return {'cmd':'update_nodes', 'table_name':tabname, 'nodes':need_update}
 
 

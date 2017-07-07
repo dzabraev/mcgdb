@@ -20,6 +20,10 @@ class StorageId(object):
     self.last_exemplar_id=1024
     super(StorageId,self).__init__(*args,**kwargs)
 
+  def key_drop(self,key):
+    if key in self.id_exemplar_storage:
+      del self.id_exemplar_storage[key]
+
   def id_get(self,key):
     return self.id_exemplar_storage.get(key,(None,None))
 

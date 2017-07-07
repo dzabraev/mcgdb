@@ -11,74 +11,81 @@ from mcgdb.common import    exec_main, gdb_print, gdb_stopped, \
                             get_this_thread_num, get_this_frame_num, \
                             mcgdbBaseException, INDEX
 
-class Path(object):
-  ''' Данный класс используется для представления пути до переменной
-      Например, this[0].cpzero или this[0]._vptr.Cache
-      Данный класс был создан для обработки путей типа this[0]._vptr.Cache.
-      Особенность this[0]._vptr.Cache в том, что пути this[0]._vptr не существует,
-      а this[0]._vptr.Cache существует
-  '''
-  def __init__(self,path=[],path_id=None):
-    if path_id!=None:
-      path=INDEX.get_by_idx(path_id)
-      self.copy(path)
-    else:
-      self.path=path
-    self.__id()
-
-  def copy(self,path):
-    self.path = path.path
-
-  @property
-  def parent(self):
-    if not self.path:
-      return None
-    return Path(self.path[:-1])
-
-  def append(self,name):
-    ''' Если name является строкой, то xxx.name; если name есть int, то будет xxx[name]
-        Данный метод возвращает новый Path, где к новому объекту добавлен name
+def Path(path=[],path_id=None,value=None):
+  class _Path(object):
+    ''' Данный класс используется для представления пути до переменной
+        Например, this[0].cpzero или this[0]._vptr.Cache
+        Данный класс был создан для обработки путей типа this[0]._vptr.Cache.
+        Особенность this[0]._vptr.Cache в том, что пути this[0]._vptr не существует,
+        а this[0]._vptr.Cache существует
     '''
-    if not type(name) is int:
-      name = name.strip()
-    new_path = copy.copy(self.path)
-    new_path.append(name)
-    return Path(new_path)
+    def __init__(self,path=[],path_id=None,value=None):
+      self.value=value
+      self.path=path
+      self.__id()
 
-  def __str__(self):
-    ''' Вернуть значение path в печатном виде'''
-    if not self.path:
-      return ''
-    strpath=self.path[0]
-    for name in self.path[1:]:
-      if type(name) is int:
-        #берется элемент массива ptr[0]
-        strpath = '{}[{}]'.format(strpath,name)
-      else:
-        strpath = strpath+'.'+name
-    return strpath
 
-  def value(self):
-    ''' Вернуть gdb.Value, которое соответствует path'''
-    value = gdb.parse_and_eval(self.path[0])
-    for name in self.path[1:]:
-      value = value[name]
-    return valcache(value)
+    @property
+    def parent(self):
+      if not self.path:
+        return None
+      return Path(self.path[:-1])
 
-  def __id(self):
-    key=tuple(self.path)
-    self.id = INDEX.insert(key)
+    def append(self,name):
+      ''' Если name является строкой, то xxx.name; если name есть int, то будет xxx[name]
+          Данный метод возвращает новый Path, где к новому объекту добавлен name
+      '''
+      if not type(name) is int:
+        name = name.strip()
+      new_path = copy.copy(self.path)
+      new_path.append(name)
+      return Path(new_path)
 
-  def assign(self,new_value):
-    gdb_cmd='set variable {path}={new_value}'.format(path=str(self),new_value=new_value)
-    try:
-      gdb.execute(gdb_cmd)
-    except Exception as e:
-      raise mcgdbBaseException(str(e))
+    def __str__(self):
+      ''' Вернуть значение path в печатном виде'''
+      if not self.path:
+        return ''
+      strpath=self.path[0]
+      for name in self.path[1:]:
+        if type(name) is int:
+          #берется элемент массива ptr[0]
+          strpath = '{}[{}]'.format(strpath,name)
+        else:
+          strpath = strpath+'.'+name
+      return strpath
+
+    def value(self):
+      ''' Вернуть gdb.Value, которое соответствует path'''
+      value = gdb.parse_and_eval(self.path[0])
+      for name in self.path[1:]:
+        value = value[name]
+      return valcache(value)
+
+    def __id(self):
+      key=tuple(self.path)
+      self.id = INDEX.insert(key,self)
+
+    def assign(self,new_value):
+      gdb_cmd='set variable {path}={new_value}'.format(path=str(self),new_value=new_value)
+      try:
+        gdb.execute(gdb_cmd)
+      except Exception as e:
+        raise mcgdbBaseException(str(e))
+  #END OF _Path definition
+  if path_id!=None:
+    key,path_object = INDEX.get_by_idx(path_id)
+    assert path_object!=None
+    return path_object
+  if path:
+    id,path_object = INDEX.get(tuple(path))
+    return path_object
+  return _Path(path=path,value=value)
+
 
 
 class VarNode(object):
-  def __init__(self,value=None,path=None,expand=None,user_slice=None,name=None,tochunks=None):
+  def __init__(self,value=None,expand=None,user_slice=None,
+                    name=None,tochunks=None,parent=None,):
     self.childs=[]
     self.value = value
     self.path = path
@@ -86,9 +93,10 @@ class VarNode(object):
     self.user_slice = user_slice
     self.name=name
     self.tochunks=tochunks
+    self.parnt=parent
 
-  def add_node(self,value=None,path=None,expand=None,user_slice=None,name=None,tochunks=None):
-    node=VarNode(value,path,expand,user_slice,name=name,tochunks=tochunks)
+  def add_node(self,value=None,expand=None,user_slice=None,name=None,tochunks=None):
+    node=VarNode(value=value,expand_user=expand,user_slice=user_slice,name=name,tochunks=tochunks,parent=self.)
     self.childs.append(node)
     return node
 
@@ -153,13 +161,18 @@ class ValueToChunks(object):
 
 
   def onclick_expand_variable(self,pkg):
-    self.expand_variable[pkg['path_id']]=True
+    path = Path(path_id=pkg['path_id'])
+    self.expand_variable[path.id]=True
+    return path
 
   def onclick_collapse_variable(self,pkg):
-    self.expand_variable[pkg['path_id']]=False
+    path = Path(path_id=pkg['path_id'])
+    self.expand_variable[path.id]=False
+    return path
 
   def onclick_change_slice(self,pkg):
     path_id=pkg['path_id']
+    path=Path(path_id=path_id)
     user_input = pkg['user_input']
     match=self.slice_regex.match(user_input)
     if match:
@@ -175,6 +188,7 @@ class ValueToChunks(object):
       self.force_update[path_id]=True
     else:
       raise mcgdbBaseException('bad input: {}'.format(user_input))
+    return path
 
   @exec_main
   def onclick_change_variable(self,pkg):
@@ -199,11 +213,11 @@ class ValueToChunks(object):
         raise mcgdbBaseException(str(e))
     else:
       new_value = user_input
-    path.assign(new_value)
-
     #при изменении переменной будет сгенерировано событие
     #gdb.events.memory_changed. При обработке данного события
     #должны быть обновлены переменные.
+    path.assign(new_value)
+    return path
 
   def base_onclick_data(self,cmdname,**kwargs):
     onclick_data = {
@@ -891,8 +905,8 @@ class ValueToChunks(object):
       else:
         self.get_diff_varnode(child,diff)
 
-  def get_diff_and_update_vartree(self,vartree):
+  def get_diff_and_update_vartree(self):
     diff = []
-    self.get_diff_varnode(vartree,diff)
+    self.get_diff_varnode(self.vartree,diff)
     return diff
 
