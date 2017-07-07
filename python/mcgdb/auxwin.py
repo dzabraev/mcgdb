@@ -39,7 +39,7 @@ class BacktraceTable(ValueToChunks,BaseSubentity):
   subentity_name='backtrace'
 
   def __init__(self,**kwargs):
-    super(BacktraceTable,self).__init__(INDEX,**kwargs)
+    super(BacktraceTable,self).__init__(**kwargs)
 
   def process_connection(self):
     return self.update_backtrace()
@@ -174,7 +174,7 @@ class RegistersTable(ValueToChunks, BaseSubentity):
       if len(reg)>0 and reg[0] and reg[0]!="''" and len(reg[0])>0:
         regname='$'+reg[0]
         self.regnames.append(regname)
-    super(RegistersTable,self).__init__(INDEX,**kwargs)
+    super(RegistersTable,self).__init__(**kwargs)
 
   def process_connection(self):
     return self.update_registers_initial()
@@ -342,7 +342,7 @@ class ThreadsTable(ValueToChunks, BaseSubentity):
 
   @exec_main
   def __init__(self, **kwargs):
-    super(ThreadsTable,self).__init__(INDEX, **kwargs)
+    super(ThreadsTable,self).__init__(**kwargs)
 
   def process_connection(self):
     return self.update_threads()
@@ -482,7 +482,7 @@ class BlockLocalvarsTable(ValueToChunks):
 
   @exec_main
   def __init__(self,**kwargs):
-    super(BlockLocalvarsTable,self).__init__(INDEX,**kwargs)
+    super(BlockLocalvarsTable,self).__init__(**kwargs)
 
   @exec_main
   def get_localvars(self):
@@ -592,24 +592,18 @@ class LocalvarsTable(StorageId,BaseSubentity):
     if pkg:
       self.send(pkg)
 
-  def docheckpkg(self,pkg):
-    return INDEX.get_by_idx(pkg['parent_id'])
-
   @exec_main
   def onclick_expand_variable(self,pkg):
-    self.docheckpkg(pkg)
     self.current_block.onclick_expand_variable(pkg)
     self.update_localvars()
 
   @exec_main
   def onclick_collapse_variable(self,pkg):
-    self.docheckpkg(pkg)
     self.current_block.onclick_collapse_variable(pkg)
     self.update_localvars()
 
   @exec_main
   def onclick_change_slice(self,pkg):
-    self.docheckpkg(pkg)
     try:
       self.current_block.onclick_change_slice(pkg)
     except mcgdbBaseException as e:
@@ -618,7 +612,6 @@ class LocalvarsTable(StorageId,BaseSubentity):
 
   @exec_main
   def onclick_change_variable(self,pkg):
-    self.docheckpkg(pkg)
     try:
       self.current_block.onclick_change_variable(pkg)
     except mcgdbBaseException as e:

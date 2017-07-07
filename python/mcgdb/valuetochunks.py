@@ -1,7 +1,7 @@
 #coding=utf8
 
 import gdb
-import re, ctypes
+import re, ctypes, copy
 from abc import abstractmethod, abstractproperty
 
 
@@ -9,7 +9,7 @@ from mcgdb.common import    exec_main, gdb_print, gdb_stopped, \
                             inferior_alive, cached_stringify_value, \
                             valcache, stringify_value, \
                             get_this_thread_num, get_this_frame_num, \
-                            mcgdbBaseException
+                            mcgdbBaseException, INDEX
 
 class Path(object):
   ''' Данный класс используется для представления пути до переменной
@@ -24,7 +24,7 @@ class Path(object):
       self.copy(path)
     else:
       self.path=path
-    self.id()
+    self.__id()
 
   def copy(self,path):
     self.path = path.path
@@ -35,7 +35,7 @@ class Path(object):
     '''
     if not type(name) is int:
       name = name.strip()
-    new_path = self.path.copy()
+    new_path = copy.copy(self.path)
     new_path.append(name)
     return Path(new_path)
 
@@ -59,9 +59,9 @@ class Path(object):
       value = value[name]
     return valcache(value)
 
-  def id(self):
+  def __id(self):
     key=tuple(self.path)
-    return INDEX.insert(key)
+    self.id = INDEX.insert(key)
 
   def assign(self,new_value):
     gdb_cmd='set variable {path}={new_value}'.format(path=str(self),new_value=new_value)
@@ -113,7 +113,7 @@ def is_incomplete_type_ptr(value):
           len(value.type.strip_typedefs().target().strip_typedefs().fields())==0)
 
 class ValueToChunks(object):
-  def __init__(self,INDEX, **kwargs):
+  def __init__(self, **kwargs):
     self.slice_regex=re.compile('^(-?\d+)([:, ](-?\d+))?$')
     self.user_slice={} # Данная переменная хранит информацию о том,
     # что если встречается указатель ptr, то сколько элементов указателя
@@ -122,7 +122,6 @@ class ValueToChunks(object):
     #один элемент ptr[n1]
     self.expand_variable={}
     self.converters={}
-    self.INDEX=INDEX
     self.converters['bin_to_long'] = lambda x: long(x,2)
     self.converters['hex_to_long'] = lambda x: long(x,16)
     self.force_update={} #Если пользователь меняет значение переменной, то сюда помещается
@@ -184,7 +183,7 @@ class ValueToChunks(object):
     path_id=pkg['path_id']
     self.force_update[path_id]=True
     user_input = pkg['user_input']
-    path = Path(id=path_id)
+    path = Path(path_id=path_id)
     value=path.value()
     if 'converter' in pkg:
       new_value = self.converters.get(pkg['converter'])(user_input)
@@ -211,15 +210,13 @@ class ValueToChunks(object):
     return onclick_data
 
 
-  def make_subarray_name(self,value,valuepath,slice_clickable=True,**kwargs):
-    funcname = kwargs.get('funcname')
-    n1,n2=self.user_slice.get((funcname,valuepath),(0,2))
+  def make_subarray_name(self,value,path,slice_clickable=True,**kwargs):
+    n1,n2=self.user_slice.get(path.id,(0,2))
     slice_kwargs={}
-    slice_chunk=self.make_slice_chunk(n1,n2,valuepath,funcname,slice_clickable=slice_clickable)
+    slice_chunk=self.make_slice_chunk(n1,n2,path,slice_clickable=slice_clickable)
     chunks = [{'str':'*(','name':'varname'}]+\
-    self.changable_value_to_chunks(value,valuepath,**kwargs)+\
-    [{'str':')','name':'varname'}]+\
-    [slice_chunk]
+    self.changable_value_to_chunks(value,path,**kwargs)+\
+      [{'str':')','name':'varname'}]+[slice_chunk]
     return chunks
 
   def is_array_fetchable(self,arr,n1,n2):
@@ -259,10 +256,8 @@ class ValueToChunks(object):
     '''
     chunks=[]
     assert name!=None
-    assert path
-    funcname=kwargs.get('funcname')
+    assert path!=None
     already_deref=kwargs.get('already_deref')
-    arrloc=(funcname,path)
 
     type_code=value.type.strip_typedefs().code
     if name:
@@ -271,7 +266,7 @@ class ValueToChunks(object):
         chunks.append({'str':' '})
 
     if type(name) is str:
-      slice_chunk = self.make_slice_chunk(n1,n2,path,funcname,slice_clickable=slice_clickable)
+      slice_chunk = self.make_slice_chunk(n1,n2,path,slice_clickable=slice_clickable)
       varname=[
         {'str':name,'name':'varname'},
         slice_chunk,
@@ -280,7 +275,6 @@ class ValueToChunks(object):
     else:
       chunks+=name
     chunks+=[{'str':' = '}]
-    valueloc=(funcname,path)
     if type_code==gdb.TYPE_CODE_PTR:
       value_addr = ctypes.c_ulong(long(value)).value
     else:
@@ -291,8 +285,8 @@ class ValueToChunks(object):
     is_already_deref = value_addr!=None and value_addr in already_deref
     max_deref_depth = kwargs.get('max_deref_depth',3)
     if  max_deref_depth!=None and \
-        ((deref_depth>=kwargs.get('max_deref_depth',3) or is_already_deref) and not self.expand_variable.get((funcname,path))) or \
-        (valueloc in self.expand_variable and not self.expand_variable[(funcname,path)] ):
+        ((deref_depth>=kwargs.get('max_deref_depth',3) or is_already_deref) and not self.expand_variable.get(path.id)) or \
+        (path.id in self.expand_variable and not self.expand_variable[path.id] ):
       chunks += self.collapsed_array_to_chunks(path,**kwargs)
       return chunks
 
@@ -321,17 +315,16 @@ class ValueToChunks(object):
         else:
           delimiter={'str':',\n'}
       for i in range(n1,n22):
-        path_idx = '{path}[{idx}]'.format(path=path,idx=i)
+        path_idx =  path.append(i)
         value_idx = valcache(value[i])
-        self.path_id(path_idx,value_idx)
         if elem_as_array:
           array_data_chunks__1=self.subarray_pointer_data_chunks(value_idx,path_idx,deref_depth,vartree=vartree,**kwargs)
-          id=self.path_id(path_idx,value_idx)
+          id=path_idx.id
         else:
           array_data_chunks__1=self.value_to_chunks_1(value_idx,None,path_idx,deref_depth,vartree=vartree,**kwargs)
           id=None #id было добавлено в value_to_chunks
         chs = {'chunks':array_data_chunks__1}
-        if id!=None:
+        if id!=None: #Данное id приписывается узлу дерева в граф. окне. При помощи данного id осуществляется операция обновления дерева
           chs['id']=id
         array_data_chunks.append(chs)
         if delimiter and i!=n22-1:
@@ -340,7 +333,7 @@ class ValueToChunks(object):
       chunks1.append({'chunks':array_data_chunks,'type_code':'TYPE_CODE_ARRAY'})
       chunks.append({
         'str':'[\n',
-        'onclick_data':self.base_onclick_data('collapse_variable',funcname=funcname,path=path,parent_id=self.path_id(path))
+        'onclick_data':self.base_onclick_data('collapse_variable',path_id=path.id)
       })
       chunks.append ({
         'chunks'  : chunks1,
@@ -348,7 +341,7 @@ class ValueToChunks(object):
       })
       chunks.append({
         'str':'\n]\n',
-        'onclick_data':self.base_onclick_data('collapse_variable',funcname=funcname,path=path,parent_id=self.path_id(path))
+        'onclick_data':self.base_onclick_data('collapse_variable',path_id=path.id)
       })
     else:
       chunks.append({'str':'[CantAccsMem]'})
@@ -357,20 +350,20 @@ class ValueToChunks(object):
   def subarray_pointer_data_chunks(self,value,path,depth,vartree=None,**kwargs):
     '''Данная функция применяется для случая, когда обрабатывается массив указателей. value элемент такого массива.
        На выходе получается строка вида int * *(0x613ed0)[0:2] = [<Expand>],
+       где значение в скобках это значение value
     '''
     name = self.make_subarray_name(value,path,**kwargs)
-    funcname=gdb.selected_frame().name()
     if vartree:
       varnode=vartree.add_node(
         value,
         path,
-        self.expand_variable.get((funcname,path)),
-        self.user_slice.get((funcname,path)),
+        self.expand_variable.get(path.id),
+        self.user_slice.get(path.id),
         tochunks = lambda value,_,path,depth,**kwargs : self.subarray_pointer_data_chunks(value,path,depth,**kwargs),
       )
     else:
       varnode=None
-    chunks = [{'id':self.path_id(path,value),'chunks':self.pointer_data_to_chunks(value,name,path,depth,vartree=varnode,**kwargs)}]
+    chunks = [{'id':path.id,'chunks':self.pointer_data_to_chunks(value,name,path,depth,vartree=varnode,**kwargs)}]
     return chunks
 
   def pointer_data_to_chunks (self,value,name,path,deref_depth, **kwargs):
@@ -381,10 +374,9 @@ class ValueToChunks(object):
       return []
     if value.is_optimized_out:
       return self.name_to_chunks(name)+[{'str':'<OptimizedOut>'}]
-    funcname=kwargs.get('funcname')
     chunks=[]
-    if funcname and self.user_slice.get((funcname,path)):
-      n1,n2 = self.user_slice.get((funcname,path))
+    if path.id in self.user_slice:
+      n1,n2 = self.user_slice.get(path.id)
     else:
       deref_type_code = value.dereference().type.strip_typedefs().code
       if deref_type_code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION,gdb.TYPE_CODE_FUNC):
@@ -430,9 +422,7 @@ class ValueToChunks(object):
         'str':collapsed_str,
         'onclick_data':self.base_onclick_data(
           'expand_variable',
-          path=path,
-          funcname=kwargs.get('funcname'),
-          parent_id=self.path_id(path),
+          path_id=path.id,
         ),
       }]
 
@@ -448,7 +438,7 @@ class ValueToChunks(object):
 
   def changable_value_to_chunks(self,value,path,**kwargs):
     if kwargs.get('enable_additional_text',False)==True:
-      valuestr  = cached_stringify_value(value,path,**kwargs)
+      valuestr  = cached_stringify_value(value,str(path),**kwargs)
     else:
       valuestr  = stringify_value(value,**kwargs)
     if 'proposed_text' not in kwargs:
@@ -462,9 +452,9 @@ class ValueToChunks(object):
     onclick_data={
       'cmd':'onclick',
       'onclick':'change_variable',
-      'path':path,
+      'path':str(path),
       'input_text': '{type} {path}'.format(path=path,type=valuetype),
-      'parent_id' : self.path_id(path),
+      'path_id' : path.id,
       'subentity_dst' : self.subentity_name,
     }
     if 'converter' in kwargs:
@@ -472,15 +462,7 @@ class ValueToChunks(object):
     res={'str':valuestr,'name':'varvalue', 'onclick_data':onclick_data, 'onclick_user_input':True}
     if 'proposed_text' in kwargs:
       res['proposed_text']=kwargs['proposed_text']
-#    index_name = kwargs.get('index_name')
-#    if index_name!=None:
-#      res['id'] = self.INDEX(index_name)
-#    else:
-#      index_name=(path,valuetype)
-#      res['id'] = INDEX(index_name)
     return [res]
-
-
 
   def struct_to_chunks(self,value,name,path,deref_depth, **kwargs):
     already_deref = kwargs['already_deref']
@@ -491,8 +473,6 @@ class ValueToChunks(object):
         chunks+=self.value_type_to_chunks(value,**kwargs)
         chunks.append({'str':' '})
       chunks+=self.name_to_chunks(name)
-    funcname=kwargs.get('funcname')
-    valueloc=(funcname,path)
     #try:
     value_addr = value.address
     #except gdb.MemoryError:
@@ -500,8 +480,8 @@ class ValueToChunks(object):
     is_already_deref = value_addr!=None and value_addr in already_deref
     max_deref_depth = kwargs.get('max_deref_depth',3)
     if  max_deref_depth!=None and \
-        ((deref_depth>=max_deref_depth or is_already_deref) and not self.expand_variable.get((funcname,path))) or \
-        (valueloc in self.expand_variable and not self.expand_variable[(funcname,path)] ):
+        ((deref_depth>=max_deref_depth or is_already_deref) and not self.expand_variable.get(path.id)) or \
+        (path.id in self.expand_variable and not self.expand_variable[path.id] ):
       chunks += self.collapsed_struct_to_chunks(path, **kwargs)
       return chunks
 
@@ -512,13 +492,14 @@ class ValueToChunks(object):
     data_chunks=[]
     for field in value.type.strip_typedefs().fields():
       field_name = field.name
-      value_path='{path}.{field_name}'.format(path=path,field_name=field_name)
+      value_path=path.append(field.name)
       try:
         field_value = valcache(value[field_name])
       except gdb.error as e:
         #В C++ имеет место быть исключение вида
         #   Python Exception <class 'gdb.error'> cannot resolve overloaded method `DeviceExc': no arguments supplied:
         #while dereference this
+        #Не знаю как с ними быть, поэтому вставляем текст исключения в граф. окно
         data_chunks.append({'str':str(e)+'\n'})
         continue
       data_chunks+=self.value_to_chunks_1(field_value,field_name,value_path,deref_depth,**kwargs)
@@ -529,14 +510,14 @@ class ValueToChunks(object):
       chunks1.append({'chunks':data_chunks,'type_code':'TYPE_CODE_UNION'})
     chunks.append({
       'str':'{\n',
-      'onclick_data':self.base_onclick_data('collapse_variable',funcname=funcname,path=path,parent_id=self.path_id(path)),
+      'onclick_data':self.base_onclick_data('collapse_variable',path_id=path.id),
     })
     chunks.append ({
       'chunks'  : chunks1,
     })
     chunks.append({
       'str':'\n}\n',
-      'onclick_data':self.base_onclick_data('collapse_variable',funcname=funcname,path=path,parent_id=self.path_id(path)),
+      'onclick_data':self.base_onclick_data('collapse_variable',path_id=path.id),
     })
     return chunks
 
@@ -560,11 +541,12 @@ class ValueToChunks(object):
             **slice_clickable (bool) : Если False, то slice делается некликательным. По умолчанию True.
             **vartree : Дерево для value
     '''
-    path=Path(['name'])
+    if name:
+      path=Path([name])
+    else:
+      path=Path()
     deref_depth=0
     already_deref = set()
-    if 'funcname' not in kwargs:
-      kwargs['funcname'] = self._get_frame_funcname(gdb.selected_frame())
     if 'already_deref' not in kwargs:
       kwargs['already_deref'] = set()
     if 'max_deref_depth' not in kwargs:
@@ -574,22 +556,11 @@ class ValueToChunks(object):
   def value_withstr_to_chunks(self,value,name,path,deref_depth,**kwargs):
     chunks=[]
     chunks+=self.name_to_chunks(name)
-    chunks.append({'str':cached_stringify_value(value,path,enable_additional_text=True), 'name':'varvalue'})
-    #chunks+=self.value_to_str_chunks(value,path,enable_additional_text=True,**kwargs)
+    chunks.append({'str':cached_stringify_value(value,str(path),enable_additional_text=True), 'name':'varvalue'})
     return chunks
 
   def ptrval_to_ulong(self,value):
     return ctypes.c_ulong(long(value)).value
-
-  def method_to_chunks(self,value, name, path, deref_depth, **kwargs):
-    chunks=[]
-    s=unicode(value)
-    re.match(r'({[^}]+}) ([^ ]) (<[^>]+>)')
-    if kwargs.get('print_typename',True):
-      chunks+=self.value_type_to_chunks(value,**kwargs)
-      chunks.append({'str':' '})
-    chunks+=self.name_to_chunks(name)
-
 
   def functionptr_to_chunks(self,value, name, path, deref_depth, **kwargs):
     chunks=[]
@@ -698,14 +669,11 @@ class ValueToChunks(object):
     '''
     assert 'already_deref' in kwargs
     assert 'max_deref_depth' in kwargs
-    assert 'funcname' in kwargs
-    funcname = kwargs['funcname']
-    self.path_id(path,value)
     varnode = vartree.add_node(
       value,
       path,
-      self.expand_variable.get((funcname,path)),
-      self.user_slice.get((funcname,path)),
+      self.expand_variable.get(path.id),
+      self.user_slice.get(path.id),
       name=name,
     ) if vartree else None
     chunks=[]
@@ -725,8 +693,7 @@ class ValueToChunks(object):
         chunks+=self.value_withstr_to_chunks(value,name,path,deref_depth,**kwargs)
       else:
         n1_orig,n2_orig = value.type.strip_typedefs().range()
-        funcname=kwargs['funcname']
-        user_slice = self.user_slice.get((funcname,path))
+        user_slice = self.user_slice.get(path.id)
         if user_slice:
           n1,n2 = user_slice
           n1 = max(n1,n1_orig)
@@ -770,10 +737,10 @@ class ValueToChunks(object):
         chunks.append({'str':' '})
         chunks+=self.name_to_chunks(name)
       chunks+=self.changable_value_to_chunks(value,path,**kwargs)
-    res_chunk={'chunks':chunks, 'id':self.path_id(path)}
+    res_chunk={'chunks':chunks, 'id':path.id}
     return [res_chunk]
 
-  def make_slice_chunk(self,n1,n2,path,funcname,slice_clickable=True):
+  def make_slice_chunk(self,n1,n2,path,slice_clickable=True):
     chunks=[]
     if n2==None:
       chunks.append({'str':'[{idx}]'.format(idx=n1), 'name':'slice'})
@@ -787,10 +754,8 @@ class ValueToChunks(object):
       onclick_data={
         'cmd':'onclick',
         'onclick':'change_slice',
-        'path':path,
-        'funcname':funcname,
         'input_text':'enter new slice N or N:M',
-        'parent_id' : self.path_id(path),
+        'path_id' : path.id,
         'subentity_dst' : self.subentity_name,
       }
       slice_chunk['onclick_data']=onclick_data
@@ -799,13 +764,13 @@ class ValueToChunks(object):
     return slice_chunk
 
   def integer_as_struct_chunks(self,value,name,**kwargs):
-    return self.integer_as_struct_chunks_1(value,name,name,**kwargs)
+    path = Path([name]) if name else Path()
+    return self.integer_as_struct_chunks_1(value,name,path,**kwargs)
 
   def integer_as_struct_chunks_1(self,value,name,path,**kwargs):
     '''Данная функция предназначается для печати целочисленного
         регистра, как структуру с полями dec,hex,bin
     '''
-    self.path_id(path,value)
     chunks=[]
     if kwargs.get('print_typename',True):
       chunks+=self.value_type_to_chunks(value)
@@ -813,19 +778,19 @@ class ValueToChunks(object):
     chunks+=self.name_to_chunks(name)
     data_chunks=[]
     data_chunks += self.name_to_chunks('dec')
-    data_chunks += self.changable_value_to_chunks(value,path,integer_mode='dec',index_name=path+'_dec')
+    data_chunks += self.changable_value_to_chunks(value,path,integer_mode='dec',index_name=str(path)+'_dec')
     data_chunks += [{'str':'\n'}]
     data_chunks += self.name_to_chunks('hex')
-    data_chunks += self.changable_value_to_chunks(value,path,integer_mode='hex',converter='hex_to_long',index_name=path+'_hex')
+    data_chunks += self.changable_value_to_chunks(value,path,integer_mode='hex',converter='hex_to_long',index_name=str(path)+'_hex')
     data_chunks += [{'str':'\n'}]
     data_chunks += self.name_to_chunks('bin')
-    data_chunks += self.changable_value_to_chunks(value,path,integer_mode='bin',converter='bin_to_long',index_name=path+'_bin')
+    data_chunks += self.changable_value_to_chunks(value,path,integer_mode='bin',converter='bin_to_long',index_name=str(path)+'_bin')
     data_chunks += [{'str':'\n'}]
     data_chunks += [{'str':'\n'}]
     chunks.append({'str':'{\n',})
     chunks+=[{'chunks':data_chunks,'type_code':'TYPE_CODE_STRUCT'}]
     chunks.append({'str':'}\n',})
-    return [{'chunks':chunks, 'id':self.path_id(path)}]
+    return [{'chunks':chunks, 'id':path.id}]
 
   def _get_frame_func_args(self,frame):
       args=[]
@@ -890,14 +855,14 @@ class ValueToChunks(object):
   def valeq(self,newval,oldval):
     return unicode(newval)==unicode(oldval)
 
-  def get_diff_varnode(self,varnode,diff,funcname):
+  def get_diff_varnode(self,varnode,diff):
     for idx,child in enumerate(varnode.childs):
       path=child.path
-      new_value = valcache(path)
+      new_value = path.value()
       if not self.valeq(new_value,child.value) or \
           self.force_update.pop(path,False) or \
-          self.expand_variable.get((funcname,path))!=child.expand  or \
-          self.user_slice.get((funcname,path))!=child.user_slice:
+          self.expand_variable.get(path.id)!=child.expand  or \
+          self.user_slice.get(path.id)!=child.user_slice:
         vartree=VarNode()
         if child.tochunks:
           tochunks = child.tochunks
@@ -909,7 +874,6 @@ class ValueToChunks(object):
           child.path,
           varnode.depth,
           vartree=vartree,
-          funcname=funcname,
           already_deref=set(),
           max_deref_depth=0,
         )
@@ -920,13 +884,10 @@ class ValueToChunks(object):
         assert 'id' in chunk
         diff.append(chunk)
       else:
-        self.get_diff_varnode(child,diff,funcname)
+        self.get_diff_varnode(child,diff)
 
   def get_diff_and_update_vartree(self,vartree):
-    funcname = gdb.selected_frame().name()
     diff = []
-    #gdb_print(unicode(self.INDEX.index_data)+'\n')
-    self.get_diff_varnode(vartree,diff,funcname)
-    #gdb_print('\n\n\n'+unicode(self.INDEX.index_data)+'\n')
+    self.get_diff_varnode(vartree,diff)
     return diff
 
