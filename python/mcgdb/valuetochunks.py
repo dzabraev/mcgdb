@@ -78,18 +78,17 @@ class Path(object):
 
 
 class VarNode(object):
-  def __init__(self,value=None,path=None,expand=None,user_slice=None,depth=-1,name=None,tochunks=None):
+  def __init__(self,value=None,path=None,expand=None,user_slice=None,name=None,tochunks=None):
     self.childs=[]
     self.value = value
     self.path = path
     self.expand = expand
     self.user_slice = user_slice
-    self.depth=depth
     self.name=name
     self.tochunks=tochunks
 
   def add_node(self,value=None,path=None,expand=None,user_slice=None,name=None,tochunks=None):
-    node=VarNode(value,path,expand,user_slice,depth=self.depth+1,name=name,tochunks=tochunks)
+    node=VarNode(value,path,expand,user_slice,name=name,tochunks=tochunks)
     self.childs.append(node)
     return node
 
@@ -366,7 +365,7 @@ class ValueToChunks(object):
       chunks.append({'str':'[CantAccsMem]'})
     return chunks
 
-  def subarray_pointer_data_chunks(self,value,path,depth,vartree=None,**kwargs):
+  def subarray_pointer_data_chunks(self,value,path,vartree=None,**kwargs):
     '''Данная функция применяется для случая, когда обрабатывается массив указателей. value элемент такого массива.
        На выходе получается строка вида int * *(0x613ed0)[0:2] = [<Expand>],
        где значение в скобках это значение value
@@ -378,11 +377,11 @@ class ValueToChunks(object):
         path,
         self.expand_variable.get(path.id),
         self.user_slice.get(path.id),
-        tochunks = lambda value,_,path,depth,**kwargs : self.subarray_pointer_data_chunks(value,path,depth,**kwargs),
+        tochunks = lambda value,_,path,**kwargs : self.subarray_pointer_data_chunks(value,path,**kwargs),
       )
     else:
       varnode=None
-    chunks = [{'id':path.id,'chunks':self.pointer_data_to_chunks(value,name,path,depth,vartree=varnode,**kwargs)}]
+    chunks = [{'id':path.id,'chunks':self.pointer_data_to_chunks(value,name,path,vartree=varnode,**kwargs)}]
     return chunks
 
   def pointer_data_to_chunks (self,value,name,path, **kwargs):
@@ -880,7 +879,6 @@ class ValueToChunks(object):
           new_value,
           child.name,
           child.path,
-          varnode.depth,
           vartree=vartree,
           already_deref=set(),
         )
