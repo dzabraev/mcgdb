@@ -29,6 +29,12 @@ class Path(object):
   def copy(self,path):
     self.path = path.path
 
+  @property
+  def parent(self):
+    if not self.path:
+      return None
+    return Path(self.path[:-1])
+
   def append(self,name):
     ''' Если name является строкой, то xxx.name; если name есть int, то будет xxx[name]
         Данный метод возвращает новый Path, где к новому объекту добавлен name
@@ -211,7 +217,9 @@ class ValueToChunks(object):
 
 
   def make_subarray_name(self,value,path,slice_clickable=True,**kwargs):
-    n1,n2=self.user_slice.get(path.id,(0,2))
+    if path.id not in self.user_slice:
+      self.user_slice[path.id] = (0,2)
+    n1,n2=self.user_slice[path.id]
     slice_kwargs={}
     slice_chunk=self.make_slice_chunk(n1,n2,path,slice_clickable=slice_clickable)
     chunks = [{'str':'*(','name':'varname'}]+\
@@ -235,7 +243,13 @@ class ValueToChunks(object):
       return False
     return True
 
-  def array_to_chunks (self, value, name, n1, n2, path, deref_depth, 
+  def expand_single_array_elem(self,path):
+    parent = path.parent
+    return  parent!=None and self.expand_variable.get(parent.id) and \
+            parent.id in self.user_slice and self.user_slice[parent.id][1]==None
+
+
+  def array_to_chunks (self, value, name, n1, n2, path,
       slice_clickable=True, vartree=None, **kwargs):
     ''' Конвертация массива или указателя, который указывает на массив в json-дерево.
 
@@ -283,10 +297,15 @@ class ValueToChunks(object):
       except gdb.MemoryError:
         value_addr=None
     is_already_deref = value_addr!=None and value_addr in already_deref
-    max_deref_depth = kwargs.get('max_deref_depth',3)
-    if  max_deref_depth!=None and \
-        ((deref_depth>=kwargs.get('max_deref_depth',3) or is_already_deref) and not self.expand_variable.get(path.id)) or \
-        (path.id in self.expand_variable and not self.expand_variable[path.id] ):
+    #Если было так: 
+    #   int ** ptr[0] = [Expand]
+    #И пользователь нажал на expand, то что бы не было
+    #   int ** ptr[0] = [
+    #       <Expand>
+    #   ]
+    # т.е. если массив содержит один элемент, то его сразу же нужно раскрывать, и не заставлять пользователя
+    # второй раз нажимать на expand.
+    if not self.expand_variable.get(path.id):
       chunks += self.collapsed_array_to_chunks(path,**kwargs)
       return chunks
 
@@ -318,10 +337,10 @@ class ValueToChunks(object):
         path_idx =  path.append(i)
         value_idx = valcache(value[i])
         if elem_as_array:
-          array_data_chunks__1=self.subarray_pointer_data_chunks(value_idx,path_idx,deref_depth,vartree=vartree,**kwargs)
+          array_data_chunks__1=self.subarray_pointer_data_chunks(value_idx,path_idx,vartree=vartree,**kwargs)
           id=path_idx.id
         else:
-          array_data_chunks__1=self.value_to_chunks_1(value_idx,None,path_idx,deref_depth,vartree=vartree,**kwargs)
+          array_data_chunks__1=self.value_to_chunks_1(value_idx,None,path_idx,vartree=vartree,**kwargs)
           id=None #id было добавлено в value_to_chunks
         chs = {'chunks':array_data_chunks__1}
         if id!=None: #Данное id приписывается узлу дерева в граф. окне. При помощи данного id осуществляется операция обновления дерева
@@ -366,7 +385,7 @@ class ValueToChunks(object):
     chunks = [{'id':path.id,'chunks':self.pointer_data_to_chunks(value,name,path,depth,vartree=varnode,**kwargs)}]
     return chunks
 
-  def pointer_data_to_chunks (self,value,name,path,deref_depth, **kwargs):
+  def pointer_data_to_chunks (self,value,name,path, **kwargs):
     str_type = str(value.type.strip_typedefs())
     assert not re.match('.*void \*$',str_type)
     assert not is_incomplete_type_ptr(value)
@@ -383,11 +402,12 @@ class ValueToChunks(object):
         n1,n2=(0,None)
       else:
         n1,n2=(0,2)
-    chunks+=self.array_to_chunks(value,name,n1,n2,path,deref_depth+1, **kwargs)
+    self.user_slice[path.id] = (n1,n2)
+    chunks+=self.array_to_chunks(value,name,n1,n2,path, **kwargs)
     return chunks
 
 
-  def pointer_to_chunks (self, value, name, path, deref_depth, **kwargs):
+  def pointer_to_chunks (self, value, name, path, **kwargs):
     chunks=[]
     if name:
       if kwargs.get('print_typename',True):
@@ -464,7 +484,7 @@ class ValueToChunks(object):
       res['proposed_text']=kwargs['proposed_text']
     return [res]
 
-  def struct_to_chunks(self,value,name,path,deref_depth, **kwargs):
+  def struct_to_chunks(self,value,name,path, **kwargs):
     already_deref = kwargs['already_deref']
     type_code = value.type.strip_typedefs().code
     chunks=[]
@@ -478,10 +498,9 @@ class ValueToChunks(object):
     #except gdb.MemoryError:
     #  value_addr=None
     is_already_deref = value_addr!=None and value_addr in already_deref
-    max_deref_depth = kwargs.get('max_deref_depth',3)
-    if  max_deref_depth!=None and \
-        ((deref_depth>=max_deref_depth or is_already_deref) and not self.expand_variable.get(path.id)) or \
-        (path.id in self.expand_variable and not self.expand_variable[path.id] ):
+    collapsed=self.expand_variable.get(path.id)
+    expand_single = self.expand_single_array_elem(path)
+    if (collapsed==False) or (collapsed==None and not expand_single):
       chunks += self.collapsed_struct_to_chunks(path, **kwargs)
       return chunks
 
@@ -502,7 +521,7 @@ class ValueToChunks(object):
         #Не знаю как с ними быть, поэтому вставляем текст исключения в граф. окно
         data_chunks.append({'str':str(e)+'\n'})
         continue
-      data_chunks+=self.value_to_chunks_1(field_value,field_name,value_path,deref_depth,**kwargs)
+      data_chunks+=self.value_to_chunks_1(field_value,field_name,value_path,**kwargs)
       data_chunks.append({'str':'\n'})
     if type_code==gdb.TYPE_CODE_STRUCT:
       chunks1.append({'chunks':data_chunks,'type_code':'TYPE_CODE_STRUCT'})
@@ -530,11 +549,6 @@ class ValueToChunks(object):
             value (gdb.Value): значение, которое нужно сконвертировать в json
             name (str): Имя, которое используется для печати NAME = VALUE. Если не задано,
                 то напечатается просто VALUE.
-            **funcname (str): имя функции, в контексте которой value конвертируется в json.
-            **max_deref_depth (int, default=0): Данный параметр используется для ограничения dereference указателей.
-                В рамках преобразования, которое делает данная функция для каждого указателя будет напечатан не только
-                адрес, но и значение памяти. Если представить список из миллиона элементов, то, очевидно, что весь
-                список печатать не надо.
             **already_deref (set): множество, состоящее из целых чисел. Кадое число трактуется, как адрес.
                 Для каждого адреса из данного множества разыменование производиться не будет.
             **print_typename (bool): True-->типы печатаются False-->не печатаются.
@@ -545,15 +559,12 @@ class ValueToChunks(object):
       path=Path([name])
     else:
       path=Path()
-    deref_depth=0
     already_deref = set()
     if 'already_deref' not in kwargs:
       kwargs['already_deref'] = set()
-    if 'max_deref_depth' not in kwargs:
-      kwargs['max_deref_depth']=0
-    return self.value_to_chunks_1(value,name,path,deref_depth,vartree=vartree,**kwargs)
+    return self.value_to_chunks_1(value,name,path,vartree=vartree,**kwargs)
 
-  def value_withstr_to_chunks(self,value,name,path,deref_depth,**kwargs):
+  def value_withstr_to_chunks(self,value,name,path,**kwargs):
     chunks=[]
     chunks+=self.name_to_chunks(name)
     chunks.append({'str':cached_stringify_value(value,str(path),enable_additional_text=True), 'name':'varvalue'})
@@ -562,7 +573,7 @@ class ValueToChunks(object):
   def ptrval_to_ulong(self,value):
     return ctypes.c_ulong(long(value)).value
 
-  def functionptr_to_chunks(self,value, name, path, deref_depth, **kwargs):
+  def functionptr_to_chunks(self,value, name, path, **kwargs):
     chunks=[]
     type_code = value.type.strip_typedefs().code
     if type_code == gdb.TYPE_CODE_METHOD:
@@ -600,7 +611,7 @@ class ValueToChunks(object):
 
 
 
-  def functionptr_to_chunks_argtypes(self,value, name, path, deref_depth, **kwargs):
+  def functionptr_to_chunks_argtypes(self,value, name, path, **kwargs):
     arg_types = [field.type for field in value.dereference().type.strip_typedefs().fields()]
     return_type = value.dereference().type.strip_typedefs().target()
     func_addr = self.ptrval_to_ulong(value)
@@ -644,7 +655,7 @@ class ValueToChunks(object):
     else:
       return [{'str':str(value.type),'name':'datatype'}]
 
-  def value_to_chunks_1(self,value,name,path,deref_depth,vartree=None,**kwargs):
+  def value_to_chunks_1(self,value,name,path,vartree=None,**kwargs):
     ''' Конвертирование gdb.Value в json-дерево. Рекурсия.
         Дополнительное описание см. в функции `value_to_chunks`
 
@@ -656,9 +667,6 @@ class ValueToChunks(object):
                 "s.y.a", для элемента массива A1 path = "s.arr[1]"
             path_name (str): Применяется для формирования path. Совпадает с именем переменной, за исключением
                 элементов массивов. Для A0 path_name будет arr[0]. Для массива arr path_name="arr".
-            deref_depth (int): текущая глубина разыменования. Если deref_depth==max_deref_depth, то указатель
-                будет напечатан без разыменования.
-            **deref_depth_max (int): см. deref_depth
             **already_deref (set): мн-во указателей, которые уже были разменованы. Если была напечатана структура или массив,
                 которая определена статически, то будет взят адрес данной структуры и помещен в данное множество.
                 Рассмотрим двунапр. данное мн-во
@@ -668,7 +676,6 @@ class ValueToChunks(object):
 
     '''
     assert 'already_deref' in kwargs
-    assert 'max_deref_depth' in kwargs
     varnode = vartree.add_node(
       value,
       path,
@@ -681,16 +688,16 @@ class ValueToChunks(object):
     type_str = str(value.type.strip_typedefs())
     print_typename=kwargs.get('print_typename',True)
     if type_code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION):
-      chunks+=self.struct_to_chunks(value,name,path,deref_depth,vartree=varnode,**kwargs)
+      chunks+=self.struct_to_chunks(value,name,path,vartree=varnode,**kwargs)
     elif type_code==gdb.TYPE_CODE_ARRAY:
       array_addr = value.address
       if array_addr!=None:
-        pointer_chunks = self.pointer_to_chunks (array_addr, name, path, deref_depth, **kwargs)
+        pointer_chunks = self.pointer_to_chunks (array_addr, name, path, **kwargs)
         if len(pointer_chunks)!=0:
           chunks+=pointer_chunks
           chunks.append({'str':'\n'})
       if re.match('.*char \[.*\]$',type_str):
-        chunks+=self.value_withstr_to_chunks(value,name,path,deref_depth,**kwargs)
+        chunks+=self.value_withstr_to_chunks(value,name,path,**kwargs)
       else:
         n1_orig,n2_orig = value.type.strip_typedefs().range()
         user_slice = self.user_slice.get(path.id)
@@ -701,7 +708,8 @@ class ValueToChunks(object):
             n2 = min(n2,n2_orig)
         else:
           n1,n2 = n1_orig,n2_orig
-        chunks += self.array_to_chunks (value, name, n1, n2, path, deref_depth, vartree=varnode, **kwargs)
+        self.user_slice[path.id] = (n1,n2)
+        chunks += self.array_to_chunks (value, name, n1, n2, path, vartree=varnode, **kwargs)
     elif type_code == gdb.TYPE_CODE_PTR:
       if re.match('.*char \*$',type_str):
         #строку печатаем по-другому в сравнении с обычным pointer
@@ -719,17 +727,17 @@ class ValueToChunks(object):
           if value.dereference().type.strip_typedefs().code == gdb.TYPE_CODE_FUNC:
             is_funct_ptr=True
           else:
-            pointer_data_chunks = self.pointer_data_to_chunks (value, name, path, deref_depth, vartree=varnode, **kwargs)
+            pointer_data_chunks = self.pointer_data_to_chunks (value, name, path, vartree=varnode, **kwargs)
         if is_funct_ptr:
-          pointer_chunks = self.functionptr_to_chunks(value, name, path, deref_depth, **kwargs)
+          pointer_chunks = self.functionptr_to_chunks(value, name, path, **kwargs)
         else:
-          pointer_chunks = self.pointer_to_chunks (value, name, path, deref_depth, **kwargs)
+          pointer_chunks = self.pointer_to_chunks (value, name, path, **kwargs)
         chunks+=pointer_chunks
         if len(pointer_data_chunks) > 0:
           chunks+=[{'str':'\n'}]
           chunks+=pointer_data_chunks
     elif type_code in (gdb.TYPE_CODE_METHOD,):
-      chunks += self.functionptr_to_chunks(value, name, path, deref_depth, **kwargs)
+      chunks += self.functionptr_to_chunks(value, name, path, **kwargs)
     else:
       if  name!=None:
         if print_typename:
@@ -875,7 +883,6 @@ class ValueToChunks(object):
           varnode.depth,
           vartree=vartree,
           already_deref=set(),
-          max_deref_depth=0,
         )
         assert len(vartree.childs)==1
         varnode.childs[idx] = vartree.childs[0] #vartree имеет ровно одного потомка на первом уровне
