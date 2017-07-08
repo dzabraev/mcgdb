@@ -20,13 +20,14 @@ class Node(object):
       Особенность this[0]._vptr.Cache в том, что пути this[0]._vptr не существует,
       а this[0]._vptr.Cache существует
   '''
-  def __init__(self,name,parent,base=None):
+  def __init__(self,name,parent,base=None,tochunks=None):
     self.name=name
     self.parent=parent
     if base:
       self.base=base
     else:
       self.base=parent.base
+    self.tochunks=tochunks
     self.childs={}
     self.base.id_seq+=1
     self.id=self.base.id_seq
@@ -53,7 +54,7 @@ class Node(object):
     new_data = self.saved_data
     return not self.base.equals(old_img,old_data,new_img,new_data)
 
-  def append(self,name,tochunks=None):
+  def append(self,name,**kwargs):
     ''' Если name является строкой, то xxx.name; если name есть int, то будет xxx[name]
         Данный метод возвращает новый Path, где к новому объекту добавлен name
     '''
@@ -64,7 +65,8 @@ class Node(object):
       child.do_capture()
     else:
       child = Node(name=name,parent=self)
-    child.tochunks=tochunks
+    if 'tochunks' in kwargs:
+      child.tochunks=kwargs['tochunks']
     return child
 
   def path_from_root(self):
@@ -116,18 +118,20 @@ class BasePath(object):
     self.equals = equals
     self.root = Node(base=self,name=None, parent=None)
 
-  def Path(self, name=None, path_id=None, path=None):
+  def Path(self, name=None, path_id=None, path=None, **kwargs):
     if path_id:
-      return self.nodes[path_id]
+      node = self.nodes[path_id]
     elif name:
-      return self.root.append(name=name)
+      node = self.root.append(name=name)
     elif path:
       node=self.root
       for name in path:
         node=node.childs[name]
-      return node
     else:
       return self.root
+    if 'tochunks' in kwargs:
+      node.tochunks=kwargs['tochunks']
+    return node
 
   def __diff(self,node,res):
     for child in node.childs.values():
@@ -824,8 +828,9 @@ class ValueToChunks(BasePath):
 
   def integer_as_struct_chunks(self,value,name,**kwargs):
     assert name!=None
-    path = self.Path(name)
-    return self.integer_as_struct_chunks_1(value,name,path,**kwargs)
+    tochunks=lambda value,name,path : self.integer_as_struct_chunks_1(value,name,path,**kwargs)
+    path = self.Path(name=name,tochunks=tochunks)
+    return tochunks(value,name,path)
 
   def integer_as_struct_chunks_1(self,value,name,path,**kwargs):
     '''Данная функция предназначается для печати целочисленного

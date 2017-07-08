@@ -341,15 +341,8 @@ class ThreadRegs(ValuesExemplar,ValueToChunks):
   def need_update(self):
     nodesdata=[]
     for regname in self.regnames:
-      regvalue = valcache(regname)
-      #register value cast to string because by default
-      #gdb.Value will be cast into long or int and python will
-      #raise exception:
-      #Python Exception <class 'gdb.error'> That operation is not available on integers of more than 8 bytes.:
-      if self.regvals[regname]!=str(regvalue):
-        chunks=self.get_register_chunks(regname=regname, regvalue=regvalue)
-        nodesdata+=self.filter_chunks_with_id(chunks)
-        self.regvals[regname]=str(regvalue)
+      chunks=self.diff(self.Path(name=regname))
+      nodesdata+=self.filter_chunks_with_id(chunks)
     return nodesdata
 
 
