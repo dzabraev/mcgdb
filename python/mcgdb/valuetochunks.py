@@ -408,19 +408,16 @@ class ValueToChunks(BasePath):
       for i in range(n1,n22):
         value_idx = valcache(value[i])
         if elem_as_array:
-          tochunks=lambda value,name,path,**kwargs : self.subarray_pointer_data_chunks(value,path,**kwargs)
+          tochunks=lambda value,name,path : self.subarray_pointer_data_chunks(value,path,**kwargs)
         else:
-          tochunks=None
+          tochunks=lambda value,name,path : self.value_to_chunks_1(value,None,path,**kwargs)
         path_idx = path.append(
           name=i,
           tochunks=tochunks,
         )
-        if elem_as_array:
-          array_data_chunks__1=self.subarray_pointer_data_chunks(value_idx,path_idx,**kwargs)
-          id=path_idx.id
-        else:
-          array_data_chunks__1=self.value_to_chunks_1(value_idx,None,path_idx,**kwargs)
-          id=None #id было добавлено в value_to_chunks
+        id=path_idx.id if elem_as_array else None
+        #Если не elem_as_array, то id было добавлено в value_to_chunks_1, поэтому тут его не добавляем
+        array_data_chunks__1=tochunks(value_idx,None,path_idx)
         chs = {'chunks':array_data_chunks__1}
         if id!=None: #Данное id приписывается узлу дерева в граф. окне. При помощи данного id осуществляется операция обновления дерева
           chs['id']=id
