@@ -289,7 +289,9 @@ class ValueToChunks(BasePath):
     #gdb.events.memory_changed. При обработке данного события
     #должны быть обновлены переменные.
     path.assign(new_value)
-    return self.diff(path)
+    return self.map_nodes_to_chunks([path]) #Насильно перерисовываем все поддерево измененой переменной.
+    #Это делается потому, что при тождественном изменение знач. переменной diff будет пустой, а в граф. окне будет <Wait change: ...>
+    #который нужно заменить значением
 
   def base_onclick_data(self,cmdname,**kwargs):
     onclick_data = {
@@ -372,13 +374,14 @@ class ValueToChunks(BasePath):
     else:
       chunks+=name
     chunks+=[{'str':' = '}]
-    if type_code==gdb.TYPE_CODE_PTR:
-      value_addr = ctypes.c_ulong(long(value)).value
-    else:
-      try:
+    try:
+      if type_code==gdb.TYPE_CODE_PTR:
+        value_addr = ctypes.c_ulong(long(value)).value
+      else:
         value_addr = value.address
-      except gdb.MemoryError:
-        value_addr=None
+    except gdb.MemoryError:
+      chunks+=self.chunks_error('accs_mem')
+      return chunks
 
     if not self.expand_variable.get(path.id):
       chunks += self.collapsed_array_to_chunks(path,**kwargs)
@@ -439,8 +442,14 @@ class ValueToChunks(BasePath):
         'onclick_data':self.base_onclick_data('collapse_variable',path_id=path.id)
       })
     else:
-      chunks.append({'str':'[CantAccsMem]'})
+      chunks+=self.chunks_error('accs_mem')
     return chunks
+
+  def chunks_error(self,name):
+    if name=='accs_mem':
+      return [{'str':'[CantAccsMem]'}]
+    else:
+      assert name in ('accs_mem',)
 
   def subarray_pointer_data_chunks(self,value,path,**kwargs):
     '''Данная функция применяется для случая, когда обрабатывается массив указателей. value элемент такого массива.
