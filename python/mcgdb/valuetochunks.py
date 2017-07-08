@@ -9,7 +9,7 @@ from mcgdb.common import    exec_main, gdb_print, gdb_stopped, \
                             inferior_alive, cached_stringify_value, \
                             valcache, stringify_value, \
                             get_this_thread_num, get_this_frame_num, \
-                            mcgdbBaseException, INDEX
+                            mcgdbBaseException, mcgdbChangevarErr, INDEX
 
 
 
@@ -282,13 +282,16 @@ class ValueToChunks(BasePath):
       try:
         new_value=long(gdb.parse_and_eval(user_input))
       except Exception as e:
-        raise mcgdbBaseException(str(e))
+        raise mcgdbChangevarErr(str(e),path,self.map_nodes_to_chunks([path]))
     else:
       new_value = user_input
     #при изменении переменной будет сгенерировано событие
     #gdb.events.memory_changed. При обработке данного события
     #должны быть обновлены переменные.
-    path.assign(new_value)
+    try:
+      path.assign(new_value)
+    except Exception as e:
+      raise mcgdbChangevarErr(error_msg=str(e),path=path,need_update=self.map_nodes_to_chunks([path]))
     return self.map_nodes_to_chunks([path]) #Насильно перерисовываем все поддерево измененой переменной.
     #Это делается потому, что при тождественном изменение знач. переменной diff будет пустой, а в граф. окне будет <Wait change: ...>
     #который нужно заменить значением

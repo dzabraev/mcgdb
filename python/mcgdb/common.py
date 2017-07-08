@@ -42,6 +42,16 @@ class mcgdbBaseException(Exception):
   def __str__(self):
     return str(self.value)
 
+class mcgdbChangevarErr(Exception):
+  def __init__(self, error_msg, path, need_update=None):
+    self.error_msg = error_msg
+    self.path = path
+    self.need_update = need_update
+
+  def __str__(self):
+    return str(self.error_msg)
+
+
 def exec_main(f):
   def decorated(*args,**kwargs):
     return exec_in_main_pythread (f,args,kwargs)

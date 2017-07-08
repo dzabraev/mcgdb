@@ -10,7 +10,7 @@ from mcgdb.basewin import BaseWin,TABID_TMP, StorageId
 from mcgdb.common  import gdb_stopped,inferior_alive,gdb_print, TablePackages
 from mcgdb.valuetochunks import check_chunks, ValueToChunks
 from mcgdb.common  import exec_main, valcache, INDEX, INDEX_tmp, \
-                    get_this_thread_num, mcgdbBaseException
+                    get_this_thread_num, mcgdbBaseException, mcgdbChangevarErr
 
 
 class ValuesExemplar(object):
@@ -124,13 +124,10 @@ class SubentityUpdate(BaseSubentity,StorageId):
 
   @exec_main
   def onclick_change_slice(self,pkg):
-    try:
-      if hasattr(self.current_values,'onclick_change_slice'):
-        need_update=self.current_values.onclick_change_slice(pkg)
-        if need_update:
-          self.send(self.pkg_update_nodes(self.subentity_name,need_update))
-    except mcgdbBaseException as e:
-      self.send_error(str(e))
+    if hasattr(self.current_values,'onclick_change_slice'):
+      need_update=self.current_values.onclick_change_slice(pkg)
+      if need_update:
+        self.send(self.pkg_update_nodes(self.subentity_name,need_update))
 
 
   @exec_main
@@ -138,11 +135,11 @@ class SubentityUpdate(BaseSubentity,StorageId):
     try:
       if hasattr(self.current_values,'onclick_change_variable'):
         need_update = self.current_values.onclick_change_variable(pkg)
-        if need_update:
-          self.send(self.pkg_update_nodes(self.subentity_name,need_update))
-    except mcgdbBaseException as e:
+    except mcgdbChangevarErr as e:
+      need_update=e.need_update
       self.send_error(str(e))
-
+    if need_update:
+      self.send(self.pkg_update_nodes(self.subentity_name,need_update))
 
   def gdbevt_exited(self,pkg):
     self.clear_table()
