@@ -281,7 +281,10 @@ class ValueToChunks(BasePath):
     path = self.Path(path_id=path_id)
     value=path.value()
     if 'converter' in pkg:
-      new_value = self.converters.get(pkg['converter'])(user_input)
+      try:
+        new_value = self.converters.get(pkg['converter'])(user_input)
+      except ValueError as e:
+        raise mcgdbChangevarErr(str(e),path,self.map_nodes_to_chunks([path]))
     elif value.type.strip_typedefs().code in (gdb.TYPE_CODE_INT,gdb.TYPE_CODE_PTR):
       try:
         new_value=long(gdb.parse_and_eval(user_input))
