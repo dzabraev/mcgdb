@@ -1,7 +1,7 @@
 #coding=utf8
 
 import gdb
-import re, ctypes, copy
+import re, ctypes, copy, traceback
 from abc import abstractmethod, abstractproperty
 
 
@@ -718,13 +718,33 @@ class ValueToChunks(BasePath):
     return chunks
 
   def value_type_to_chunks(self,value,**kwargs):
+    '''Если у структуры есть имя (value.type.name), то печатаем его.
+        Если перед нами анонимный тип данных:
+        struct {} x;
+        То тип данных полагаем struct
+    '''
     type_code=value.type.strip_typedefs().code
-    if type_code==gdb.TYPE_CODE_STRUCT:
-      return [{'str':'struct','name':'datatype'}]
-    elif type_code==gdb.TYPE_CODE_UNION:
-      return [{'str':'union','name':'datatype'}]
+    prefix=''
+    data_type=value.type.name or unicode(value.type)
+    if data_type and data_type not in ('struct {...}','union {...}'):
+      #non anonymous datatype
+      if type_code==gdb.TYPE_CODE_UNION:
+        #что бы визуально отличать структуру от union добавляем префикс такого вида
+        prefix='union '
+      else:
+        prefix=''
     else:
-      return [{'str':str(value.type),'name':'datatype'}]
+      #anonymous
+      prefix=''
+      data_type=''
+      if type_code==gdb.TYPE_CODE_STRUCT:
+        data_type='struct'
+      elif type_code==gdb.TYPE_CODE_UNION:
+        data_type='union'
+      else:
+        # Можем оказаться тут, например, при печати $rbp или $rsp, $rip
+        pass
+    return [{'str':'{prefix}{data_type}'.format(prefix=prefix, data_type=data_type),'name':'datatype'}]
 
   def value_to_chunks_1(self,value,name,path,**kwargs):
     ''' Конвертирование gdb.Value в json-дерево. Рекурсия.
