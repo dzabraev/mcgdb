@@ -8,8 +8,8 @@ infinite : infinite.c
 main : main.o file.o testdir/file.o myclass.o
 	g++ main.o file.o testdir/file.o myclass.o  -o main -lpthread
 
-main.o : main.c head.h
-	g++ $(CFLAGS) main.c -o main.o -c
+main.o : main.cc head.h
+	g++ $(CFLAGS) main.cc -o main.o -c
 file.o : file.c head.h
 	g++ $(CFLAGS) file.c -o file.o -c
 

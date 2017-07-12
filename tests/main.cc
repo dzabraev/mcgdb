@@ -13,6 +13,22 @@ int globalvar = 1;
 typedef struct incompl_struct incompl_struct;
 typedef union incompl_union incompl_union;
 
+class MyBase {
+  int x;
+  int y;
+  public :
+    MyBase (int x) {this->x=x; this->y=0;};
+    MyBase (int x, int y) {this->x=x; this->y=y;};
+    int value(void) {return x;};
+    int value(int k) {return x*k;};
+    int value(int k,int q) {return x*k*q;};
+};
+
+class MyDeriv : MyBase {
+  public:
+    MyDeriv(int x) : MyBase(x) {};
+    int value2(void) {return this->value();};
+};
 
 struct mystruct {
   int my1;
@@ -54,6 +70,7 @@ int main(void) {
     const char *s;
   } test_utf8;
   test_utf8.s = "тест кодировки abdc";
+  MyDeriv mm(1);
   char charbuf[4]="abc";
   {
     int block1=1;
