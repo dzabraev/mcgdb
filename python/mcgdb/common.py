@@ -736,12 +736,18 @@ class GEThread(object):
     self.entities_evt_queue=[] #Если при обработке пакета от editor или от чего-то еще
     #трубется оповестить другие окна о каком-то событии, то entity.process_pkg()
     #должен вернуть пакет(ы), которые будут обрабатываться в классах, которые соотв. окнам
+    self.pending_gdbpkgs=[] #Если target_running, а от gdb приходит event, например, new_objfile
+    #и если при работающем target попытаться, например, обновить локальные переменные, то первое же
+    #gdb.parse_and_eval() выбросит exception. Поэтому будем сохранять события от gdb пока не получим
+    # 'exited' или 'stop'
     while True:
-      if len(self.entities_evt_queue)>0:
-        #self.__process_pkg_from_entity ()
-        pkg = self.entities_evt_queue.pop(0)
-        self.send_pkg_to_entities(pkg)
-        continue
+      if gdb_stopped():
+        if len(self.entities_evt_queue)>0:
+          self.send_pkg_to_entities(self.entities_evt_queue.pop(0))
+          continue
+        elif len(self.pending_gdbpkgs)>0:
+          self.send_pkg_to_entities(self.pending_gdbpkgs.pop(0))
+          continue
       rfds=self.fte.keys()
       rfds+=self.wait_connection.keys()
       rfds.append(self.gdb_rfd)
@@ -764,13 +770,16 @@ class GEThread(object):
             ok=False
           if ok:
             self.fte[entity.fd]=entity
-            #entity.gdb_update_current_frame(self.exec_filename,self.exec_line)
         else:
           if fd==self.gdb_rfd:
             #обработка пакета из gdb
             pkg = self.get_pkg_from_gdb()
             if pkg:
-              self.send_pkg_to_entities(pkg)
+              if not gdb_stopped():
+                assert 'gdbevt' not in pkg or pkg['gdbevt'] not in ('exited','stop')
+                self.pending_gdbpkgs.append(pkg)
+              else:
+                self.send_pkg_to_entities(pkg)
           else:
             #обработка пакета из удаленного (графического) окна
             entity = self.fte[fd]
