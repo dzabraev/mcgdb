@@ -24,10 +24,23 @@ class MyBase {
     int value(int k,int q) {return x*k*q;};
 };
 
-class MyDeriv : MyBase {
+class MyBase2 {
+  float x;
+};
+
+class MyDeriv : MyBase, MyBase2 {
+  //double x;
   public:
     MyDeriv(int x) : MyBase(x) {};
     int value2(void) {return this->value();};
+    union {
+      int uni1;
+      double uni2;
+    };
+    struct {
+      int uni3;
+      double uni4;
+    };
 };
 
 struct mystruct {

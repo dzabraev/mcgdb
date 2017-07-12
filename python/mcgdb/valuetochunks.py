@@ -20,7 +20,7 @@ class Node(object):
       Особенность this[0]._vptr.Cache в том, что пути this[0]._vptr не существует,
       а this[0]._vptr.Cache существует
   '''
-  def __init__(self,name,parent,base=None,tochunks=None):
+  def __init__(self,name,parent=None,base=None,tochunks=None):
     self.name=name
     self.parent=parent
     if base:
@@ -34,7 +34,12 @@ class Node(object):
     self.base.nodes[self.id] = self
     if self.parent:
       self.do_capture()
-      self.parent.childs[name]=self
+      if type(name) is gdb.Type:
+        assert name.name!=None
+        self.parent.childs[name.name]=self
+      else:
+        #for anonymous fields we use key=(idx,None), where idx is number of field in struct
+        self.parent.childs[name]=self
 
   def do_capture(self):
     self.saved_img =self.get_value_img(self.value())
@@ -54,13 +59,20 @@ class Node(object):
     new_data = self.saved_data
     return not self.base.equals(old_img,old_data,new_img,new_data)
 
+  def cast(self,cast_type,**kwargs):
+    return self.append(cast_type,**kwargs)
+
   def append(self,name,**kwargs):
     ''' Если name является строкой, то xxx.name; если name есть int, то будет xxx[name]
-        Данный метод возвращает новый Path, где к новому объекту добавлен name
+        Данный метод возвращает новый Path, где к новому объекту добавлен name.
     '''
-    if not type(name) is int:
+    if type(name) in (str,unicode):
       name = name.strip()
-    child = self.childs.get(name)
+    if type(name) is gdb.Type:
+      assert name.name!=None
+      child = self.childs.get(name.name)
+    else:
+      child = self.childs.get(name)
     if child:
       child.do_capture()
     else:
@@ -80,6 +92,9 @@ class Node(object):
     s.reverse()
     return s
 
+  def is_anonymous(self,name):
+    return type(name) is tuple and name[1] is None
+
   def __str__(self):
     ''' Вернуть значение path в печатном виде'''
     parent=self.parent
@@ -87,9 +102,13 @@ class Node(object):
     strpath=path[0]
     assert type(path[0]) is str
     for name in path[1:]:
+      if self.is_anonymous(name):
+        continue
       if type(name) is int:
         #берется элемент массива ptr[0]
         strpath = '{}[{}]'.format(strpath,name)
+      elif type(name) is gdb.Type:
+        strpath = '(({cast_type})({value_path}))'.format(cast_type=name.name,value_path=strpath)
       else:
         strpath = strpath+'.'+name
     return strpath
@@ -99,7 +118,12 @@ class Node(object):
     path=self.path_from_root()
     value = gdb.parse_and_eval(path[0])
     for name in path[1:]:
-      value = value[name]
+      if self.is_anonymous(name):
+        continue
+      if type(name) is gdb.Type:
+        value = value.cast(name)
+      else:
+        value = value[name]
     return valcache(value)
 
   def assign(self,new_value):
@@ -190,6 +214,10 @@ class ValueToChunks(BasePath):
     #n1,n2 задает диапазон, включая оба конца. Если n2 есть None, то печатается строго
     #один элемент ptr[n1]
     self.expand_variable={}
+    self.type_code_to_string={
+      gdb.TYPE_CODE_STRUCT : 'struct',
+      gdb.TYPE_CODE_UNION  : 'union',
+    }
     self.converters={}
     self.converters['bin_to_long'] = lambda x: long(x,2)
     self.converters['hex_to_long'] = lambda x: long(x,16)
@@ -369,7 +397,7 @@ class ValueToChunks(BasePath):
     assert name!=None
 
     type_code=value.type.strip_typedefs().code
-    if name:
+    if name!=None:
       if kwargs.get('print_typename',True):
         chunks+=self.value_type_to_chunks(value,**kwargs)
         chunks.append({'str':' '})
@@ -421,9 +449,9 @@ class ValueToChunks(BasePath):
       for i in range(n1,n22):
         value_idx = valcache(value[i])
         if elem_as_array:
-          tochunks=lambda value,name,path : self.subarray_pointer_data_chunks(value,path,**kwargs)
+          tochunks=lambda value,name,path,**kwargs : self.subarray_pointer_data_chunks(value,path,**kwargs)
         else:
-          tochunks=lambda value,name,path : self.value_to_chunks_1(value,None,path,**kwargs)
+          tochunks=lambda value,name,path,**kwargs : self.value_to_chunks_1(value,None,path,**kwargs)
         path_idx = path.append(
           name=i,
           tochunks=tochunks,
@@ -494,19 +522,15 @@ class ValueToChunks(BasePath):
 
   def pointer_to_chunks (self, value, name, path, **kwargs):
     chunks=[]
-    if name:
-      if kwargs.get('print_typename',True):
-        chunks+=self.value_type_to_chunks(value,**kwargs)
-        chunks.append({'str':' '})
-      chunks+=self.name_to_chunks(name)
-    chunks += self.changable_value_to_chunks(value,path,**kwargs)
+    chunks+=self.chunks_type_name(value,name,**kwargs)
+    chunks+=self.changable_value_to_chunks(value,path,**kwargs)
     return chunks
 
   def name_to_chunks(self,name,**kwargs):
     with_equal=kwargs.get('with_equal',True)
     chunks=[]
     if name!=None:
-      if type(name) is str:
+      if type(name) in (str,unicode):
         chunks+=[{'str':name, 'name':'varname'},]
       else:
         chunks+=name
@@ -569,14 +593,13 @@ class ValueToChunks(BasePath):
       res['proposed_text']=kwargs['proposed_text']
     return [res]
 
-  def struct_to_chunks(self,value,name,path, **kwargs):
+  def struct_to_chunks(self,value,name,path,fields=None,**kwargs):
+    '''
+        :param fields: list of gdb.Field If this argument specified then only this fields will be print
+    '''
     type_code = value.type.strip_typedefs().code
     chunks=[]
-    if name:
-      if kwargs.get('print_typename',True):
-        chunks+=self.value_type_to_chunks(value,**kwargs)
-        chunks.append({'str':' '})
-      chunks+=self.name_to_chunks(name)
+    chunks+=self.chunks_type_name(value,name,**kwargs)
     #try:
     value_addr = value.address
     #except gdb.MemoryError:
@@ -589,19 +612,42 @@ class ValueToChunks(BasePath):
 
     chunks1=[]
     data_chunks=[]
-    for field in value.type.strip_typedefs().fields():
-      field_name = field.name
-      try:
-        field_value = valcache(value[field_name])
-        value_path=path.append(name=field_name)
-      except gdb.error as e:
-        #В C++ имеет место быть исключение вида
-        #   Python Exception <class 'gdb.error'> cannot resolve overloaded method `DeviceExc': no arguments supplied:
-        #while dereference this
-        #Не знаю как с ними быть, поэтому вставляем текст исключения в граф. окно
-        data_chunks.append({'str':str(e)+'\n'})
-        continue
-      data_chunks+=self.value_to_chunks_1(field_value,field_name,value_path,**kwargs)
+    base_classes=[]
+
+    for idx,field in enumerate(fields if fields else value.type.strip_typedefs().fields()):
+      if field.is_base_class:
+        base_type = gdb.lookup_type(field.name)
+        field_value = value.cast(base_type)
+        field_name='<INHERITANCE>'
+        tochunks=lambda value, name, path, **kwargs : self.value_to_chunks_1(value,field_name,path, **kwargs)
+        value_path=path.cast(base_type,tochunks=tochunks)
+      else:
+        field_name = field.name
+        if field_name==None:
+          #this is anonymous field. For example:
+          # class A {
+          #    union {
+          #      int x;
+          #      double y;
+          #    };
+          # };
+          # class A have fielns x,y and UNION is anonimous field
+          value_name = self.type_code_to_string[field.type.code]
+          tochunks = lambda value,name,path,**kwargs : self.value_to_chunks_1(
+              value=value,
+              name=value_name,
+              path=path,
+              fields=field.type.fields(),
+              expand_depth=1,
+              print_typename=False,
+              **kwargs)
+          field_value = value
+          value_path=path.append(name=(idx,None),tochunks=tochunks)
+        else:
+          field_value = valcache(value[field_name])
+          value_path=path.append(name=field_name)
+          tochunks = lambda value,name,path,**kwargs : self.value_to_chunks_1(value,name,path,**kwargs)
+      data_chunks+=tochunks(field_value,field_name,value_path,**kwargs)
       data_chunks.append({'str':'\n'})
     if type_code==gdb.TYPE_CODE_STRUCT:
       chunks1.append({'chunks':data_chunks,'type_code':'TYPE_CODE_STRUCT'})
@@ -669,11 +715,7 @@ class ValueToChunks(BasePath):
       func_name=function.name
     else:
       func_name='unknown'
-    if name:
-      if kwargs.get('print_typename',True):
-        chunks+=self.value_type_to_chunks(value,**kwargs)
-        chunks.append({'str':' '})
-      chunks+=self.name_to_chunks(name)
+    chunks+=self.chunks_type_name(value,name,**kwargs)
     valuetype = self.stringify_type(value.type)
     chunks+=self.changable_strvalue_to_chunks(str(func_addr),path,valuetype,**kwargs)
     chunks.append({'str':' '})
@@ -718,14 +760,17 @@ class ValueToChunks(BasePath):
     return chunks
 
   def value_type_to_chunks(self,value,**kwargs):
+    return self.type_to_chunks(value.type,**kwargs)
+
+  def type_to_chunks(self,value_type,**kwargs):
     '''Если у структуры есть имя (value.type.name), то печатаем его.
         Если перед нами анонимный тип данных:
         struct {} x;
         То тип данных полагаем struct
     '''
-    type_code=value.type.strip_typedefs().code
+    type_code=value_type.strip_typedefs().code
     prefix=''
-    data_type=value.type.name or unicode(value.type)
+    data_type=value_type.name or unicode(value_type)
     if data_type and data_type not in ('struct {...}','union {...}'):
       #non anonymous datatype
       if type_code==gdb.TYPE_CODE_UNION:
@@ -745,6 +790,15 @@ class ValueToChunks(BasePath):
         # Можем оказаться тут, например, при печати $rbp или $rsp, $rip
         pass
     return [{'str':'{prefix}{data_type}'.format(prefix=prefix, data_type=data_type),'name':'datatype'}]
+
+  def chunks_type_name(self,value,name,**kwargs):
+    chunks=[]
+    if name!=None:
+      if kwargs.get('print_typename',True):
+        chunks+=self.value_type_to_chunks(value,**kwargs)
+        chunks.append({'str':' '})
+      chunks+=self.name_to_chunks(name)
+    return chunks
 
   def value_to_chunks_1(self,value,name,path,**kwargs):
     ''' Конвертирование gdb.Value в json-дерево. Рекурсия.
@@ -791,11 +845,7 @@ class ValueToChunks(BasePath):
     elif type_code == gdb.TYPE_CODE_PTR:
       if re.match('.*char \*$',type_str):
         #строку печатаем по-другому в сравнении с обычным pointer
-        if name:
-          if print_typename:
-            chunks+=self.value_type_to_chunks(value,**kwargs)
-            chunks.append({'str':' '})
-          chunks+=self.name_to_chunks(name)
+        chunks+=self.chunks_type_name(value,name,**kwargs)
         chunks+=self.changable_value_to_chunks(value,path,enable_additional_text=True,**kwargs)
       else:
         is_funct_ptr=False
@@ -817,11 +867,7 @@ class ValueToChunks(BasePath):
     elif type_code in (gdb.TYPE_CODE_METHOD,):
       chunks += self.functionptr_to_chunks(value, name, path, **kwargs)
     else:
-      if  name!=None:
-        if print_typename:
-          chunks+=self.value_type_to_chunks(value,**kwargs)
-        chunks.append({'str':' '})
-        chunks+=self.name_to_chunks(name)
+      chunks+=self.chunks_type_name(value=value,name=name)
       chunks+=self.changable_value_to_chunks(value,path,**kwargs)
     res_chunk={'chunks':chunks, 'id':path.id}
     return [res_chunk]
@@ -851,7 +897,7 @@ class ValueToChunks(BasePath):
 
   def integer_as_struct_chunks(self,value,name,**kwargs):
     assert name!=None
-    tochunks=lambda value,name,path : self.integer_as_struct_chunks_1(value,name,path,**kwargs)
+    tochunks=lambda value,name,path,**kwargs : self.integer_as_struct_chunks_1(value,name,path,**kwargs)
     path = self.Path(name=name,tochunks=tochunks)
     return tochunks(value,name,path)
 
