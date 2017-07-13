@@ -20,9 +20,11 @@ class Node(object):
       Особенность this[0]._vptr.Cache в том, что пути this[0]._vptr не существует,
       а this[0]._vptr.Cache существует
   '''
-  def __init__(self,name,parent=None,base=None,tochunks=None):
+  def __init__(self,name,parent=None,base=None,tochunks=None,field=None):
     self.name=name
     self.parent=parent
+    self.field=field
+    assert not self.is_anonymous(name) or field!=None
     if base:
       self.base=base
     else:
@@ -34,7 +36,7 @@ class Node(object):
     self.base.nodes[self.id] = self
     if self.parent:
       self.do_capture()
-      if type(name) is gdb.Type:
+      if type(name) is gdb.Type: #cast
         assert name.name!=None
         self.parent.childs[name.name]=self
       else:
@@ -76,31 +78,34 @@ class Node(object):
     if child:
       child.do_capture()
     else:
-      child = Node(name=name,parent=self)
+      child = Node(name=name,parent=self,**kwargs)
     if 'tochunks' in kwargs:
       child.tochunks=kwargs['tochunks']
     return child
 
   def path_from_root(self):
     assert self.parent!=None
-    s=[self.name]
+    s=[self.field if self.field else self.name]
     parent=self.parent
     #в корне дерева ничего не хранится, поэтому parent.parent
     while parent.parent:
-      s.append(parent.name)
+      if parent.field:
+        s.append(parent.field)
+      else:
+        s.append(parent.name)
       parent=parent.parent
     s.reverse()
     return s
 
   def is_anonymous(self,name):
-    return type(name) is tuple and name[1] is None
+    return (type(name) is tuple and name[1] is None) or (type(name) is gdb.Field and name.name is None)
 
   def __str__(self):
     ''' Вернуть значение path в печатном виде'''
     parent=self.parent
     path=self.path_from_root()
     strpath=path[0]
-    assert type(path[0]) is str
+    assert type(path[0]) in (str,unicode)
     for name in path[1:]:
       if self.is_anonymous(name):
         continue
@@ -118,8 +123,6 @@ class Node(object):
     path=self.path_from_root()
     value = gdb.parse_and_eval(path[0])
     for name in path[1:]:
-      if self.is_anonymous(name):
-        continue
       if type(name) is gdb.Type:
         value = value.cast(name)
       else:
@@ -146,6 +149,7 @@ class BasePath(object):
     if path_id:
       node = self.nodes[path_id]
     elif name:
+      assert type(name) in (str,unicode)
       node = self.root.append(name=name)
     elif path:
       node=self.root
@@ -451,7 +455,7 @@ class ValueToChunks(BasePath):
         if elem_as_array:
           tochunks=lambda value,name,path,**kwargs : self.subarray_pointer_data_chunks(value,path,**kwargs)
         else:
-          tochunks=lambda value,name,path,**kwargs : self.value_to_chunks_1(value,None,path,**kwargs)
+          tochunks=lambda value,name,path,**kwargs : self.value_to_chunks_1(value=value,name=None,path=path,**kwargs)
         path_idx = path.append(
           name=i,
           tochunks=tochunks,
@@ -614,12 +618,13 @@ class ValueToChunks(BasePath):
     data_chunks=[]
     base_classes=[]
 
-    for idx,field in enumerate(fields if fields else value.type.strip_typedefs().fields()):
+    target_fields = fields if fields else value.type.strip_typedefs().fields()
+    for idx,field in enumerate(target_fields):
+      field_value,field_name,value_path = None,None,None
       if field.is_base_class:
         base_type = gdb.lookup_type(field.name)
         field_value = value.cast(base_type)
-        field_name='<INHERITANCE>'
-        tochunks=lambda value, name, path, **kwargs : self.value_to_chunks_1(value,field_name,path, **kwargs)
+        tochunks=lambda value, name, path, **kwargs : self.value_to_chunks_1(value=value,name='<INHERITANCE>',path=path, **kwargs)
         value_path=path.cast(base_type,tochunks=tochunks)
       else:
         field_name = field.name
@@ -633,16 +638,15 @@ class ValueToChunks(BasePath):
           # };
           # class A have fielns x,y and UNION is anonimous field
           value_name = self.type_code_to_string[field.type.code]
-          tochunks = lambda value,name,path,**kwargs : self.value_to_chunks_1(
+          tochunks = (lambda value_name : lambda value,name,path,**kwargs : self.value_to_chunks_1(
               value=value,
               name=value_name,
               path=path,
-              fields=field.type.fields(),
               expand_depth=1,
               print_typename=False,
-              **kwargs)
-          field_value = value
-          value_path=path.append(name=(idx,None),tochunks=tochunks)
+              **kwargs))(value_name)
+          field_value = value[field]
+          value_path=path.append(name=(idx,None),tochunks=tochunks, field=field)
         else:
           field_value = valcache(value[field_name])
           value_path=path.append(name=field_name)
@@ -818,7 +822,6 @@ class ValueToChunks(BasePath):
     chunks=[]
     type_code = value.type.strip_typedefs().code
     type_str = str(value.type.strip_typedefs())
-    print_typename=kwargs.get('print_typename',True)
     if type_code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION):
       chunks+=self.struct_to_chunks(value,name,path,**kwargs)
     elif type_code==gdb.TYPE_CODE_ARRAY:
