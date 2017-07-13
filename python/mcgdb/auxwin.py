@@ -8,15 +8,20 @@ import traceback
 
 from mcgdb.basewin import BaseWin,TABID_TMP, StorageId
 from mcgdb.common  import gdb_stopped,inferior_alive,gdb_print, TablePackages
-from mcgdb.valuetochunks import check_chunks, ValueToChunks
+from mcgdb.valuetochunks import check_chunks, ValueToChunks, get_frame_funcname, \
+                                get_frame_fileline, get_frame_func_args, frame_func_args
 from mcgdb.common  import exec_main, valcache, INDEX, INDEX_tmp, \
                     get_this_thread_num, mcgdbBaseException, mcgdbChangevarErr
 
 
 class ValuesExemplar(object):
   def get_table(self):
+    ''' Return whole table for current inferior state'''
     raise NotImplementedError
   def need_update(self):
+    ''' This function compare saved inferior state with
+        current inferior state and produce packages, that
+        will be update GUI window'''
     raise NotImplementedError
 
 
@@ -83,7 +88,7 @@ class SubentityUpdate(BaseSubentity,StorageId):
         self.exemplar_set(id,self.subentity_name)
       need_update = values.need_update()
       if need_update:
-        pkg=self.pkg_update_nodes(self.subentity_name, need_update)
+        pkg=self.pkg_transaction(self.subentity_name, need_update)
       else:
         pkg=None
     else:
@@ -108,6 +113,34 @@ class SubentityUpdate(BaseSubentity,StorageId):
   def process_connection(self):
     self.update_values()
 
+
+  def gdbevt_exited(self,pkg):
+    self.clear_table()
+  def gdbevt_stop(self,pkg):
+    self.update_values()
+  def gdbevt_new_objfile(self,pkg):
+    self.update_values()
+  def gdbevt_clear_objfiles(self,pkg):
+    self.update_values()
+  def gdbevt_memory_changed(self,pkg):
+    self.update_values()
+  def gdbevt_register_changed(self,pkg):
+    self.update_values()
+
+  def shellcmd_up(self,pkg):
+    self.update_values()
+  def shellcmd_down(self,pkg):
+    self.update_values()
+  def shellcmd_thread(self,pkg):
+    self.update_values()
+
+  def mcgdbevt_frame(self,pkg):
+    self.update_values()
+
+  def mcgdbevt_thread(self,pkg):
+    self.update_values()
+
+class OnclickVariables(object):
   @exec_main
   def onclick_expand_variable(self,pkg):
     if hasattr(self.current_values,'onclick_expand_variable'):
@@ -140,34 +173,6 @@ class SubentityUpdate(BaseSubentity,StorageId):
       self.send_error(str(e))
     if need_update:
       self.send(self.pkg_update_nodes(self.subentity_name,need_update))
-
-  def gdbevt_exited(self,pkg):
-    self.clear_table()
-  def gdbevt_stop(self,pkg):
-    self.update_values()
-  def gdbevt_new_objfile(self,pkg):
-    self.update_values()
-  def gdbevt_clear_objfiles(self,pkg):
-    self.update_values()
-  def gdbevt_memory_changed(self,pkg):
-    self.update_values()
-  def gdbevt_register_changed(self,pkg):
-    self.update_values()
-
-  def shellcmd_up(self,pkg):
-    self.update_values()
-  def shellcmd_down(self,pkg):
-    self.update_values()
-  def shellcmd_thread(self,pkg):
-    self.update_values()
-
-  def mcgdbevt_frame(self,pkg):
-    self.update_values()
-
-  def mcgdbevt_thread(self,pkg):
-    self.update_values()
-
-
 
 
 class BacktraceTable(BaseSubentity,ValueToChunks):
@@ -224,10 +229,10 @@ class BacktraceTable(BaseSubentity,ValueToChunks):
       chunks = [
         framenumber,
         {'str':'  '},
-      ] + self._get_frame_fileline(frame) + \
+      ] + self.get_frame_fileline(frame) + \
       [
         {'str':'\n'},
-      ] + self._get_frame_funcname_with_args(frame)
+      ] + self.get_frame_funcname_with_args(frame)
       col['chunks']=chunks
       row = {'columns' : [col], 'nframe':nframe}
       frames.append(row)
@@ -346,7 +351,7 @@ class ThreadRegs(ValuesExemplar,ValueToChunks):
     return nodesdata
 
 
-class RegistersTable(SubentityUpdate):
+class RegistersTable(SubentityUpdate,OnclickVariables):
   subentity_name='registers'
   values_class = ThreadRegs
 
@@ -357,133 +362,156 @@ class RegistersTable(SubentityUpdate):
       raise RuntimeError
     return 1024+thnum
 
+class CurrentThreads(ValuesExemplar,TablePackages):
+  def __init__(self,*args,**kwargs):
+    super(CurrentThreads,self).__init__(*args,**kwargs)
+    self.value_transform={
+      'thread_name':lambda value : '"{}"\n'.format(value),
+      'func_args':lambda value : get_func_args(value),
+    }
 
-class ThreadsTable(BaseSubentity,ValueToChunks):
-  subentity_name='threads'
+  def get_table(self):
+    threads_info = self.get_threads_info()
+    self.saved_threads_info = threads_info
+    rows=[]
+    gnums=threads_info.keys()
+    gnums.sort()
+    for global_num in gnums:
+      thread_info=threads_info[global_num]
+      row={'columns' : [column]}
+      row = self.new_threadrow(global_num,thread_info)
+      rows.append(row)
+    return {'rows':rows}
 
-  @exec_main
-  def __init__(self, **kwargs):
-    super(ThreadsTable,self).__init__(**kwargs)
+  def need_update(self):
+    pkgs=[]
+    threads_info = self.get_threads_info()
+    exited_threads = set(self.saved_threads_info.keys()) - set(threads_info.keys())
+    for global_num in exited_threads:
+      pkgs.append(self.drop_node(self.id_threadrow(global_num)))
+    new_threads=[]
+    for global_num in threads_info:
+      thread_info = threads_info[global_num]
+      if global_num not in self.saved_threads_info:
+        #появился новый поток
+        pkgs.append(self.append_row(self.new_threadrow(global_num,thread_info)))
+      else:
+        saved_thread_info = self.saved_threads_info[global_num]
+        pkgs += self.compare_infos(saved_thread_info,thread_info)
+    self.saved_threads_info = threads_info
+    return pkgs
 
-  def process_connection(self):
-    return self.update_threads()
+  def compare_infos(self,global_num,new,old):
+    upd=[]
+    for target in ['thread_name','func_name','file_name','file_line','func_args']:
+      if new[target]!=old[target]:
+        upd.append(self.get_node(global_num,target,new[target]))
+    return self.pkg_update_nodes('threads',upd)
 
-  @exec_main
-  def _select_thread_1(self,nthread):
-    threads=gdb.selected_inferior().threads()
-    if len(threads)<nthread+1:
-      return 'thread #{} not exists'.format(nthread)
-    threads[nthread].switch()
-
-  def onclick_select_thread(self,pkg):
-    nthread = pkg['nthread']
-    res=self._select_thread_1(nthread)
-    if res!=None:
-      self.send_error(res)
+  def get_node(self,global_num,target,value):
+    getid=getattr(self,'id_{}'.format(target))
+    if target in self.value_transform:
+      value = self.value_transform[target](value)
+    if type(value) is (str,unicode):
+      return {'str':value,'id':getid(global_num)}
     else:
-      # об этом остальные сущности о смене потока
-      return [{'cmd':'mcgdbevt','mcgdbevt':'thread', 'data':{}}]
+      return value
 
-  def update_threads(self):
-    try:
-      self.send({
-        'cmd':'exemplar_create',
-        'table_name':'threads',
-        'table':self.get_threads(),
-        'id':1024,
-        'set':True,
-      })
-    except:
-      return
+  def new_threadrow(self,global_num,thread_info):
+    gn=global_num
+    ti=thread_info
+    tid=ti[gn]['tid']
+    thread_name=ti[gn]['thread_name']
+    func_name=ti[gn]['func_name']
+    file_name=ti[gn]['file_name']
+    func_args=ti[gn]['func_args']
+    file_line=str(ti[gn]['file_line'])
+    chunks=[
+      {'str':'{global_num} LWP={tid} '.format(global_num=gn,tid=tid)},
+      self.get_node(gn,'thread_name',thread_name),
+      self.get_node(gn,'file_name',file_name),
+      {'str':':'},
+      self.get_node(gn,'file_line',file_line),
+      self.get_node(gn,'func_name',func_name),
+    ]
+    if len(funcargs)==:
+      chunks.append({'src':'()'})
+    else:
+      chunks.append({'src':'(\n'})
+      chunks.append(self.get_node(gn,'func_args',func_args))
+      chunks.append({'src':')'})
+    col={'chunks':chunks}
+    row=['columns':[col]]
+    return row
 
 
-  @exec_main
-  def get_threads(self):
+  id_per_row = 6
+  def id_threadrow(self,global_num):
+    ''' Thread row id'''
+    return id_per_row*global_num
+
+  def id_thread_name(self,global_num):
+    return id_per_row*global_num+1
+
+  def id_func_name(self,global_num):
+    return id_per_row*global_num+2
+
+  def id_file_name(self,global_num):
+    return id_per_row*global_num+3
+
+  def id_file_line(self,global_num):
+    return id_per_row*global_num+4
+
+  def id_func_args(self,global_num):
+    return id_per_row*global_num+5
+
+
+  def get_threads_info(self):
+    threads_info={}
+    #сохраняем информацию о текущем треде и текущем фрейме, что бы потом восстановить
     selected_thread = gdb.selected_thread()
     selected_frame = gdb.selected_frame()
-    throws=[]
-    threads=gdb.selected_inferior().threads()
-    nrow=0
-    selected_row=None
-    for thread in threads:
-      column={}
+    for thread in gdb.selected_inferior().threads():
       thread.switch()
       frame = gdb.selected_frame()
       global_num    =   str(thread.global_num)
       tid           =   str(thread.ptid[1])
-      threadname    =   str(thread.name) if thread.name else ''
-      funcname      =   self._get_frame_funcname_with_args(frame)
-      fileline      =   self._get_frame_fileline(frame)
-      global_num_chunk = {'str':global_num, 'name':'th_global_num'}
-      if thread==selected_thread:
-        global_num_chunk['selected']=True
-        selected_row=nrow
-      column['onclick_data'] = {
-          'cmd' : 'onclick',
-          'onclick':'select_thread',
-          'nthread' : nrow,
-        }
-      chunks = [ global_num_chunk,
-          {'str':'  '},
-          {'str':tid,        'name':'th_tid'},
-          {'str':'  '},
-          {'str':'"'},
-          {'str':threadname,     'name':'th_threadname'},
-          {'str':'"\n'},
-        ] +  \
-        fileline + \
-        [{'str':'\n'}] + \
-        self._get_frame_funcname_with_args(frame)
-      column['chunks'] = chunks
-      row={'columns' : [column]}
-      throws.append(row)
-      nrow+=1
+      threadname    =   str(thread.name) if thread.name else 'unknown'
+      funcname = get_frame_funcname()
+      filename,fileline = get_frame_fileline(frame)
+      funcargs = get_frame_func_args(frame)
+      threads_info.append[global_num] = {
+        'tid':tid,
+        'thread_name':threadname,
+        'func_name':funcname,
+        'file_name':filename,
+        'file_line':fileline,
+        'func_args':funcargs,
+      }
     if selected_thread != None:
       selected_thread.switch()
     if selected_frame != None:
       selected_frame.select()
-    table = {
-      'rows':throws,
-    }
-    if selected_row!=None:
-      table['selected_row'] = selected_row
-    return table
+    return threads_info
 
-  #GDB EVENTS
-  def gdbevt_exited(self,evt):
-    self.clear_table()
 
-  def gdbevt_stop(self,evt):
-    self.update_threads()
 
-  def gdbevt_new_objfile(self,evt):
-    self.update_threads()
 
-  def gdbevt_clear_objfiles(self,evt):
-    self.update_threads()
+class ThreadsTable(SubentityUpdate):
+  subentity_name='threads'
+  values_class = CurrentThreads
 
-  def gdbevt_memory_changed(self,evt):
-    self.update_threads()
+  @exec_main
+  def get_key(self):
+    return 1024
 
-  def gdbevt_register_changed(self,evt):
-    self.update_threads()
+  def onclick_select_thread(self,pkg):
+    nthread = pkg['nthread']
+    res=self.current_values.select_thread(nthread)
+    if res!=None:
+      self.send(res)
+    return [{'cmd':'mcgdbevt','mcgdbevt':'thread', 'data':{}}]
 
-  #SHELL COMMANDS
-  def shellcmd_up(self,data=None):
-    self.update_threads()
-
-  def shellcmd_down(self,data=None):
-    self.update_threads()
-
-  def shellcmd_thread(self,data=None):
-    self.update_threads()
-
-  #MCGDB EVENTS
-  def mcgdbevt_frame(self,data):
-    self.update_threads()
-
-  def mcgdbevt_thread(self,data):
-    self.update_threads()
 
 
 class BlockLocalvarsTable(ValuesExemplar,ValueToChunks):
@@ -511,7 +539,11 @@ class BlockLocalvarsTable(ValuesExemplar,ValueToChunks):
 
   @exec_main
   def need_update(self):
-    return self.diff()
+    nodes = self.diff()
+    if nodes:
+      return self.pkg_update_nodes(nodes)
+    else:
+      return None
 
   @exec_main
   def get_local_vars(self):
@@ -528,6 +560,7 @@ class BlockLocalvarsTable(ValuesExemplar,ValueToChunks):
       lvars.append(row)
     return {'rows':lvars}
 
+  @exec_main
   def get_local_vars_1(self):
     try:
       frame = gdb.selected_frame()
@@ -553,7 +586,7 @@ class BlockLocalvarsTable(ValuesExemplar,ValueToChunks):
 
 
 
-class LocalvarsTable(SubentityUpdate):
+class LocalvarsTable(SubentityUpdate,OnclickVariables):
   subentity_name='localvars'
   values_class = BlockLocalvarsTable
 

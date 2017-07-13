@@ -939,7 +939,6 @@ class TablePackages(object):
     pkg={'cmd':'update_nodes', 'table_name':tabname, 'nodes':[node_data]}
     self.send(pkg)
 
-
   def do_row_visible(self,nrow):
     pkg={'cmd':'do_row_visible','table_name':'asm', 'nrow':nrow}
     self.send(pkg)
@@ -956,4 +955,14 @@ class TablePackages(object):
   def pkg_update_nodes(self,tabname,need_update):
     return {'cmd':'update_nodes', 'table_name':tabname, 'nodes':need_update}
 
+  def pkg_drop_node(self,tabname,id):
+    return {'cmd':'drop_node', 'table_name':tabname, 'id':id}
 
+  def pkg_drop_row(self,tabname,id):
+    return {'cmd':'drop_row', 'table_name':tabname, 'id':id}
+
+  def pkg_append_row(self,tabname,row):
+    return {'cmd':'append_row','table_name':tabname,'row':row}
+
+  def pkg_transaction(self,tabname,pkgs):
+    return {'cmd':'transaction','table_name':tabname,'pkgs':pkgs}

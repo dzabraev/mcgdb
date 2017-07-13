@@ -13,6 +13,51 @@ from mcgdb.common import    exec_main, gdb_print, gdb_stopped, \
 
 
 
+def get_frame_funcname(frame):
+  return frame.name()
+
+def get_frame_fileline(frame):
+    frame_line = frame.find_sal().line
+    symtab = frame.find_sal().symtab
+    frame_filename = symtab.filename if symtab else 'unknown'
+    return frame_filename,frame_line
+
+def get_frame_func_args(frame):
+    ''' Возвращает список пар: (имя аргумента, строковое представление аргумента) '''
+    args=[]
+    try:
+      block=frame.block()
+    except RuntimeError:
+      return []
+    while block:
+      for sym in block:
+        if sym.is_argument:
+          value = valcache(sym.value(frame))
+          args.append(
+            (sym.name,stringify_value(value))
+          )
+      if block.function:
+        break
+      block=block.superblock
+      if (not block):
+        break
+    return args
+
+def frame_func_args(frame):
+    frame_func_args=[]
+    l=len(func_args)
+    for idx,argname,argval in enumerate(func_args):
+      frame_func_args.append({'str':'  '})
+      frame_func_args.append({'str':argname,'name':'varname'})
+      frame_func_args.append({'str':'='})
+      frame_func_args.append({'str':argval, 'name':'varvalue'})
+      if idx<l-1:
+        frame_func_args.append({'str':'\n'})
+    return frame_func_args
+
+
+
+
 class Node(object):
   ''' Данный класс используется для представления пути до переменной
       Например, this[0].cpzero или this[0]._vptr.Cache
@@ -935,57 +980,6 @@ class ValueToChunks(BasePath):
     chunks+=[{'chunks':data_chunks,'type_code':'TYPE_CODE_STRUCT'}]
     chunks.append({'str':'}\n',})
     return [{'chunks':chunks, 'id':path.id}]
-
-  def _get_frame_func_args(self,frame):
-      args=[]
-      try:
-        block=frame.block()
-      except RuntimeError:
-        return []
-      while block:
-        for sym in block:
-          if sym.is_argument:
-            value = valcache(sym.value(frame))
-            args.append(
-              (sym.name,stringify_value(value))
-            )
-        if block.function:
-          break
-        block=block.superblock
-        if (not block):
-          break
-      return args
-
-  def _get_frame_funcname(self,frame):
-    frame_func_name = frame.name()
-    return frame_func_name
-
-  def _get_frame_funcname_with_args(self,frame):
-    frame_func_name = {'str':self._get_frame_funcname(frame),'name':'frame_func_name'}
-    frame_func_args = []
-    func_args = self._get_frame_func_args(frame)
-    for argname,argval in func_args:
-      frame_func_args.append({'str':'\n  '})
-      frame_func_args.append({'str':argname,'name':'varname'})
-      frame_func_args.append({'str':'='})
-      frame_func_args.append({'str':argval, 'name':'varvalue'})
-    res = [frame_func_name, {'str':'('}] + frame_func_args
-    if len(func_args) > 0:
-      res.append ({'str':'\n)'})
-    else :
-      res.append ({'str':')'})
-    return res
-
-
-  def _get_frame_fileline(self,frame):
-    frame_line      = frame.find_sal().line
-    symtab = frame.find_sal().symtab
-    frame_filename  = symtab.filename if symtab else 'unknown'
-    return [
-      {'str':frame_filename,'name':'frame_filename'},
-      {'str':':', 'name':'frame_fileline_delimiter'},
-      {'str':str(frame_line),'name':'frame_line'},
-    ]
 
   def filter_chunks_with_id(self,chunks):
     ok=[]
