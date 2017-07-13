@@ -597,7 +597,12 @@ class ValueToChunks(BasePath):
       res['proposed_text']=kwargs['proposed_text']
     return [res]
 
-  def struct_to_chunks(self,value,name,path,fields=None,**kwargs):
+  def update_kwargs(self,**kwargs):
+    kw = dict(kwargs.pop('kwargs',{}))
+    kw.update(kwargs)
+    return kw
+
+  def struct_to_chunks(self,value,name,path,fields=None,expand_depth=0,**kwargs):
     '''
         :param fields: list of gdb.Field If this argument specified then only this fields will be print
     '''
@@ -609,8 +614,10 @@ class ValueToChunks(BasePath):
     #except gdb.MemoryError:
     #  value_addr=None
     collapsed=self.expand_variable.get(path.id)
-    expand_single = self.expand_single_array_elem(path)
-    if (collapsed==False) or (collapsed==None and not expand_single):
+    expand_single = self.expand_single_array_elem(path) #True, Если данная структура получается в результате разыменования уазателя,
+    #причем в slice у указателя стоит только один элемент, а не диапазон.
+    ok_expand_depth = expand_depth>0
+    if (collapsed==False) or (collapsed==None and not expand_single and not ok_expand_depth):
       chunks += self.collapsed_struct_to_chunks(path, **kwargs)
       return chunks
 
@@ -642,16 +649,16 @@ class ValueToChunks(BasePath):
               value=value,
               name=value_name,
               path=path,
-              expand_depth=1,
-              print_typename=False,
-              **kwargs))(value_name)
+              **self.update_kwargs(expand_depth=max(1,expand_depth-1),print_typename=False,kwargs=kwargs)
+            )
+          )(value_name)
           field_value = value[field]
           value_path=path.append(name=(idx,None),tochunks=tochunks, field=field)
         else:
           field_value = valcache(value[field_name])
           value_path=path.append(name=field_name)
           tochunks = lambda value,name,path,**kwargs : self.value_to_chunks_1(value,name,path,**kwargs)
-      data_chunks+=tochunks(field_value,field_name,value_path,**kwargs)
+      data_chunks+=tochunks(field_value,field_name,value_path,expand_depth=expand_depth-1,**kwargs)
       data_chunks.append({'str':'\n'})
     if type_code==gdb.TYPE_CODE_STRUCT:
       chunks1.append({'chunks':data_chunks,'type_code':'TYPE_CODE_STRUCT'})
