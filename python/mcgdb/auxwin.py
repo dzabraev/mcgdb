@@ -111,6 +111,9 @@ class SubentityUpdate(BaseSubentity,StorageId):
   @exec_main
   def onclick_expand_variable(self,pkg):
     if hasattr(self.current_values,'onclick_expand_variable'):
+      if not gdb_stopped():
+        self.send_error('target running')
+        return
       need_update=self.current_values.onclick_expand_variable(pkg)
       if need_update:
         self.send(self.pkg_update_nodes(self.subentity_name,need_update))
@@ -118,6 +121,9 @@ class SubentityUpdate(BaseSubentity,StorageId):
   @exec_main
   def onclick_collapse_variable(self,pkg):
     if hasattr(self.current_values,'onclick_collapse_variable'):
+      if not gdb_stopped():
+        self.send_error('target running')
+        return
       need_update=self.current_values.onclick_collapse_variable(pkg)
       if need_update:
         self.send(self.pkg_update_nodes(self.subentity_name,need_update))
@@ -125,6 +131,9 @@ class SubentityUpdate(BaseSubentity,StorageId):
   @exec_main
   def onclick_change_slice(self,pkg):
     if hasattr(self.current_values,'onclick_change_slice'):
+      if not gdb_stopped():
+        self.send_error('target running')
+        return
       need_update=self.current_values.onclick_change_slice(pkg)
       if need_update:
         self.send(self.pkg_update_nodes(self.subentity_name,need_update))
@@ -134,6 +143,9 @@ class SubentityUpdate(BaseSubentity,StorageId):
   def onclick_change_variable(self,pkg):
     try:
       if hasattr(self.current_values,'onclick_change_variable'):
+        if not gdb_stopped():
+          self.send_error('target running')
+          return
         need_update = self.current_values.onclick_change_variable(pkg)
     except mcgdbChangevarErr as e:
       need_update=e.need_update
