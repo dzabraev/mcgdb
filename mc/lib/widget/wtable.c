@@ -345,13 +345,11 @@ wtable_exemplar_create (WTable *wtab, json_t *pkg) {
   }
 }
 
-
-gboolean
-wtable_gdbevt_common (WTable *wtab, gdb_action_t * act) {
-  /*return TRUE if event was processed*/
-  json_t *pkg = act->pkg;
+static gboolean
+wtable_gdbevt_process_pkg(WTable *wtab, json_t *pkg) {
   gboolean handled=FALSE;
-  switch(act->command) {
+  gdb_cmd command = get_command_num (subpkg);
+  switch(command) {
     case MCGDB_EXEMPLAR_CREATE:
       wtable_exemplar_create (wtab,pkg);
       handled=TRUE;
@@ -376,13 +374,78 @@ wtable_gdbevt_common (WTable *wtab, gdb_action_t * act) {
       wtable_do_row_visible_json(wtab,pkg);
       handled=TRUE;
       break;
+    case MCGDB_DROP_ROWS:
+      wtable_drop_rows(wtab,pkg);
+      handleed=TRUE;
+      break;
+    case MCGDB_DROP_NODES:
+      wtable_drop_rows(wtab,pkg);
+      handleed=TRUE;
+      break;
+    case MCGDB_TRANSACTION:
+      wtable_transaction(wtab,pkg);
+      handleed=TRUE;
+      break;
+    case MCGDB_PREPEND_ROWS:
+      wtable_prepend_rows(wtab,pkg);
+      handleed=TRUE;
+      break;
     default:
       break;
   }
+}
+
+gboolean
+wtable_gdbevt_common (WTable *wtab, gdb_action_t * act) {
+  /*return TRUE if event was processed*/
+  json_t *pkg = act->pkg;
+  gboolean handled = wtable_gdbevt_process_pkg (wtab,pkg);
   if (NEED_REDRAW(wtab))
     wtable_draw(wtab);
   return handled;
 }
+
+gint find_row_by_id (gconstpointer a, gconstpointer b) {
+  return TABROW(a)->id - (int)b;
+}
+
+static void
+wtable_drop_rows(WTable *wtab, json_t *pkg) {
+  Table *tab = wtab->tab;
+  json_t *ids = json_array (pkg,"ids");
+  size_t len=json_array_size (ids);
+  for (size_t idx=0;idx<len;idx++) {
+    table_row *row;
+    size_t shift;
+    id = json_array_get (ids,idx); /*id of row that will be deleted*/
+    row = TABROW (g_list_find_custom (tab->rows, (gconstpointer)id, find_row_by_id));
+    table_delete_row (tab,row);
+  }
+}
+
+
+static void
+wtable_drop_nodes(WTable *wtab, json_t *pkg) {
+
+}
+
+
+static void
+wtable_transaction(WTable *wtab, json_t *pkg) {
+  json_t *pkgs = json_array (pkg,"pkgs");
+  size_t len=json_array_size (pkgs);
+  for(int i=0;i<len;i++) {
+    json_t * subpkg = json_array_get (pkgs,i);
+    wtable_gdbevt_process_pkg (wtab, subpkg);
+  }
+}
+
+
+static void
+wtable_prepend_rows(WTable *wtab, json_t *pkg) {
+
+}
+
 
 
 static int
@@ -826,7 +889,7 @@ table_add_node(Table *tab, GNode * parent, json_t *json_data) {
   data->row = CHUNK(parent)->row;
   GNode *node = g_node_append_data (parent,data);
   if (data->id)
-    g_hash_table_insert ( tab->hnodes, GINT_TO_POINTER(data->id), node);
+    g_hash_table_insert (tab->hnodes, GINT_TO_POINTER(data->id), node);
   return node;
 }
 
@@ -839,15 +902,42 @@ drop_childs_free (GNode *node, gpointer data) {
 }
 
 static void
-drop_childs (GNode *node) {
+drop_childs_custom (GNode *node, GNodeTraverseFunc callback, gpointer data) {
   GNode *child = g_node_first_child (node), *next_child;
   while (child) {
+    if (callback)
+      callback (child,data);
     next_child = g_node_next_sibling (child);
     g_node_unlink (child);
     g_node_traverse (child,G_IN_ORDER,G_TRAVERSE_ALL,-1,drop_childs_free,0);
     g_node_destroy (child);
     child = next_child;
   }
+}
+
+
+static void
+table_unregister_node (Table *tab, cell_data_t *chunk) {
+  g_hash_table_remove (tab->hnodes, chunk->id);
+}
+
+gboolean
+unregister_node(GNode *node, gpointer data) {
+  table_unregister_node (TABLE(data),CHUNK(node));
+}
+
+
+static void
+drop_single_node (GNode *node, Table *tab) {
+  g_node_unlink (node);
+  table_unregister_node (node,tab);
+  cell_data_free (CHUNK(node));
+  g_node_destroy (child);
+}
+
+static void
+drop_childs (GNode *node, Table *tab) {
+  drop_childs_custom (node,unregister_node, (gpointer)tab);
 }
 
 static void
@@ -873,7 +963,7 @@ table_update_node_json (Table *tab, json_t *json_chunk) {
   update_chunk(CHUNK(node),json_chunk);
   if (json_object_get (json_chunk, "chunks")) {
     /*if new data has subtree => replace old subtree*/
-    drop_childs(node);
+    drop_childs(node,tab);
     json_to_celltree(tab,node,json_chunk);
   }
   tab->rowsize_changed=TRUE;
@@ -1026,7 +1116,7 @@ process_cell_tree_mouse_callbacks (Table *tab, GNode *root, int y, int x) {
         //message_assert (CHUNK(node)->str);
         if (CHUNK(node)->str)
           free (CHUNK(node)->str);
-        drop_childs(node);
+        drop_childs(node,tab);
         asprintf(&CHUNK(node)->str,"<Wait change: %s>", f);
         json_decref (CHUNK(node)->onclick_data);
         CHUNK(node)->onclick_data=NULL;
@@ -1092,22 +1182,38 @@ table_process_mouse_click(Table *tab, mouse_event_t * event) {
     click_x
   );
 
-/*
-  if (!handled && tab->cell_callbacks)
-    handled = tab->cell_callbacks[ncol](row,nrow,ncol);
-
-  if (!handled && tab->row_callback) {
-    handled = tab->row_callback(row,nrow,ncol);
-  }
-*/
 }
 
 static void
 table_row_destroy(table_row *row) {
-  for (int col=0;col<row->ncols;col++) {
-    g_node_destroy (row->columns[col]);
-  }
   g_free(row);
+}
+
+static void
+table_delete_row (Table *tab, table_row *row) {
+  /*remove `row` from table*/
+  /*сдвигаем координаты последующих строк*/
+  shift = row->y2 - row->y1;
+  for (GList *srow = g_list_next(row); srow; srow=g_list_next(srow)) {
+    table_row_shift (tab,srow,shift);
+  }
+  /*удаляем строку из списка*/
+  g_list_remove_link (tab->rows, row);
+  /*free and unregister nodes*/
+  for (int col=0;col<row->ncols;col++) {
+    GNode *node = row->columns[col];
+    drop_childs (node,tab);
+    drop_single_node (node,tab);
+  }
+  if (tab->active_row==row)
+    tab->active_row=NULL;
+  tab->nrows--;
+  table_row_destroy (row);
+}
+
+static void
+table_delete_node (Table *tab, int id) {
+  tab->rowsize_changed = TRUE;
 }
 
 static void

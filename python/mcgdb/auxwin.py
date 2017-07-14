@@ -14,10 +14,21 @@ from mcgdb.common  import exec_main, valcache, INDEX, INDEX_tmp, \
                     get_this_thread_num, mcgdbBaseException, mcgdbChangevarErr
 
 
+from abc import ABCMeta, abstractmethod, abstractproperty
+
 class ValuesExemplar(object):
+  __metaclass__ = ABCMeta
+
+  def __init__(self,subentity_name,*args,**kwargs):
+    self.subentity_name = subentity_name
+    super(ValuesExemplar,self).__init__(*args,**kwargs)
+
+  @abstractmethod
   def get_table(self):
     ''' Return whole table for current inferior state'''
     raise NotImplementedError
+
+  @abstractmethod
   def need_update(self):
     ''' This function compare saved inferior state with
         current inferior state and produce packages, that
@@ -26,28 +37,19 @@ class ValuesExemplar(object):
 
 
 class BaseSubentity(TablePackages):
+  __metaclass__ = ABCMeta
+
   @exec_main
   def __init__(self,**kwargs):
     self.send = kwargs.pop('send')
     self.send_error = kwargs.pop('send_error')
     super(BaseSubentity,self).__init__(**kwargs)
 
-  @property
+  @abstractproperty
   def subentity_name(self):raise NotImplementedError
 
-  def set_message_in_table(self,msg,id=TABID_TMP,set_current=True):
-    pkg={
-      'cmd':'exemplar_create',
-      'table':{'rows':[{'columns':[{'chunks':[{'str':msg}]}]}]},
-      'table_name':self.subentity_name,
-      'id':id,
-    }
-    if set_current:
-      pkg['set'] = set_current
-    self.send(pkg)
-
   def clear_table(self):
-    self.set_message_in_table ('')
+    self.send_pkg_message_in_table ('')
 
 
 
@@ -58,56 +60,58 @@ class SubentityUpdate(BaseSubentity,StorageId):
     self.current_table_id=None
     self.current_values=None
 
+  @abstractmethod
   def get_key(self): raise NotImplementedError
 
-  @property
+  @abstractproperty
   def values_class(self):raise NotImplementedError
 
-  @property
+  @abstractproperty
   def subentity_name(self):raise NotImplementedError
 
   def get_values_class(self):
     return self.values_class
+
+  def get_value_class_kwargs(self):
+    return {'subentity_name':self.subentity_name}
 
   @exec_main
   def update_values(self):
     try:
       key = self.get_key()
     except (gdb.error,RuntimeError):
-      self.set_message_in_table('not available')
+      self.send_pkg_message_in_table('not available')
       self.current_table_id=None
       self.current_values=None
       return
     id,values = self.id_get(key)
+    pkgs=[]
     if id!=None:
       #множество переменных, которые соотв. данному блоку было отрисовано ранее.
       #сравниваем значения отрис. ранее и значение перем. сейчас. Разницу отправляем
       #в граф. окно для перерисовки части таблицы
       if self.current_table_id!=id:
         #блок изменился
-        self.exemplar_set(id,self.subentity_name)
+        pkgs.append(self.pkg_exemplar_set(id=id))
       need_update = values.need_update()
       if need_update:
-        pkg=self.pkg_transaction(self.subentity_name, need_update)
-      else:
-        pkg=None
+        pkgs+=need_update
     else:
       #создаем таблицу для блока
       values_class = self.get_values_class()
-      values = values_class()
+      values = values_class(**self.get_value_class_kwargs())
       id = self.id_insert(key,values)
       try:
         table = values.get_table()
-        pkg=self.pkg_exemplar_create(self.subentity_name,table,id)
+        pkgs.append(self.pkg_exemplar_create(table,id))
       except RuntimeError:
-        pkg=None
         self.key_drop(key)
     assert id!=None
     assert values!=None
     self.current_table_id=id
     self.current_values=values
-    if pkg:
-      self.send(pkg)
+    if pkgs:
+      self.send_pkg_transaction(pkg)
 
   @exec_main
   def process_connection(self):
@@ -140,7 +144,21 @@ class SubentityUpdate(BaseSubentity,StorageId):
   def mcgdbevt_thread(self,pkg):
     self.update_values()
 
-class OnclickVariables(object):
+class OnclickVariables(TablePackages):
+  ''' Abstract class'''
+  __metaclass__ = ABCMeta
+  @abstractproperty
+  def subentity_name(self): raise NotImplementedError
+
+  @abstractproperty
+  def current_values(self): raise NotImplementedError
+
+  @abstractmethod
+  def send(self): pass
+
+  @abstractmethod
+  def send_error(self): pass
+
   @exec_main
   def onclick_expand_variable(self,pkg):
     if hasattr(self.current_values,'onclick_expand_variable'):
@@ -174,12 +192,21 @@ class OnclickVariables(object):
     if need_update:
       self.send(self.pkg_update_nodes(self.subentity_name,need_update))
 
+class CurrentBacktrace(ValuesExemplar,TablePackages):
+  def get_table(self):
+    return self.one_row_one_cell(msg='Not available')
+  def need_update(self):
+    return []
 
-class BacktraceTable(BaseSubentity,ValueToChunks):
+class BacktraceTable(SubentityUpdate):
+  subentity_name='backtrace'
+  values_class=CurrentBacktrace
+
+class BacktraceTable1(BaseSubentity,ValueToChunks):
   subentity_name='backtrace'
 
   def __init__(self,**kwargs):
-    super(BacktraceTable,self).__init__(**kwargs)
+    super(BacktraceTable1,self).__init__(**kwargs)
 
   def process_connection(self):
     return self.update_backtrace()
@@ -296,8 +323,6 @@ class BacktraceTable(BaseSubentity,ValueToChunks):
 
 
 class ThreadRegs(ValuesExemplar,ValueToChunks):
-  subentity_name='registers'
-
   @exec_main
   def __init__(self,**kwargs):
     self.regvals={}
@@ -367,7 +392,7 @@ class CurrentThreads(ValuesExemplar,TablePackages):
     super(CurrentThreads,self).__init__(*args,**kwargs)
     self.value_transform={
       'thread_name':lambda value : '"{}"\n'.format(value),
-      'func_args':lambda value : get_func_args(value),
+      'func_args':lambda value : frame_func_args(value),
     }
 
   def get_table(self):
@@ -378,7 +403,6 @@ class CurrentThreads(ValuesExemplar,TablePackages):
     gnums.sort()
     for global_num in gnums:
       thread_info=threads_info[global_num]
-      row={'columns' : [column]}
       row = self.new_threadrow(global_num,thread_info)
       rows.append(row)
     return {'rows':rows}
@@ -387,17 +411,19 @@ class CurrentThreads(ValuesExemplar,TablePackages):
     pkgs=[]
     threads_info = self.get_threads_info()
     exited_threads = set(self.saved_threads_info.keys()) - set(threads_info.keys())
-    for global_num in exited_threads:
-      pkgs.append(self.drop_node(self.id_threadrow(global_num)))
+    for global_num in exited_threads: #remove from GUI win exited threads
+      rowid=self.id_threadrow(global_num)
+      pkgs.append(self.pkg_drop_rows([rowid]))
     new_threads=[]
     for global_num in threads_info:
       thread_info = threads_info[global_num]
       if global_num not in self.saved_threads_info:
         #появился новый поток
-        pkgs.append(self.append_row(self.new_threadrow(global_num,thread_info)))
+        row=self.new_threadrow(global_num,thread_info)
+        pkgs.append(self.pkg_append_rows([row]))
       else:
         saved_thread_info = self.saved_threads_info[global_num]
-        pkgs += self.compare_infos(saved_thread_info,thread_info)
+        pkgs += self.compare_infos(global_num,old=saved_thread_info,new=thread_info)
     self.saved_threads_info = threads_info
     return pkgs
 
@@ -406,9 +432,10 @@ class CurrentThreads(ValuesExemplar,TablePackages):
     for target in ['thread_name','func_name','file_name','file_line','func_args']:
       if new[target]!=old[target]:
         upd.append(self.get_node(global_num,target,new[target]))
-    return self.pkg_update_nodes('threads',upd)
+    return self.pkg_update_nodes(upd)
 
   def get_node(self,global_num,target,value):
+    ''' Возвращает узел дерева типа target, с содержимым value'''
     getid=getattr(self,'id_{}'.format(target))
     if target in self.value_transform:
       value = self.value_transform[target](value)
@@ -434,36 +461,36 @@ class CurrentThreads(ValuesExemplar,TablePackages):
       self.get_node(gn,'file_line',file_line),
       self.get_node(gn,'func_name',func_name),
     ]
-    if len(funcargs)==:
+    if len(func_args)==0:
       chunks.append({'src':'()'})
     else:
       chunks.append({'src':'(\n'})
       chunks.append(self.get_node(gn,'func_args',func_args))
       chunks.append({'src':')'})
     col={'chunks':chunks}
-    row=['columns':[col]]
+    row={'columns':[col]}
     return row
 
 
   id_per_row = 6
   def id_threadrow(self,global_num):
     ''' Thread row id'''
-    return id_per_row*global_num
+    return self.id_per_row*global_num
 
   def id_thread_name(self,global_num):
-    return id_per_row*global_num+1
+    return self.id_per_row*global_num+1
 
   def id_func_name(self,global_num):
-    return id_per_row*global_num+2
+    return self.id_per_row*global_num+2
 
   def id_file_name(self,global_num):
-    return id_per_row*global_num+3
+    return self.id_per_row*global_num+3
 
   def id_file_line(self,global_num):
-    return id_per_row*global_num+4
+    return self.id_per_row*global_num+4
 
   def id_func_args(self,global_num):
-    return id_per_row*global_num+5
+    return self.id_per_row*global_num+5
 
 
   def get_threads_info(self):
@@ -477,10 +504,10 @@ class CurrentThreads(ValuesExemplar,TablePackages):
       global_num    =   str(thread.global_num)
       tid           =   str(thread.ptid[1])
       threadname    =   str(thread.name) if thread.name else 'unknown'
-      funcname = get_frame_funcname()
+      funcname = get_frame_funcname(frame)
       filename,fileline = get_frame_fileline(frame)
       funcargs = get_frame_func_args(frame)
-      threads_info.append[global_num] = {
+      threads_info[global_num] = {
         'tid':tid,
         'thread_name':threadname,
         'func_name':funcname,
@@ -514,7 +541,7 @@ class ThreadsTable(SubentityUpdate):
 
 
 
-class BlockLocalvarsTable(ValuesExemplar,ValueToChunks):
+class BlockLocalvarsTable(ValuesExemplar,ValueToChunks,TablePackages):
   ''' Локальные переменные для конкретного блока
 
       Для каждого встреченного блока создается объект типа BlockLocalvarsTable.
@@ -527,8 +554,6 @@ class BlockLocalvarsTable(ValuesExemplar,ValueToChunks):
       значений переменных для блока в предыдущий момент времени и в текущей момент. Вычисленная разница
       отправляется в граф. окно для обновления таблицы с лок. перменными.
   '''
-  subentity_name='localvars'
-
   @exec_main
   def __init__(self,**kwargs):
     super(BlockLocalvarsTable,self).__init__(**kwargs)

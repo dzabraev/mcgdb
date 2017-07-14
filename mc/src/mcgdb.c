@@ -238,7 +238,7 @@ read_pkg_from_gdb (void) {
 
 }
 
-static enum gdb_cmd
+enum gdb_cmd
 get_command_num(json_t *pkg) {
   json_t * val;
   const char *command;

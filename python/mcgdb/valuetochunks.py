@@ -43,7 +43,7 @@ def get_frame_func_args(frame):
         break
     return args
 
-def frame_func_args(frame):
+def frame_func_args(func_args):
     frame_func_args=[]
     l=len(func_args)
     for idx,argname,argval in enumerate(func_args):

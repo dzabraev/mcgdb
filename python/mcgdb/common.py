@@ -17,6 +17,7 @@ import re,copy,ctypes
 from mcgdb import PATH_TO_DEFINES_MCGDB
 import mcgdb
 
+from abc import ABCMeta, abstractmethod, abstractproperty
 
 main_thread_ident=threading.current_thread().ident
 mcgdb_main=None
@@ -930,39 +931,82 @@ class McgdbMain(object):
 
 
 class TablePackages(object):
-  def exemplar_set(self,id,table_name):
-    pkg={'cmd':'exemplar_set','id':id,'table_name':table_name}
-    self.send(pkg)
+  __metaclass__ = ABCMeta
 
-  def select_node(self,tabname,node_id,selected):
+  @abstractproperty
+  def subentity_name(self): pass
+
+  def __init__(self,*args,**kwargs):
+    map(self.__register_sender,[
+      self.pkg_exemplar_set,
+      self.pkg_select_node,
+      self.pkg_do_row_visible,
+      self.pkg_exemplar_create,
+      self.pkg_update_nodes,
+      self.pkg_drop_node,
+      self.pkg_drop_row,
+      self.pkg_append_row,
+      self.pkg_transaction,
+      self.pkg_message_in_table,
+    ])
+    super(TablePackages,self).__init__(*args,**kwargs)
+
+  def __register_sender(self,pkg_creator):
+    attrname = 'send_'.format(pkg_creator.__name__)
+    setattr(self,attrname,lambda *args,**kwargs : self.send(pkg_creator(*args,**kwargs)))
+
+  def pkg_exemplar_set(self,id):
+    return {'cmd':'exemplar_set','id':id,'table_name':self.subentity_name}
+
+  def pkg_select_node(self,node_id,selected):
     node_data={'id':node_id,'selected':selected}
-    pkg={'cmd':'update_nodes', 'table_name':tabname, 'nodes':[node_data]}
-    self.send(pkg)
+    pkg={'cmd':'update_nodes', 'table_name':self.subentity_name, 'nodes':[node_data]}
+    return pkg
 
-  def do_row_visible(self,nrow):
-    pkg={'cmd':'do_row_visible','table_name':'asm', 'nrow':nrow}
-    self.send(pkg)
+  def pkg_do_row_visible(self,nrow):
+    return {'cmd':'do_row_visible','table_name':self.subentity_name, 'nrow':nrow}
 
-  def pkg_exemplar_create(self,tabname,tabdata,id,set=True):
+
+  def pkg_exemplar_create(self,tabdata,id,set=True):
       pkg={ 'cmd':'exemplar_create',
-            'table_name':tabname,
+            'table_name':self.subentity_name,
             'table':tabdata,
             'id':id,
             'set':set,
       }
       return pkg
 
-  def pkg_update_nodes(self,tabname,need_update):
-    return {'cmd':'update_nodes', 'table_name':tabname, 'nodes':need_update}
+  def pkg_update_nodes(self,need_update):
+    return {'cmd':'update_nodes', 'table_name':self.subentity_name, 'nodes':need_update}
 
-  def pkg_drop_node(self,tabname,id):
-    return {'cmd':'drop_node', 'table_name':tabname, 'id':id}
+  def pkg_drop_nodes(self,ids):
+    return {'cmd':'drop_nodes', 'table_name':self.subentity_name, 'ids':ids}
 
-  def pkg_drop_row(self,tabname,id):
-    return {'cmd':'drop_row', 'table_name':tabname, 'id':id}
+  def pkg_drop_rows(self,ids):
+    return {'cmd':'drop_rows', 'table_name':self.subentity_name, 'ids':ids}
 
-  def pkg_append_row(self,tabname,row):
-    return {'cmd':'append_row','table_name':tabname,'row':row}
+  def pkg_prepend_rows(self,rows,rowid=-1):
+    ''' Добавить строки rows за rowid. Если rowid=-1, то строки будут добавляться за последнюю'''
+    return {'cmd':'prepend_rows','table_name':self.subentity_name,'rows':rows, 'rowid':rowid}
 
-  def pkg_transaction(self,tabname,pkgs):
-    return {'cmd':'transaction','table_name':tabname,'pkgs':pkgs}
+  def pkg_append_rows(self,row):
+    return self.pkg_prepend_rows(rows,rowid=-1)
+
+  def pkg_transaction(self,pkgs):
+    ''' Сначала будут выполнены команды из всхе пакетов. и только потом будет сделана перерисовка'''
+    return {'cmd':'transaction','table_name':self.subentity_name,'pkgs':pkgs}
+
+  def one_row_one_cell(self,msg):
+    return {'rows':[{'columns':[{'chunks':[{'str':msg}]}]}]}
+
+  def pkg_message_in_table(self,msg,id=TABID_TMP,set_current=True):
+    pkg={
+      'cmd':'exemplar_create',
+      'table':self.one_row_one_cell(msg),
+      'table_name':self.subentity_name,
+      'id':id,
+    }
+    if set_current:
+      pkg['set'] = set_current
+    return pkg
+

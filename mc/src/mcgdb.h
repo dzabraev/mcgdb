@@ -158,6 +158,8 @@ void free_gdb_evt (struct gdb_action * gdb_evt);
 json_t *read_pkg_from_gdb (void);
 void send_pkg_to_gdb (const char *msg);
 
+enum gdb_cmd get_command_num(json_t *pkg);
+
 
 #endif /*__mcgdb_h_*/
 
