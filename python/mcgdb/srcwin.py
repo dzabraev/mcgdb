@@ -13,6 +13,7 @@ class SrcWin(BaseWin):
 
   type='srcwin'
   startcmd='mcgdb open src'
+  subentities_cls=[]
 
 
   def __init__(self, **kwargs):

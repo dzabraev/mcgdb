@@ -3,19 +3,20 @@
 import gdb
 
 import mcgdb.basewin
-from mcgdb.common import exec_main, gdb_print, INDEX
-from mcgdb.basewin import BaseWin, TABID_TMP
+from mcgdb.common import exec_main, gdb_print, INDEX, TABID_TMP, TablePackages
+from mcgdb.basewin import BaseWin
 from mcgdb.valuetochunks import ValueToChunks
 
 
 import re
 
-class AsmWin(BaseWin,ValueToChunks):
+class AsmWin(BaseWin,ValueToChunks,TablePackages):
   '''Окно для отображение ассемблерного кода.
   '''
 
   type='asmwin'
   startcmd='mcgdb open asm'
+  subentity_cls=[]
 
   @exec_main
   def __init__(self,**kwargs):

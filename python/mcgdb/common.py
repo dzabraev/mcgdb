@@ -19,6 +19,12 @@ import mcgdb
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 
+
+TABID_TMP=1 #Временный экземпляр таблицы. Используется для выведения пользователю каких-либо сообщений.
+#После того, как экземпляр был сделан текущим, и потом на место текущего экземпляра
+#был установлен другой экземпляр, данный экземпляр будет удален.
+
+
 main_thread_ident=threading.current_thread().ident
 mcgdb_main=None
 
@@ -985,9 +991,12 @@ class TablePackages(object):
   def pkg_drop_rows(self,ids):
     return {'cmd':'drop_rows', 'table_name':self.subentity_name, 'ids':ids}
 
-  def pkg_prepend_rows(self,rows,rowid=-1):
-    ''' Добавить строки rows за rowid. Если rowid=-1, то строки будут добавляться за последнюю'''
-    return {'cmd':'prepend_rows','table_name':self.subentity_name,'rows':rows, 'rowid':rowid}
+  def pkg_prepend_rows(self,rows,rowid=None):
+    ''' Добавить строки rows за rowid. Если rowid is None, то строки будут добавляться за последнюю'''
+    pkg={'cmd':'prepend_rows','table_name':self.subentity_name,'rows':rows}
+    if not rowid is None:
+      pkg['rowid']=rowid
+    return pkg
 
   def pkg_append_rows(self,row):
     return self.pkg_prepend_rows(rows,rowid=-1)

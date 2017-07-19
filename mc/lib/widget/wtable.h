@@ -60,6 +60,7 @@ typedef struct {
   int *xl;
   int *xr;
   gboolean rowsize_changed;
+  gint32 id;
 } table_row;
 
 typedef enum table_type_id {
@@ -103,7 +104,7 @@ typedef struct celldata {
   gboolean selected;
   json_t *onclick_data;
   gboolean onclick_user_input;
-  gint id;
+  gint32 id;
   table_row *row;
 } cell_data_t;
 
@@ -136,7 +137,7 @@ typedef struct Table {
   const global_keymap_t * keymap;
   GHashTable *hnodes;
   char *table_name;
-  gint id;
+  gint32 id;
   gboolean tabsize_changed; /*у таблицы был изменен размер*/
   gboolean rowsize_changed; /*в таблицы была изменана хотя бы одна строка. Например, пакетом update_node или waittext'ом*/
 } Table;

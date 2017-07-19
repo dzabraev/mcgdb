@@ -1,17 +1,13 @@
 #coding=utf8
 
-from abc import abstractmethod, abstractproperty
+from abc import abstractmethod, abstractproperty, ABCMeta
 import os,socket,ctypes,subprocess,time,logging,json
 import gdb
 
 import mcgdb
 from mcgdb.common import  pkgsend,pkgrecv,gdb_print,exec_cmd_in_gdb,gdb_stopped,\
                           error,get_prompt,debug,is_main_thread,exec_main,TablePackages, \
-                          mcgdbBaseException
-
-TABID_TMP=1 #Временный экземпляр таблицы. Используется для выведения пользователю каких-либо сообщений.
-#После того, как экземпляр был сделан текущим, и потом на место текущего экземпляра
-#был установлен другой экземпляр, данный экземпляр будет удален.
+                          mcgdbBaseException, TABID_TMP
 
 
 class StorageId(object):
@@ -40,7 +36,129 @@ class StorageId(object):
     return id
 
 
-class BaseWin(TablePackages,StorageId):
+
+
+class CommunicationMixin(object):
+  __metaclass__ = ABCMeta
+
+  def __init__(self,**kwargs):
+    self.fd = kwargs.get('communication_fd')
+
+  def setup_communication_fd(self,fd):
+    self.fd=fd
+
+  def get_communication_fd(self):
+    return self.fd
+
+  def send(self,msg):
+    assert self.fd!=None
+    logging.info('time={time} sender={type} pkgs={pkgs}'.format(type=self.type,pkgs=json.dumps(msg),time=time.time()))
+    pkgsend(self.fd,msg)
+
+  def recv(self):
+    assert self.fd!=None
+    return pkgrecv(self.fd)
+
+  def send_error(self,message):
+    '''Вывести пользователю ошибку в граф. окне.
+    '''
+    try:
+      self.send({'cmd':'error_message','message':message})
+    except:
+      pass
+
+
+
+class TablePackages(CommunicationMixin):
+  __metaclass__ = ABCMeta
+
+  @abstractproperty
+  def subentity_name(self): pass
+
+  def __init__(self,*args,**kwargs):
+    map(self.__register_sender,[
+      self.pkg_exemplar_set,
+      self.pkg_select_node,
+      self.pkg_do_row_visible,
+      self.pkg_exemplar_create,
+      self.pkg_update_nodes,
+      self.pkg_drop_node,
+      self.pkg_drop_row,
+      self.pkg_append_row,
+      self.pkg_transaction,
+      self.pkg_message_in_table,
+    ])
+    super(TablePackages,self).__init__(*args,**kwargs)
+
+  def __register_sender(self,pkg_creator):
+    attrname = 'send_'.format(pkg_creator.__name__)
+    setattr(self,attrname,lambda *args,**kwargs : self.send(pkg_creator(*args,**kwargs)))
+
+  def pkg_exemplar_set(self,id):
+    return {'cmd':'exemplar_set','id':id,'table_name':self.subentity_name}
+
+  def pkg_select_node(self,node_id,selected):
+    node_data={'id':node_id,'selected':selected}
+    pkg={'cmd':'update_nodes', 'table_name':self.subentity_name, 'nodes':[node_data]}
+    return pkg
+
+  def pkg_do_row_visible(self,nrow):
+    return {'cmd':'do_row_visible','table_name':self.subentity_name, 'nrow':nrow}
+
+
+  def pkg_exemplar_create(self,tabdata,id,set=True):
+      pkg={ 'cmd':'exemplar_create',
+            'table_name':self.subentity_name,
+            'table':tabdata,
+            'id':id,
+            'set':set,
+      }
+      return pkg
+
+  def pkg_update_nodes(self,need_update):
+    return {'cmd':'update_nodes', 'table_name':self.subentity_name, 'nodes':need_update}
+
+  def pkg_drop_nodes(self,ids):
+    return {'cmd':'drop_nodes', 'table_name':self.subentity_name, 'ids':ids}
+
+  def pkg_drop_rows(self,ids):
+    return {'cmd':'drop_rows', 'table_name':self.subentity_name, 'ids':ids}
+
+  def pkg_prepend_rows(self,rows,rowid=None):
+    ''' Добавить строки rows за rowid. Если rowid is None, то строки будут добавляться за последнюю'''
+    pkg={'cmd':'prepend_rows','table_name':self.subentity_name,'rows':rows}
+    if not rowid is None:
+      pkg['rowid']=rowid
+    return pkg
+
+  def pkg_append_rows(self,row):
+    return self.pkg_prepend_rows(rows,rowid=-1)
+
+  def pkg_transaction(self,pkgs):
+    ''' Сначала будут выполнены команды из всхе пакетов. и только потом будет сделана перерисовка'''
+    return {'cmd':'transaction','table_name':self.subentity_name,'pkgs':pkgs}
+
+  def one_row_one_cell(self,msg):
+    return {'rows':[{'columns':[{'chunks':[{'str':msg}]}]}]}
+
+  def pkg_message_in_table(self,msg,id=TABID_TMP,set_current=True):
+    pkg={
+      'cmd':'exemplar_create',
+      'table':self.one_row_one_cell(msg),
+      'table_name':self.subentity_name,
+      'id':id,
+    }
+    if set_current:
+      pkg['set'] = set_current
+    return pkg
+
+
+
+
+
+class BaseWin(CommunicationMixin,StorageId):
+  __metaclass__ = ABCMeta
+
   def __init__(self, **kwargs):
     '''
         Args:
@@ -70,7 +188,8 @@ class BaseWin(TablePackages,StorageId):
     manually=kwargs.pop('manually',False)
     cmd=self.make_runwin_cmd()
     complete_cmd=self.gui_window_cmd.format(cmd=cmd)
-    
+    self.subentities={}
+
     if manually:
       gdb_print('''Execute manually `{cmd}` for start window'''.format(cmd=cmd))
     else:
@@ -87,6 +206,17 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     if not hasattr(self,'subentities'):
       self.subentities={}
     super(BaseWin,self).__init__(**kwargs)
+
+  @abstractproperty
+  def subentities_cls(self): pass
+
+  @exec_main
+  def init_subentities(self):
+    kw={
+      'communication_fd':self.get_communication_fd(),
+    }
+    for cls in self.subentities_cls:
+      self.subentities[cls.subentity_name] = cls(**kw)
 
   def make_runwin_cmd(self):
     ''' Данный метод формирует shell-команду для запуска окна с editor.
@@ -109,18 +239,15 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     self.lsock      =None
     self.listen_port=None
     self.listen_fd  =None
-    self.fd=self.conn.fileno()
-    pkgsend(self.fd,{
+    self.setup_communication_fd(self.conn.fileno())
+    self.send({
       'cmd' :'set_window_type',
       'type':self.type,
     })
+    self.init_subentities()
     for subentity in self.subentities.values():
       subentity.process_connection()
     return True
-
-  @abstractproperty
-  def runwindow_cmd(self):
-    pass
 
   @abstractproperty
   def startcmd(self):
@@ -131,12 +258,6 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
   def type(self):
     pass
 
-  def send(self,msg):
-    logging.info('time={time} sender={type} pkgs={pkgs}'.format(type=self.type,pkgs=json.dumps(msg),time=time.time()))
-    pkgsend(self.fd,msg)
-
-  def recv(self):
-    return pkgrecv(self.fd)
 
   def process_pkg(self,pkg):
     '''Обработать сообщение из графического окна, GDB, или класса, который
@@ -238,13 +359,6 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
       line=None
     return filename,line
 
-  def send_error(self,message):
-    '''Вывести пользователю ошибку в граф. окне.
-    '''
-    try:
-      self.send({'cmd':'error_message','message':message})
-    except:
-      pass
 
 
 

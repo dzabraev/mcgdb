@@ -57,9 +57,6 @@ process_action_from_gdb_edit(WEdit * edit, struct gdb_action * act);
 static enum window_type
 get_window_type(json_t * pkg);
 
-static enum gdb_cmd
-get_command_num(json_t * pkg);
-
 static void
 process_lines_array(json_t * j_lines,  void (*callback)(long) );
 

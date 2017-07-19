@@ -73,7 +73,7 @@ mcgdb_aux_dialog_gdbevt (WDialog *h) {
     case MCGDB_NONE:
       break;
     default:
-      tabname = json_str (pkg,"table_name");
+      tabname = myjson_str (pkg,"table_name");
       if (wtable_get_table(wtab_vars_regs,tabname)) {
         wtab=wtab_vars_regs;
       }

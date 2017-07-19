@@ -6,12 +6,15 @@ import re,sys,ctypes
 import traceback
 
 
-from mcgdb.basewin import BaseWin,TABID_TMP, StorageId
-from mcgdb.common  import gdb_stopped,inferior_alive,gdb_print, TablePackages
+from mcgdb.basewin import BaseWin, StorageId, CommunicationMixin
+
 from mcgdb.valuetochunks import check_chunks, ValueToChunks, get_frame_funcname, \
                                 get_frame_fileline, get_frame_func_args, frame_func_args
+
 from mcgdb.common  import exec_main, valcache, INDEX, INDEX_tmp, \
-                    get_this_thread_num, mcgdbBaseException, mcgdbChangevarErr
+                    get_this_thread_num, mcgdbBaseException, mcgdbChangevarErr, \
+                    gdb_stopped,inferior_alive,gdb_print, TablePackages,TABID_TMP, \
+                    TablePackages
 
 
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -36,13 +39,12 @@ class ValuesExemplar(object):
     raise NotImplementedError
 
 
-class BaseSubentity(TablePackages):
+class BaseSubentity(TablePackages, CommunicationMixin):
   __metaclass__ = ABCMeta
 
   @exec_main
   def __init__(self,**kwargs):
-    self.send = kwargs.pop('send')
-    self.send_error = kwargs.pop('send_error')
+    self.setup_communication_fd(kwargs.pop('communication_fd'))
     super(BaseSubentity,self).__init__(**kwargs)
 
   @abstractproperty
@@ -53,7 +55,7 @@ class BaseSubentity(TablePackages):
 
 
 
-class SubentityUpdate(BaseSubentity,StorageId):
+class SubentityUpdate(BaseSubentity,StorageId,CommunicationMixin):
   @exec_main
   def __init__(self,**kwargs):
     super(SubentityUpdate,self).__init__(**kwargs)
@@ -144,20 +146,14 @@ class SubentityUpdate(BaseSubentity,StorageId):
   def mcgdbevt_thread(self,pkg):
     self.update_values()
 
-class OnclickVariables(TablePackages):
+class OnclickVariables(TablePackages,CommunicationMixin):
   ''' Abstract class'''
   __metaclass__ = ABCMeta
   @abstractproperty
   def subentity_name(self): raise NotImplementedError
 
-  @abstractproperty
+  @property
   def current_values(self): raise NotImplementedError
-
-  @abstractmethod
-  def send(self): pass
-
-  @abstractmethod
-  def send_error(self): pass
 
   @exec_main
   def onclick_expand_variable(self,pkg):
@@ -382,7 +378,7 @@ class RegistersTable(SubentityUpdate,OnclickVariables):
 
   @exec_main
   def get_key(self):
-    thnum = get_this_thread_num()
+    thnum = get_this_thread_num() #current thread num
     if thnum==None:
       raise RuntimeError
     return 1024+thnum
@@ -628,23 +624,8 @@ class AuxWin(BaseWin):
 
   type='auxwin'
   startcmd='mcgdb open aux'
+  subentities_cls=[RegistersTable, LocalvarsTable, BacktraceTable, ThreadsTable]
 
-  @exec_main
-  def __init__(self, **kwargs):
-    kwtab={
-      'send'        :   self.send,
-      'send_error'  :   self.send_error,
-    }
-    self.subentities={
-      'registers' : RegistersTable(**kwtab),
-      'localvars' : LocalvarsTable(**kwtab),
-      'backtrace' : BacktraceTable(**kwtab),
-      'threads'   : ThreadsTable(**kwtab),
-    }
-    super(AuxWin,self).__init__(**kwargs)
-
-  def process_connection(self):
-    return super(AuxWin,self).process_connection()
 
 
 

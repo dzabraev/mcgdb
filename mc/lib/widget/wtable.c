@@ -32,6 +32,7 @@
 #define TAB_BOTTOM(tab) ((tab)->y+(tab)->lines - 1)
 #define TAB_TOP(tab) ((tab)->y)
 
+#define APPEND -2
 
 static cb_ret_t wtable_callback           (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *data);
 static cb_ret_t selbar_callback           (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *data);
@@ -47,7 +48,7 @@ static void         table_row_destroy(table_row *row);
 static void         table_update_bounds(Table * tab, long y, long x, long lines, long cols);
 static Table *      table_new (const char *table_name, long ncols);
 static Table *      table_copy (const Table *tab);
-static int          table_add_row (Table * tab);
+static GList *      table_insert_row (Table * tab, gint32 id, gint32 insert_before_id);
 static void         table_destroy(Table *tab);
 static void         table_clear_rows(Table * tab);
 static void         table_draw(Table * tab);
@@ -60,6 +61,7 @@ static void         table_set_colwidth_formula(Table * tab, int (*formula)(const
 //static void         table_setcolor(Table *tab, int nrow, int ncol, int color);
 static void         table_process_mouse_click(Table *tab, mouse_event_t * event);
 static void         table_set_cell_text(Table *tab, int nrow, int ncol, json_t *text);
+static void         table_set_cell_text_grow (Table *tab, GList *row, int ncol, json_t *json_data);
 //static void         table_set_cell_color(Table *tab, int nrow, int ncol, const char *fg, const char *bg, const char *attrib);
 static void         table_update_node_json (Table *tab, json_t *json_chunk);
 
@@ -81,7 +83,7 @@ static int
 get_chunk_horiz_shift(cell_data_t * chunk);
 
 
-gint    find_button_in_list(gconstpointer a, gconstpointer b);
+gint32    find_button_in_list(gconstpointer a, gconstpointer b);
 
 Selbar *find_selbar (WDialog *h);
 
@@ -112,16 +114,16 @@ static void
 wtable_exemplar_copy(WTable *wtab, json_t *pkg);
 
 static void
-wtable_insert_exemplar (WTable *wtab, Table *tab, const char *table_name, gint id);
+wtable_insert_exemplar (WTable *wtab, Table *tab, const char *table_name, gint32 id);
 
 static void
 wtable_update_nodes(WTable *wtab, json_t *pkg);
 
 static void
-wtable_do_row_visible(WTable *wtab, const char *tabname, gint id, int nrow);
+wtable_do_row_visible(WTable *wtab, const char *tabname, gint32 id, int nrow);
 
 static Table *
-wtable_get_exemplar (WTable *wtab, const char *table_name, gint id);
+wtable_get_exemplar (WTable *wtab, const char *table_name, gint32 id);
 
 static GHashTable *
 wtable_get_exemplars (WTable *wtab, const char *table_name);
@@ -131,21 +133,45 @@ static void
 insert_pkg_json_into_table (json_t *json_tab, Table *tab);
 
 
-static cell_data_t * cell_data_new (void);
-static cell_data_t * cell_data_copy (const cell_data_t * data);
+static cell_data_t *
+cell_data_new (void);
+
+static cell_data_t *
+cell_data_copy (const cell_data_t * data);
+
+static void
+cell_data_free (cell_data_t * data);
+
 
 static Table *
-get_exemplar(GHashTable *exemplars, gint id);
+get_exemplar(GHashTable *exemplars, gint32 id);
 
+static void
+wtable_drop_rows(WTable *wtab, json_t *pkg);
 
+static void
+wtable_drop_nodes(WTable *wtab, json_t *pkg);
 
+static void
+wtable_transaction(WTable *wtab, json_t *pkg);
 
+static void
+wtable_insert_rows(WTable *wtab, json_t *pkg);
 
+static void
+table_delete_row_by_id (Table *tab, gint32 id);
 
+static void
+drop_childs (GNode *node, Table *tab);
 
+static void
+drop_single_node (GNode *node, Table *tab);
 
+static GList *
+insert_json_row (json_t *row, Table *tab, gint32 insert_before_id);
 
-
+static void
+table_row_shift(Table *tab, table_row *row, size_t row_shift);
 
 
 static table_row *
@@ -173,14 +199,14 @@ wtable_exemplar_copy(WTable *wtab, json_t *pkg) {
     'table_name' : str,
   }
 */
-  const char *table_name = json_str(pkg,"table_name");
-  gint new_id = json_int(pkg,"new_id");
+  const char *table_name = myjson_str(pkg,"table_name");
+  gint32 new_id = myjson_int(pkg,"new_id");
   Table *tab = table_copy (wtable_get_table (wtab,table_name));
   wtable_insert_exemplar (wtab,tab,table_name,new_id);
 }
 
 static Table *
-wtable_get_exemplar (WTable *wtab, const char *table_name, gint id) {
+wtable_get_exemplar (WTable *wtab, const char *table_name, gint32 id) {
   /*Если id!=0, то возвращается экземляр по id, иначе возвр. текущий экземпляр.*/
   if (id)
     return get_exemplar(wtable_get_exemplars (wtab,table_name),id);
@@ -194,13 +220,13 @@ wtable_get_exemplars (WTable *wtab, const char *table_name) {
 }
 
 static Table *
-get_exemplar(GHashTable *exemplars, gint id) {
+get_exemplar(GHashTable *exemplars, gint32 id) {
   message_assert (exemplars!=NULL);
   return (Table *) g_hash_table_lookup (exemplars, GINT_TO_POINTER(id));
 }
 
 static void
-__wtable_exemplar_drop(WTable *wtab, const char *table_name, gint id) {
+__wtable_exemplar_drop(WTable *wtab, const char *table_name, gint32 id) {
   GHashTable * exemplars=wtable_get_exemplars (wtab, table_name);
   Table *tab = get_exemplar (exemplars, id);
   Table *curtable = g_hash_table_lookup (wtab->tables, table_name);
@@ -230,14 +256,14 @@ wtable_exemplar_drop(WTable *wtab, json_t *pkg) {
 *    'table_name' : str,
 *  }
 */
-  const char *table_name = json_str (pkg, "table_name");
-  gint id = json_int(pkg,"id");
+  const char *table_name = myjson_str (pkg, "table_name");
+  gint32 id = myjson_int(pkg,"id");
   __wtable_exemplar_drop(wtab,table_name,id);
 }
 
 
 static void
-wtable_insert_exemplar (WTable *wtab, Table *tab, const char *table_name, gint id) {
+wtable_insert_exemplar (WTable *wtab, Table *tab, const char *table_name, gint32 id) {
   /*insert exemplar `tab` to `table_name` exemplars. If exemplar with given id exists, remove old exemplar.*/
   GHashTable * exemplars = wtable_get_exemplars (wtab, table_name);
   Table *old_tab;
@@ -255,7 +281,7 @@ wtable_insert_exemplar (WTable *wtab, Table *tab, const char *table_name, gint i
 
 
 static void
-wtable_set_current_exemplar(WTable *wtab, const char *table_name, gint id) {
+wtable_set_current_exemplar(WTable *wtab, const char *table_name, gint32 id) {
   /* устанавливает таблицу текущей для наименования table_name. При этом, если текущее наименование
    * отрисовки совпадает с table_name, то будет изменена таблица, которая будет отрисовываться.*/
   GHashTable *exemplars = wtable_get_exemplars (wtab,table_name);
@@ -292,24 +318,24 @@ wtable_exemplar_set(WTable *wtab, json_t *pkg) {
 *    'table_name' : str,
 *  }
 */
-  const char *table_name = json_str (pkg, "table_name");
-  gint id = json_int(pkg,"id");
+  const char *table_name = myjson_str (pkg, "table_name");
+  gint32 id = myjson_int(pkg,"id");
   wtable_set_current_exemplar (wtab,table_name,id);
 }
 
 static Table *
-__wtable_exemplar_create (WTable *wtab, const char *table_name, gint id, json_t *table) {
+__wtable_exemplar_create (WTable *wtab, const char *table_name, gint32 id, json_t *table) {
   int ncols;
   Table *tab;
   if (!table) {
     ncols=0;
   }
   else {
-   json_t *rows = json_arr (table, "rows");
+   json_t *rows = myjson_arr (table, "rows");
     if (json_array_size(rows)==0) /*no rows*/
       ncols=0;
     else {
-      ncols = json_array_size(json_arr (json_array_get(rows,0),"columns")); /*length of first row*/
+      ncols = json_array_size(myjson_arr (json_array_get(rows,0),"columns")); /*length of first row*/
     }
   }
   tab = table_new(table_name, ncols);
@@ -334,9 +360,9 @@ wtable_exemplar_create (WTable *wtab, json_t *pkg) {
     'set' : Bool, #if True, this exemplar will be set as current for table_name
   }
 */
-  const char *table_name = json_str (pkg, "table_name");
-  gint id = json_int (pkg, "id");
-  json_t *table = json_obj (pkg, "table");
+  const char *table_name = myjson_str (pkg, "table_name");
+  gint32 id = myjson_int (pkg, "id");
+  json_t *table = myjson_obj (pkg, "table");
 
    __wtable_exemplar_create (wtab, table_name, id, table);
 
@@ -348,7 +374,7 @@ wtable_exemplar_create (WTable *wtab, json_t *pkg) {
 static gboolean
 wtable_gdbevt_process_pkg(WTable *wtab, json_t *pkg) {
   gboolean handled=FALSE;
-  gdb_cmd command = get_command_num (subpkg);
+  gdb_cmd_t command = get_command_num (pkg);
   switch(command) {
     case MCGDB_EXEMPLAR_CREATE:
       wtable_exemplar_create (wtab,pkg);
@@ -376,23 +402,24 @@ wtable_gdbevt_process_pkg(WTable *wtab, json_t *pkg) {
       break;
     case MCGDB_DROP_ROWS:
       wtable_drop_rows(wtab,pkg);
-      handleed=TRUE;
+      handled=TRUE;
       break;
     case MCGDB_DROP_NODES:
-      wtable_drop_rows(wtab,pkg);
-      handleed=TRUE;
+      wtable_drop_nodes(wtab,pkg);
+      handled=TRUE;
       break;
     case MCGDB_TRANSACTION:
       wtable_transaction(wtab,pkg);
-      handleed=TRUE;
+      handled=TRUE;
       break;
-    case MCGDB_PREPEND_ROWS:
-      wtable_prepend_rows(wtab,pkg);
-      handleed=TRUE;
+    case MCGDB_INSERT_ROWS:
+      wtable_insert_rows(wtab,pkg);
+      handled=TRUE;
       break;
     default:
       break;
   }
+  return handled;
 }
 
 gboolean
@@ -405,36 +432,54 @@ wtable_gdbevt_common (WTable *wtab, gdb_action_t * act) {
   return handled;
 }
 
-gint find_row_by_id (gconstpointer a, gconstpointer b) {
-  return TABROW(a)->id - (int)b;
+static gint32
+find_row_by_id_compare (gconstpointer a, gconstpointer b) {
+  return TABROW(a)->id - GPOINTER_TO_INT(b);
 }
+
+static GList *
+find_grow_by_id (Table *tab, gint32 id) {
+  return g_list_find_custom (tab->rows, GINT_TO_POINTER(id), find_row_by_id_compare);
+}
+
+static table_row *
+find_row_by_id (Table *tab, gint32 id) {
+  return TABROW (find_grow_by_id (tab,id));
+}
+
 
 static void
 wtable_drop_rows(WTable *wtab, json_t *pkg) {
   Table *tab = wtab->tab;
-  json_t *ids = json_array (pkg,"ids");
+  json_t *ids = myjson_arr (pkg,"ids");
   size_t len=json_array_size (ids);
   for (size_t idx=0;idx<len;idx++) {
-    table_row *row;
-    size_t shift;
-    id = json_array_get (ids,idx); /*id of row that will be deleted*/
-    row = TABROW (g_list_find_custom (tab->rows, (gconstpointer)id, find_row_by_id));
-    table_delete_row (tab,row);
+    gint32 id = json_integer_value (json_array_get (ids,idx)); /*id of row that will be deleted*/
+    table_delete_row_by_id (tab,id);
   }
 }
 
 
 static void
 wtable_drop_nodes(WTable *wtab, json_t *pkg) {
-
+  Table *tab = wtab->tab;
+  json_t *ids = myjson_arr (pkg,"ids");
+  size_t len=json_array_size (ids);
+  for (size_t idx=0;idx<len;idx++) {
+    gint32 id = json_integer_value (json_array_get (ids,idx)); /*id of node that will be deleted*/
+    GNode *node = g_hash_table_lookup (tab->hnodes,GINT_TO_POINTER(id));
+    message_assert (node!=NULL);
+    drop_childs (node,tab);
+    drop_single_node (node,tab);
+  }
 }
 
 
 static void
 wtable_transaction(WTable *wtab, json_t *pkg) {
-  json_t *pkgs = json_array (pkg,"pkgs");
+  json_t *pkgs = myjson_arr (pkg,"pkgs");
   size_t len=json_array_size (pkgs);
-  for(int i=0;i<len;i++) {
+  for(size_t i=0;i<len;i++) {
     json_t * subpkg = json_array_get (pkgs,i);
     wtable_gdbevt_process_pkg (wtab, subpkg);
   }
@@ -442,31 +487,39 @@ wtable_transaction(WTable *wtab, json_t *pkg) {
 
 
 static void
-wtable_prepend_rows(WTable *wtab, json_t *pkg) {
-
+wtable_insert_rows(WTable *wtab, json_t *pkg) {
+  json_t *rid = json_object_get (pkg,"rowid");
+  gint32 rowid = (rid) ? -1 : json_integer_value (rid);
+  json_t *rows = myjson_arr (pkg,"rows");
+  size_t len = json_array_size(rows);
+  for (int idx=len-1;idx>=0;idx--) {
+    json_t *row = json_array_get (rows,idx);
+    insert_json_row (row,wtab->tab, rowid);
+  }
 }
 
 
 
-static int
-insert_json_row (json_t *row, Table *tab) {
-    int nrow;
-    json_t * columns = json_arr (row,"columns");
+static GList *
+insert_json_row (json_t *row, Table *tab, gint32 insert_before_id) {
+    GList *grow;
+    gint32 id = myjson_int(row,"id");
+    json_t * columns = myjson_arr (row,"columns");
     size_t rowsize = json_array_size (columns);
     message_assert((size_t)(tab->ncols)==rowsize);
-    nrow = table_add_row (tab);
+    grow = table_insert_row (tab, id, insert_before_id);
     for (int ncol=0;ncol<tab->ncols;ncol++) {
-      table_set_cell_text (
-        tab,nrow,ncol,
+      table_set_cell_text_grow (
+        tab,grow,ncol,
         json_array_get (columns,ncol)
       );
     }
-    return nrow;
+    return grow;
 }
 
 static void
 insert_pkg_json_into_table (json_t *json_tab, Table *tab) {
-  json_t *json_rows = json_arr (json_tab, "rows");
+  json_t *json_rows = myjson_arr (json_tab, "rows");
   size_t size_rows = json_array_size (json_rows);
   json_t *json_selected_row = json_object_get (json_tab,"selected_row");
   json_t *draw;
@@ -479,7 +532,7 @@ insert_pkg_json_into_table (json_t *json_tab, Table *tab) {
   }
   for (size_t i=0;i<size_rows;i++) {
     json_t * row = json_array_get (json_rows,i);
-    insert_json_row (row,tab);
+    insert_json_row (row,tab, -1);
   }
 }
 
@@ -510,9 +563,9 @@ wtable_update_bound(WTable *wtab) {
 
 static void
 wtable_update_nodes(WTable *wtab, json_t *pkg) {
-  const char *tabname = json_str (pkg,"table_name");
+  const char *tabname = myjson_str (pkg,"table_name");
   Table *tab = wtable_get_table(wtab,tabname);
-  json_t *nodesdata = json_arr(pkg,"nodes");
+  json_t *nodesdata = myjson_arr(pkg,"nodes");
   for (size_t idx=0;idx<json_array_size(nodesdata); idx++) {
     json_t *json_chunk = json_array_get(nodesdata,idx);
     table_update_node_json(tab,json_chunk);
@@ -694,7 +747,7 @@ json_get_chunk_name (json_t * chunk) {
 static Table *
 table_copy (const Table *tab) {
   /*copy constructor*/
-  gint idx;
+  gint32 idx;
   Table *new_tab = g_new0(Table,1);
   memcpy(new_tab,tab,sizeof(Table));
 
@@ -769,20 +822,6 @@ cell_data_makecolor(cell_data_t *data) {
   }
 }
 
-/*
-typedef struct celldata {
-  chunk_name_t name;
-  type_code_t type_code;
-  char *str;
-  char *proposed_text;
-  GArray *coord;
-  int color;
-  gboolean selected;
-  json_t *onclick_data;
-  gboolean onclick_user_input;
-  gint id;
-} cell_data_t;
-*/
 
 static cell_data_t *
 cell_data_copy (const cell_data_t * data) {
@@ -846,7 +885,7 @@ cell_data_setcolor (cell_data_t *data) {
 
 
 static GNode *
-table_get_node_by_id (Table * tab, gint node_id) {
+table_get_node_by_id (Table * tab, gint32 node_id) {
   return (GNode *) g_hash_table_lookup (tab->hnodes, GINT_TO_POINTER(node_id));
 }
 
@@ -886,30 +925,24 @@ update_chunk (cell_data_t * data, json_t * json_data) {
 static GNode *
 table_add_node(Table *tab, GNode * parent, json_t *json_data) {
   cell_data_t *data = cell_data_new_from_json (json_data);
-  data->row = CHUNK(parent)->row;
   GNode *node = g_node_append_data (parent,data);
+  data->row = CHUNK(parent)->row;
   if (data->id)
     g_hash_table_insert (tab->hnodes, GINT_TO_POINTER(data->id), node);
   return node;
 }
 
 
-static gboolean
-drop_childs_free (GNode *node, gpointer data) {
-  cell_data_free ((cell_data_t *)node->data);
-  node->data=NULL;
-  return FALSE;
-}
-
 static void
-drop_childs_custom (GNode *node, GNodeTraverseFunc callback, gpointer data) {
+drop_childs_custom (GNode *node, void (*callback)(GNode *node, gpointer data), gpointer data) {
   GNode *child = g_node_first_child (node), *next_child;
   while (child) {
     if (callback)
       callback (child,data);
     next_child = g_node_next_sibling (child);
     g_node_unlink (child);
-    g_node_traverse (child,G_IN_ORDER,G_TRAVERSE_ALL,-1,drop_childs_free,0);
+    drop_childs_custom (child, callback, data);
+    cell_data_free (CHUNK(child));
     g_node_destroy (child);
     child = next_child;
   }
@@ -918,21 +951,20 @@ drop_childs_custom (GNode *node, GNodeTraverseFunc callback, gpointer data) {
 
 static void
 table_unregister_node (Table *tab, cell_data_t *chunk) {
-  g_hash_table_remove (tab->hnodes, chunk->id);
+  g_hash_table_remove (tab->hnodes, GINT_TO_POINTER(chunk->id));
 }
 
-gboolean
+static void
 unregister_node(GNode *node, gpointer data) {
   table_unregister_node (TABLE(data),CHUNK(node));
 }
 
-
 static void
 drop_single_node (GNode *node, Table *tab) {
   g_node_unlink (node);
-  table_unregister_node (node,tab);
+  table_unregister_node (tab, CHUNK(node));
   cell_data_free (CHUNK(node));
-  g_node_destroy (child);
+  g_node_destroy (node);
 }
 
 static void
@@ -955,9 +987,9 @@ json_to_celltree (Table *tab, GNode *parent, json_t *json_chunk) {
 
 static void
 table_update_node_json (Table *tab, json_t *json_chunk) {
-  gint node_id;
+  gint32 node_id;
   GNode *node;
-  node_id = json_int (json_chunk, "id");
+  node_id = myjson_int (json_chunk, "id");
   node = table_get_node_by_id (tab, node_id);
   message_assert (node!=NULL);
   update_chunk(CHUNK(node),json_chunk);
@@ -974,11 +1006,16 @@ table_update_node_json (Table *tab, json_t *json_chunk) {
 }
 
 
-
 static void
 table_set_cell_text (Table *tab, int nrow, int ncol, json_t *json_data) {
-  table_row *row = g_list_nth_data(tab->rows,nrow);
+  GList *grow = g_list_nth(tab->rows,nrow);
+  return table_set_cell_text_grow (tab,grow,ncol,json_data);
+}
+
+static void
+table_set_cell_text_grow (Table *tab, GList *grow, int ncol, json_t *json_data) {
   cell_data_t * cell_data;
+  table_row *row = TABROW(grow);
   GNode *cell_root;
   message_assert(row);
   message_assert(row->ncols > ncol);
@@ -1087,7 +1124,7 @@ process_cell_tree_mouse_callbacks (Table *tab, GNode *root, int y, int x) {
       if (CHUNK(node)->onclick_user_input) {
         f = input_dialog (
           _("Change variable"),
-          json_str (onclick_data, "input_text"),
+          myjson_str (onclick_data, "input_text"),
           "mc.edit.change-variable",
            CHUNK(node)->proposed_text ? CHUNK(node)->proposed_text  : CHUNK(node)->str,
           INPUT_COMPLETE_NONE);
@@ -1140,7 +1177,6 @@ table_process_mouse_click(Table *tab, mouse_event_t * event) {
   GList *g_row;
   long nrow=0,ncol;
   table_row * row;
-  gboolean handled=FALSE;
 
   message_assert (tab!=NULL);
 
@@ -1175,7 +1211,7 @@ table_process_mouse_click(Table *tab, mouse_event_t * event) {
   */
   message_assert (ncol<tab->ncols);
 
-  handled = process_cell_tree_mouse_callbacks(
+  process_cell_tree_mouse_callbacks(
     tab,
     TABROW(g_row)->columns[ncol],
     click_y,
@@ -1190,15 +1226,17 @@ table_row_destroy(table_row *row) {
 }
 
 static void
-table_delete_row (Table *tab, table_row *row) {
+table_delete_row_by_id (Table *tab, gint32 id) {
   /*remove `row` from table*/
   /*сдвигаем координаты последующих строк*/
-  shift = row->y2 - row->y1;
+  GList *grow = find_grow_by_id (tab, id);
+  table_row *row = TABROW(grow);
+  size_t shift = row->y2 - row->y1;
   for (GList *srow = g_list_next(row); srow; srow=g_list_next(srow)) {
-    table_row_shift (tab,srow,shift);
+    table_row_shift (tab,TABROW(srow),shift);
   }
   /*удаляем строку из списка*/
-  g_list_remove_link (tab->rows, row);
+  tab->rows = g_list_remove_link (tab->rows, grow);
   /*free and unregister nodes*/
   for (int col=0;col<row->ncols;col++) {
     GNode *node = row->columns[col];
@@ -1211,10 +1249,6 @@ table_delete_row (Table *tab, table_row *row) {
   table_row_destroy (row);
 }
 
-static void
-table_delete_node (Table *tab, int id) {
-  tab->rowsize_changed = TRUE;
-}
 
 static void
 table_row_destroy_g(gpointer data) {
@@ -1695,20 +1729,35 @@ table_destroy(Table *tab) {
 
 
 
-static int
-_table_insert_row(Table * tab, table_row * row) {
-  tab->rows = g_list_append (tab->rows, row);
-  return tab->nrows++;
+static GList *
+__table_insert_row (Table * tab, table_row * row, gint32 insert_before_id) {
+  GList *sibling;
+  if (insert_before_id != -1) {
+    sibling = find_grow_by_id (tab, insert_before_id);
+    message_assert (sibling);
+  }
+  else {
+    /*append element*/
+    sibling=NULL;
+  }
+  tab->rows = g_list_insert_before (tab->rows,sibling,row);
+  tab->nrows++;
+  if (sibling)
+    return sibling->prev;
+  else
+    return g_list_last(tab->rows);
 }
 
-static int
-table_add_row (Table * tab) {
+static GList *
+table_insert_row (Table * tab, gint32 id, gint insert_before_id) {
+  /* allocate new row and insert allocated row 
+      1. if id==-1 then append
+      2. if id!=-1 then find row with given id and insert row before.*/
   long ncols = tab->ncols;
   table_row *row;
-  int rc;
   row = table_row_alloc (ncols);
-  rc = _table_insert_row (tab,row);
-  return rc;
+  row->id=id;
+  return __table_insert_row (tab,row, insert_before_id);
 }
 
 
@@ -1890,7 +1939,7 @@ table_do_row_visible(Table *tab, table_row *selrow) {
 }
 
 static void
-wtable_do_row_visible(WTable *wtab, const char *tabname, gint id, int nrow) {
+wtable_do_row_visible(WTable *wtab, const char *tabname, gint32 id, int nrow) {
   Table *tab = wtable_get_exemplar(wtab,tabname,id);
   //Table *tab = wtable_get_table(wtab,tabname);
   tab->selected_row = nrow;
@@ -1900,11 +1949,11 @@ wtable_do_row_visible(WTable *wtab, const char *tabname, gint id, int nrow) {
 
 void
 wtable_do_row_visible_json(WTable *wtab, json_t *pkg) {
-  const char *tabname=json_str (pkg,"table_name");
-  gint id = json_integer_value (json_object_get (pkg, "id"));
-  int nrow=json_int (pkg,"nrow");
+  const char *tabname=myjson_str (pkg,"table_name");
+  gint32 exemplar_id = json_integer_value (json_object_get (pkg, "id"));
+  int nrow=myjson_int (pkg,"nrow");
   message_assert (tabname!=NULL);
-  wtable_do_row_visible(wtab,tabname,id,nrow);
+  wtable_do_row_visible(wtab,tabname,exemplar_id,nrow);
 }
 
 
@@ -2143,7 +2192,7 @@ selbar_callback (Widget * w,
   return MSG_HANDLED;
 }
 
-gint
+gint32
 find_button_in_list(gconstpointer a, gconstpointer b) {
   SelbarButton *btn = (SelbarButton *)a;
   int x_click = ((int *)b)[0];

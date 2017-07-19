@@ -26,16 +26,16 @@ void __message_assert (const char *EX, const char *FILE, int LINE);
 #define __MCGDB_IDENTITY(x) x
 //#define __MCGDB_CONSTTRUE_CHECKER(x) ((void *)1)
 
-#define json_int(obj,field) __json_extract(obj,field,json_integer_value,json_is_integer)
-#define json_str(obj,field) __json_extract(obj,field,json_string_value,json_is_string)
-#define json_bool(obj,field) __json_extract(obj,field,json_boolean_value,json_is_boolean)
-#define json_obj(obj,field) __json_extract(obj,field,__MCGDB_IDENTITY,json_is_object)
-#define json_arr(obj,field) __json_extract(obj,field,__MCGDB_IDENTITY,json_is_array)
+#define myjson_int(obj,field) __json_extract(obj,field,json_integer_value,json_is_integer)
+#define myjson_str(obj,field) __json_extract(obj,field,json_string_value,json_is_string)
+#define myjson_bool(obj,field) __json_extract(obj,field,json_boolean_value,json_is_boolean)
+#define myjson_obj(obj,field) __json_extract(obj,field,__MCGDB_IDENTITY,json_is_object)
+#define myjson_arr(obj,field) __json_extract(obj,field,__MCGDB_IDENTITY,json_is_array)
 
 
 
 
-enum gdb_cmd {
+typedef enum gdb_cmd {
   MCGDB_UNKNOWN=0,
   MCGDB_ERROR_MESSAGE,
   MCGDB_NONE,
@@ -61,7 +61,11 @@ enum gdb_cmd {
   MCGDB_EXEMPLAR_DROP,
   MCGDB_EXEMPLAR_SET,
   MCGDB_EXEMPLAR_COPY,
-};
+  MCGDB_DROP_ROWS,
+  MCGDB_DROP_NODES,
+  MCGDB_TRANSACTION,
+  MCGDB_INSERT_ROWS,
+} gdb_cmd_t;
 
 enum window_type {
   MCGDB_UNKNOWN_WINDOW_TYPE=0,
@@ -158,7 +162,7 @@ void free_gdb_evt (struct gdb_action * gdb_evt);
 json_t *read_pkg_from_gdb (void);
 void send_pkg_to_gdb (const char *msg);
 
-enum gdb_cmd get_command_num(json_t *pkg);
+gdb_cmd_t get_command_num(json_t *pkg);
 
 
 #endif /*__mcgdb_h_*/
