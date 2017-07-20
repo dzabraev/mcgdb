@@ -403,9 +403,11 @@ class CurrentThreads(ValuesExemplar,TablePackages):
       'global_num'  :lambda th : {'str':str(th['global_num']),'selected':th['selected']},
     }
 
+  @exec_main
   def get_table(self):
     threads_info = self.get_threads_info()
     self.saved_threads_info = threads_info
+    self.selected_global_num = gdb.selected_thread().global_num
     rows=[]
     gnums=threads_info.keys()
     gnums.sort()
@@ -415,6 +417,7 @@ class CurrentThreads(ValuesExemplar,TablePackages):
       rows.append(row)
     return {'rows':rows}
 
+  @exec_main
   def need_update(self):
     pkgs=[]
     threads_info = self.get_threads_info()
@@ -438,6 +441,7 @@ class CurrentThreads(ValuesExemplar,TablePackages):
     if append_rows:
       pkgs.append(self.pkg_append_rows(append_rows))
     self.saved_threads_info = threads_info
+    self.selected_global_num = gdb.selected_thread().global_num
     return pkgs
 
   def compare_infos(self,global_num,new,old):
@@ -478,10 +482,36 @@ class CurrentThreads(ValuesExemplar,TablePackages):
       self.get_node(gn,'func_name',thread_info),
       self.get_node(gn,'func_args',thread_info)
     ]
-    col={'chunks':chunks}
+    onclick_data={
+      'cmd' : 'onclick',
+      'onclick':'select_thread',
+      'global_num':gn,
+    }
+    col={'chunks':chunks,'onclick_data':onclick_data}
     row={'columns':[col],'id':self.id_threadrow(gn)}
     return row
 
+  def pkg_select_thread(self,global_num):
+    return self.pkg_select_node(id=self.id_global_num(global_num),selected=True,visible=True)
+
+  def pkg_unselect_thread(self,global_num):
+    return self.pkg_select_node(id=self.id_global_num(global_num),selected=False)
+
+
+  def select_thread(self,global_num):
+    if self.selected_global_num == global_num:
+      return
+    for thread in gdb.selected_inferior().threads():
+      if thread.global_num==global_num:
+        thread.switch()
+        pkgs=[
+          self.pkg_select_thread(self.selected_global_num),
+          self.pkg_unselect_thread(global_num),
+        ]
+        self.selected_global_num = global_num
+        return self.pkg_transaction(pkgs)
+    self.send_error("can't find selected thread")
+    return self.need_update()
 
   id_per_row = 7
   def id_threadrow(self,global_num):
@@ -549,9 +579,9 @@ class ThreadsTable(SubentityUpdate):
   def get_key(self):
     return 1024
 
+  @exec_main
   def onclick_select_thread(self,pkg):
-    nthread = pkg['nthread']
-    res=self.current_values.select_thread(nthread)
+    res=self.current_values.select_thread(int(pkg['global_num']))
     if res!=None:
       self.send(res)
     return [{'cmd':'mcgdbevt','mcgdbevt':'thread', 'data':{}}]
