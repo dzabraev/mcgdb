@@ -61,6 +61,7 @@ typedef struct {
   int *xr;
   gboolean rowsize_changed;
   gint32 id;
+  int shift; /*Пусть есть Строка А, и следующая за ней строка Б. Строку А удаляют. Тогда в shift строки Б записывается минус высота строки А.*/
 } table_row;
 
 typedef enum table_type_id {

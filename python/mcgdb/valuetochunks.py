@@ -44,16 +44,16 @@ def get_frame_func_args(frame):
     return args
 
 def frame_func_args(func_args):
-    frame_func_args=[]
-    l=len(func_args)
-    for idx,argname,argval in enumerate(func_args):
-      frame_func_args.append({'str':'  '})
-      frame_func_args.append({'str':argname,'name':'varname'})
-      frame_func_args.append({'str':'='})
-      frame_func_args.append({'str':argval, 'name':'varvalue'})
-      if idx<l-1:
-        frame_func_args.append({'str':'\n'})
-    return frame_func_args
+    frame_func_args_arr=[]
+    frame_func_args_arr.append({'str':' ({}'.format('\n' if len(func_args) else '')})
+    for argname,argval in func_args:
+      frame_func_args_arr.append({'str':'  '})
+      frame_func_args_arr.append({'str':argname,'name':'varname'})
+      frame_func_args_arr.append({'str':'='})
+      frame_func_args_arr.append({'str':argval, 'name':'varvalue'})
+      frame_func_args_arr.append({'str':'\n'})
+    frame_func_args_arr.append({'str':')'})
+    return {'chunks':frame_func_args_arr}
 
 
 

@@ -374,6 +374,7 @@ wtable_exemplar_create (WTable *wtab, json_t *pkg) {
 static gboolean
 wtable_gdbevt_process_pkg(WTable *wtab, json_t *pkg) {
   gboolean handled=FALSE;
+  message_assert (json_is_object (pkg));
   gdb_cmd_t command = get_command_num (pkg);
   switch(command) {
     case MCGDB_EXEMPLAR_CREATE:
@@ -450,7 +451,7 @@ find_row_by_id (Table *tab, gint32 id) {
 
 static void
 wtable_drop_rows(WTable *wtab, json_t *pkg) {
-  Table *tab = wtab->tab;
+  Table *tab = wtable_get_table (wtab, myjson_str(pkg, "table_name"));
   json_t *ids = myjson_arr (pkg,"ids");
   size_t len=json_array_size (ids);
   for (size_t idx=0;idx<len;idx++) {
@@ -462,13 +463,15 @@ wtable_drop_rows(WTable *wtab, json_t *pkg) {
 
 static void
 wtable_drop_nodes(WTable *wtab, json_t *pkg) {
-  Table *tab = wtab->tab;
   json_t *ids = myjson_arr (pkg,"ids");
+  Table *tab = wtable_get_table (wtab, myjson_str(pkg, "table_name"));
   size_t len=json_array_size (ids);
   for (size_t idx=0;idx<len;idx++) {
     gint32 id = json_integer_value (json_array_get (ids,idx)); /*id of node that will be deleted*/
     GNode *node = g_hash_table_lookup (tab->hnodes,GINT_TO_POINTER(id));
     message_assert (node!=NULL);
+    CHUNK(node)->row->rowsize_changed=TRUE;
+    tab->rowsize_changed=TRUE;
     drop_childs (node,tab);
     drop_single_node (node,tab);
   }
@@ -489,12 +492,13 @@ wtable_transaction(WTable *wtab, json_t *pkg) {
 static void
 wtable_insert_rows(WTable *wtab, json_t *pkg) {
   json_t *rid = json_object_get (pkg,"rowid");
-  gint32 rowid = (rid) ? -1 : json_integer_value (rid);
+  gint32 rowid = (rid) ? json_integer_value (rid) : -1;
   json_t *rows = myjson_arr (pkg,"rows");
+  Table *tab = wtable_get_table (wtab, myjson_str(pkg, "table_name"));
   size_t len = json_array_size(rows);
   for (int idx=len-1;idx>=0;idx--) {
     json_t *row = json_array_get (rows,idx);
-    insert_json_row (row,wtab->tab, rowid);
+    insert_json_row (row,tab,rowid);
   }
 }
 
@@ -503,7 +507,7 @@ wtable_insert_rows(WTable *wtab, json_t *pkg) {
 static GList *
 insert_json_row (json_t *row, Table *tab, gint32 insert_before_id) {
     GList *grow;
-    gint32 id = myjson_int(row,"id");
+    gint32 id = json_integer_value(json_object_get(row,"id"));
     json_t * columns = myjson_arr (row,"columns");
     size_t rowsize = json_array_size (columns);
     message_assert((size_t)(tab->ncols)==rowsize);
@@ -645,6 +649,7 @@ table_row_copy(Table *tab, const table_row *row) {
   new_row->ncols=row->ncols;
   new_row->y1 = row->y1;
   new_row->y2 = row->y2;
+  new_row->shift = row->shift;
   new_row->rowsize_changed = row->rowsize_changed;
   new_row->columns  = (GNode **)g_new0(GNode *, ncols);
   new_row->offset   = (int *)g_new(int, ncols);
@@ -664,6 +669,7 @@ static table_row *
 table_row_alloc(long ncols) {
   table_row * row = g_new0 (table_row,1);
   row->ncols=ncols;
+  row->shift=0;
   row->columns  = (GNode **)g_new0(GNode *, ncols);
   row->offset   = (int *)g_new(int, ncols);
   row->xl       = (int *)g_new(int, ncols);
@@ -1229,12 +1235,16 @@ static void
 table_delete_row_by_id (Table *tab, gint32 id) {
   /*remove `row` from table*/
   /*сдвигаем координаты последующих строк*/
-  GList *grow = find_grow_by_id (tab, id);
-  table_row *row = TABROW(grow);
-  size_t shift = row->y2 - row->y1;
-  for (GList *srow = g_list_next(row); srow; srow=g_list_next(srow)) {
-    table_row_shift (tab,TABROW(srow),shift);
-  }
+  GList *grow = find_grow_by_id (tab, id), *next;
+  table_row *row;
+  message_assert (grow!=NULL);
+  row = TABROW(grow);
+  next = g_list_next (grow);
+  if (next)
+    TABROW(next)->shift = (row->y1 - row->y2) + row->shift;
+//  for (GList *srow = g_list_next(row); srow; srow=g_list_next(srow)) {
+//    table_row_shift (tab,TABROW(srow),shift);
+//  }
   /*удаляем строку из списка*/
   tab->rows = g_list_remove_link (tab->rows, grow);
   /*free and unregister nodes*/
@@ -1640,6 +1650,10 @@ __table_draw(Table * tab, gboolean blank) {
         tab->last_row_pos++;
       }
       row = g_list_next (row);
+      if (row) {
+        row_shift += TABROW(row)->shift;
+        TABROW(row)->shift=0;
+      }
     }
   }
   else {
@@ -1742,10 +1756,19 @@ __table_insert_row (Table * tab, table_row * row, gint32 insert_before_id) {
   }
   tab->rows = g_list_insert_before (tab->rows,sibling,row);
   tab->nrows++;
-  if (sibling)
+  row->rowsize_changed = TRUE;
+  tab->rowsize_changed = TRUE;
+  if (sibling) {
+    row->y1 = TABROW(sibling)->y1;
+    row->y2 = row->y1 - !!tab->draw_hline; /*слагаемое с draw_hline предназначается
+    * для резервирования места для печати гориз. линии, которая разд. строки.*/
     return sibling->prev;
-  else
+  }
+  else {
+    row->y1=TAB_TOP(tab)+1;
+    row->y2=TAB_TOP(tab)+1;
     return g_list_last(tab->rows);
+  }
 }
 
 static GList *
@@ -1818,9 +1841,10 @@ table_add_offset(Table *tab, int off) {
   tab->row_offset = MAX(tab->row_offset, 0);
   tab->row_offset = MIN(tab->row_offset, max_offset);
   delta=tab->row_offset - old_offset;
-  if (delta!=0)
+  if (delta!=0) {
     tab->redraw |= REDRAW_TAB;
-  table_update_coord(tab,delta);
+    table_update_coord(tab,delta);
+  }
 }
 
 static void

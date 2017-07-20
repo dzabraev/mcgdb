@@ -6,15 +6,15 @@ import re,sys,ctypes
 import traceback
 
 
-from mcgdb.basewin import BaseWin, StorageId, CommunicationMixin
+from mcgdb.basewin import BaseWin, StorageId, CommunicationMixin, TablePackages
 
 from mcgdb.valuetochunks import check_chunks, ValueToChunks, get_frame_funcname, \
                                 get_frame_fileline, get_frame_func_args, frame_func_args
 
 from mcgdb.common  import exec_main, valcache, INDEX, INDEX_tmp, \
                     get_this_thread_num, mcgdbBaseException, mcgdbChangevarErr, \
-                    gdb_stopped,inferior_alive,gdb_print, TablePackages,TABID_TMP, \
-                    TablePackages
+                    gdb_stopped,inferior_alive,gdb_print, TABID_TMP
+
 
 
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -23,8 +23,12 @@ class ValuesExemplar(object):
   __metaclass__ = ABCMeta
 
   def __init__(self,subentity_name,*args,**kwargs):
-    self.subentity_name = subentity_name
+    self.__subentity_name = subentity_name
     super(ValuesExemplar,self).__init__(*args,**kwargs)
+
+  @property
+  def subentity_name(self):
+    return self.__subentity_name
 
   @abstractmethod
   def get_table(self):
@@ -34,8 +38,11 @@ class ValuesExemplar(object):
   @abstractmethod
   def need_update(self):
     ''' This function compare saved inferior state with
-        current inferior state and produce packages, that
-        will be update GUI window'''
+        current inferior state and produce packages (with diff), that
+        will be update GUI window
+
+        Return value is list of packages.
+    '''
     raise NotImplementedError
 
 
@@ -44,7 +51,6 @@ class BaseSubentity(TablePackages, CommunicationMixin):
 
   @exec_main
   def __init__(self,**kwargs):
-    self.setup_communication_fd(kwargs.pop('communication_fd'))
     super(BaseSubentity,self).__init__(**kwargs)
 
   @abstractproperty
@@ -55,7 +61,7 @@ class BaseSubentity(TablePackages, CommunicationMixin):
 
 
 
-class SubentityUpdate(BaseSubentity,StorageId,CommunicationMixin):
+class SubentityUpdate(BaseSubentity,StorageId,TablePackages):
   @exec_main
   def __init__(self,**kwargs):
     super(SubentityUpdate,self).__init__(**kwargs)
@@ -113,7 +119,7 @@ class SubentityUpdate(BaseSubentity,StorageId,CommunicationMixin):
     self.current_table_id=id
     self.current_values=values
     if pkgs:
-      self.send_pkg_transaction(pkg)
+      self.send_pkg_transaction(pkgs)
 
   @exec_main
   def process_connection(self):
@@ -152,29 +158,26 @@ class OnclickVariables(TablePackages,CommunicationMixin):
   @abstractproperty
   def subentity_name(self): raise NotImplementedError
 
-  @property
-  def current_values(self): raise NotImplementedError
-
   @exec_main
   def onclick_expand_variable(self,pkg):
     if hasattr(self.current_values,'onclick_expand_variable'):
       need_update=self.current_values.onclick_expand_variable(pkg)
       if need_update:
-        self.send(self.pkg_update_nodes(self.subentity_name,need_update))
+        self.send(self.pkg_update_nodes(need_update))
 
   @exec_main
   def onclick_collapse_variable(self,pkg):
     if hasattr(self.current_values,'onclick_collapse_variable'):
       need_update=self.current_values.onclick_collapse_variable(pkg)
       if need_update:
-        self.send(self.pkg_update_nodes(self.subentity_name,need_update))
+        self.send(self.pkg_update_nodes(need_update))
 
   @exec_main
   def onclick_change_slice(self,pkg):
     if hasattr(self.current_values,'onclick_change_slice'):
       need_update=self.current_values.onclick_change_slice(pkg)
       if need_update:
-        self.send(self.pkg_update_nodes(self.subentity_name,need_update))
+        self.send(self.pkg_update_nodes(need_update))
 
 
   @exec_main
@@ -186,7 +189,7 @@ class OnclickVariables(TablePackages,CommunicationMixin):
       need_update=e.need_update
       self.send_error(str(e))
     if need_update:
-      self.send(self.pkg_update_nodes(self.subentity_name,need_update))
+      self.send(self.pkg_update_nodes(need_update))
 
 class CurrentBacktrace(ValuesExemplar,TablePackages):
   def get_table(self):
@@ -197,6 +200,9 @@ class CurrentBacktrace(ValuesExemplar,TablePackages):
 class BacktraceTable(SubentityUpdate):
   subentity_name='backtrace'
   values_class=CurrentBacktrace
+
+  def get_key(self):
+    return 1
 
 class BacktraceTable1(BaseSubentity,ValueToChunks):
   subentity_name='backtrace'
@@ -318,7 +324,7 @@ class BacktraceTable1(BaseSubentity,ValueToChunks):
     self.update_backtrace()
 
 
-class ThreadRegs(ValuesExemplar,ValueToChunks):
+class ThreadRegs(ValuesExemplar,ValueToChunks, TablePackages):
   @exec_main
   def __init__(self,**kwargs):
     self.regvals={}
@@ -369,7 +375,8 @@ class ThreadRegs(ValuesExemplar,ValueToChunks):
     for regname in self.regnames:
       chunks=self.diff(self.Path(name=regname))
       nodesdata+=self.filter_chunks_with_id(chunks)
-    return nodesdata
+    if nodesdata:
+      return [self.pkg_update_nodes(nodesdata)]
 
 
 class RegistersTable(SubentityUpdate,OnclickVariables):
@@ -387,8 +394,10 @@ class CurrentThreads(ValuesExemplar,TablePackages):
   def __init__(self,*args,**kwargs):
     super(CurrentThreads,self).__init__(*args,**kwargs)
     self.value_transform={
-      'thread_name':lambda value : '"{}"\n'.format(value),
-      'func_args':lambda value : frame_func_args(value),
+      'thread_name' :lambda th : '"{}"\n'.format(th['thread_name']),
+      'func_args'   :lambda th : frame_func_args(th['func_args']),
+      'func_name'   :lambda th : {'str':th['func_name'], 'name':'frame_func_name'},
+      'global_num'  :lambda th : {'str':str(th['global_num']),'selected':th['selected']},
     }
 
   def get_table(self):
@@ -407,19 +416,24 @@ class CurrentThreads(ValuesExemplar,TablePackages):
     pkgs=[]
     threads_info = self.get_threads_info()
     exited_threads = set(self.saved_threads_info.keys()) - set(threads_info.keys())
+    rm_rowids=[]
     for global_num in exited_threads: #remove from GUI win exited threads
-      rowid=self.id_threadrow(global_num)
-      pkgs.append(self.pkg_drop_rows([rowid]))
+      rm_rowids.append(self.id_threadrow(global_num))
+    if rm_rowids:
+      pkgs.append(self.pkg_drop_rows(rm_rowids))
     new_threads=[]
+    append_rows=[]
     for global_num in threads_info:
       thread_info = threads_info[global_num]
       if global_num not in self.saved_threads_info:
         #появился новый поток
-        row=self.new_threadrow(global_num,thread_info)
-        pkgs.append(self.pkg_append_rows([row]))
+        row = self.new_threadrow(global_num,thread_info)
+        append_rows.append(row) #добавляем для него строку
       else:
         saved_thread_info = self.saved_threads_info[global_num]
-        pkgs += self.compare_infos(global_num,old=saved_thread_info,new=thread_info)
+        pkgs.append(self.compare_infos(global_num,old=saved_thread_info,new=thread_info))
+    if append_rows:
+      pkgs.append(self.pkg_append_rows(append_rows))
     self.saved_threads_info = threads_info
     return pkgs
 
@@ -427,48 +441,52 @@ class CurrentThreads(ValuesExemplar,TablePackages):
     upd=[]
     for target in ['thread_name','func_name','file_name','file_line','func_args']:
       if new[target]!=old[target]:
-        upd.append(self.get_node(global_num,target,new[target]))
-    return self.pkg_update_nodes(upd)
+        upd.append(self.get_node(global_num,target,new))
+    if new['selected']!=old['selected']:
+      upd.append(self.get_node(global_num,'global_num',new))
+    if upd:
+      return self.pkg_update_nodes(upd)
 
-  def get_node(self,global_num,target,value):
+  def get_node(self,global_num,target,thread_info):
     ''' Возвращает узел дерева типа target, с содержимым value'''
     getid=getattr(self,'id_{}'.format(target))
     if target in self.value_transform:
-      value = self.value_transform[target](value)
-    if type(value) is (str,unicode):
-      return {'str':value,'id':getid(global_num)}
+      value = self.value_transform[target](thread_info)
     else:
-      return value
+      value = thread_info[target]
+    if type(value) in (dict,):
+      #this is already node
+      node = value
+    else:
+      node = {'str':unicode(value)}
+    node['id'] = getid(global_num)
+    return node
 
   def new_threadrow(self,global_num,thread_info):
     gn=global_num
-    ti=thread_info
-    tid=ti[gn]['tid']
-    thread_name=ti[gn]['thread_name']
-    func_name=ti[gn]['func_name']
-    file_name=ti[gn]['file_name']
-    func_args=ti[gn]['func_args']
-    file_line=str(ti[gn]['file_line'])
     chunks=[
-      {'str':'{global_num} LWP={tid} '.format(global_num=gn,tid=tid)},
-      self.get_node(gn,'thread_name',thread_name),
-      self.get_node(gn,'file_name',file_name),
+      self.get_node(gn,'global_num',thread_info),
+      {'str':' LWP={tid} '.format(tid=thread_info['tid'])},
+      self.get_node(gn,'thread_name',thread_info),
+      self.get_node(gn,'file_name',thread_info),
       {'str':':'},
-      self.get_node(gn,'file_line',file_line),
-      self.get_node(gn,'func_name',func_name),
+      self.get_node(gn,'file_line',thread_info),
+      {'str':' '},
+      self.get_node(gn,'func_name',thread_info),
+      self.get_node(gn,'func_args',thread_info)
     ]
-    if len(func_args)==0:
-      chunks.append({'src':'()'})
-    else:
-      chunks.append({'src':'(\n'})
-      chunks.append(self.get_node(gn,'func_args',func_args))
-      chunks.append({'src':')'})
+#    if len(func_args)==0:
+#      chunks.append({'src':'()'})
+#    else:
+#      chunks.append({'src':'(\n'})
+#      chunks.append(self.get_node(gn,'func_args',func_args))
+#      chunks.append({'src':')'})
     col={'chunks':chunks}
     row={'columns':[col]}
     return row
 
 
-  id_per_row = 6
+  id_per_row = 7
   def id_threadrow(self,global_num):
     ''' Thread row id'''
     return self.id_per_row*global_num
@@ -488,6 +506,10 @@ class CurrentThreads(ValuesExemplar,TablePackages):
   def id_func_args(self,global_num):
     return self.id_per_row*global_num+5
 
+  def id_global_num(self,global_num):
+    return self.id_per_row*global_num+6
+
+
 
   def get_threads_info(self):
     threads_info={}
@@ -497,7 +519,7 @@ class CurrentThreads(ValuesExemplar,TablePackages):
     for thread in gdb.selected_inferior().threads():
       thread.switch()
       frame = gdb.selected_frame()
-      global_num    =   str(thread.global_num)
+      global_num    =   thread.global_num
       tid           =   str(thread.ptid[1])
       threadname    =   str(thread.name) if thread.name else 'unknown'
       funcname = get_frame_funcname(frame)
@@ -510,6 +532,8 @@ class CurrentThreads(ValuesExemplar,TablePackages):
         'file_name':filename,
         'file_line':fileline,
         'func_args':funcargs,
+        'selected' :selected_thread.global_num==global_num,
+        'global_num':global_num,
       }
     if selected_thread != None:
       selected_thread.switch()
@@ -562,7 +586,7 @@ class BlockLocalvarsTable(ValuesExemplar,ValueToChunks,TablePackages):
   def need_update(self):
     nodes = self.diff()
     if nodes:
-      return self.pkg_update_nodes(nodes)
+      return [self.pkg_update_nodes(nodes)]
     else:
       return None
 
@@ -572,7 +596,7 @@ class BlockLocalvarsTable(ValuesExemplar,ValueToChunks,TablePackages):
     if len(variables)==0:
       return  {'rows':[]}
     lvars=[]
-    funcname=self._get_frame_funcname(gdb.selected_frame())
+    funcname=get_frame_funcname(gdb.selected_frame())
     for name,value in variables.iteritems():
       chunks = self.value_to_chunks(value,name)
       check_chunks(chunks)

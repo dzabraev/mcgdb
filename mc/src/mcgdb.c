@@ -294,6 +294,10 @@ get_command_num(json_t *pkg) {
     else if (compare_cmd("exemplar_drop"))   {return MCGDB_EXEMPLAR_DROP;}
     else if (compare_cmd("exemplar_set"))    {return MCGDB_EXEMPLAR_SET;}
     else if (compare_cmd("exemplar_copy"))   {return MCGDB_EXEMPLAR_COPY;}
+    else if (compare_cmd("transaction"))     {return MCGDB_TRANSACTION;}
+    else if (compare_cmd("drop_rows"))       {return MCGDB_DROP_ROWS;}
+    else if (compare_cmd("drop_nodes"))      {return MCGDB_DROP_NODES;}
+    else if (compare_cmd("insert_rows"))     {return MCGDB_INSERT_ROWS;}
     else {
       cmd = MCGDB_UNKNOWN;
       message_assert (cmd!=MCGDB_UNKNOWN);

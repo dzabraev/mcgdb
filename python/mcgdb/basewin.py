@@ -6,7 +6,7 @@ import gdb
 
 import mcgdb
 from mcgdb.common import  pkgsend,pkgrecv,gdb_print,exec_cmd_in_gdb,gdb_stopped,\
-                          error,get_prompt,debug,is_main_thread,exec_main,TablePackages, \
+                          error,get_prompt,debug,is_main_thread,exec_main,\
                           mcgdbBaseException, TABID_TMP
 
 
@@ -41,8 +41,9 @@ class StorageId(object):
 class CommunicationMixin(object):
   __metaclass__ = ABCMeta
 
-  def __init__(self,**kwargs):
-    self.fd = kwargs.get('communication_fd')
+  def __init__(self,*args,**kwargs):
+    self.fd = kwargs.pop('communication_fd',None)
+    super(CommunicationMixin,self).__init__(*args,**kwargs)
 
   def setup_communication_fd(self,fd):
     self.fd=fd
@@ -52,7 +53,9 @@ class CommunicationMixin(object):
 
   def send(self,msg):
     assert self.fd!=None
-    logging.info('time={time} sender={type} pkgs={pkgs}'.format(type=self.type,pkgs=json.dumps(msg),time=time.time()))
+    if msg is None:
+      return
+    logging.info('time={time} sender={type} pkgs={pkgs}'.format(type=(getattr(self,'type',None) or self.subentity_name),pkgs=json.dumps(msg),time=time.time()))
     pkgsend(self.fd,msg)
 
   def recv(self):
@@ -60,8 +63,7 @@ class CommunicationMixin(object):
     return pkgrecv(self.fd)
 
   def send_error(self,message):
-    '''Вывести пользователю ошибку в граф. окне.
-    '''
+    '''Вывести пользователю ошибку в граф. окне.'''
     try:
       self.send({'cmd':'error_message','message':message})
     except:
@@ -75,32 +77,26 @@ class TablePackages(CommunicationMixin):
   @abstractproperty
   def subentity_name(self): pass
 
-  def __init__(self,*args,**kwargs):
-    map(self.__register_sender,[
-      self.pkg_exemplar_set,
-      self.pkg_select_node,
-      self.pkg_do_row_visible,
-      self.pkg_exemplar_create,
-      self.pkg_update_nodes,
-      self.pkg_drop_node,
-      self.pkg_drop_row,
-      self.pkg_append_row,
-      self.pkg_transaction,
-      self.pkg_message_in_table,
-    ])
-    super(TablePackages,self).__init__(*args,**kwargs)
+  def send_pkg_exemplar_set     (self,*args,**kwargs): self.send(self.pkg_exemplar_set      (*args,**kwargs))
+  def send_pkg_exemplar_create  (self,*args,**kwargs): self.send(self.pkg_exemplar_create   (*args,**kwargs))
+  def send_pkg_select_node      (self,*args,**kwargs): self.send(self.pkg_select_node       (*args,**kwargs))
+  def send_pkg_do_row_visible   (self,*args,**kwargs): self.send(self.pkg_do_row_visible    (*args,**kwargs))
+  def send_pkg_update_nodes     (self,*args,**kwargs): self.send(self.pkg_update_nodes      (*args,**kwargs))
+  def send_pkg_drop_nodes       (self,*args,**kwargs): self.send(self.pkg_drop_nodes        (*args,**kwargs))
+  def send_pkg_drop_rows        (self,*args,**kwargs): self.send(self.pkg_drop_rows         (*args,**kwargs))
+  def send_pkg_insert_rows      (self,*args,**kwargs): self.send(self.pkg_insert_rows       (*args,**kwargs))
+  def send_pkg_transaction      (self,*args,**kwargs): self.send(self.pkg_transaction       (*args,**kwargs))
+  def send_pkg_message_in_table (self,*args,**kwargs): self.send(self.pkg_message_in_table  (*args,**kwargs))
 
-  def __register_sender(self,pkg_creator):
-    attrname = 'send_'.format(pkg_creator.__name__)
-    setattr(self,attrname,lambda *args,**kwargs : self.send(pkg_creator(*args,**kwargs)))
 
   def pkg_exemplar_set(self,id):
     return {'cmd':'exemplar_set','id':id,'table_name':self.subentity_name}
 
-  def pkg_select_node(self,node_id,selected):
-    node_data={'id':node_id,'selected':selected}
-    pkg={'cmd':'update_nodes', 'table_name':self.subentity_name, 'nodes':[node_data]}
-    return pkg
+  def pkg_select_node(self,id,selected,visible=None):
+    node_data={'id':id, 'selected':selected}
+    if visible is not None:
+      node_data['visible']=visible
+    return self.pkg_update_nodes([node_data])
 
   def pkg_do_row_visible(self,nrow):
     return {'cmd':'do_row_visible','table_name':self.subentity_name, 'nrow':nrow}
@@ -124,19 +120,25 @@ class TablePackages(CommunicationMixin):
   def pkg_drop_rows(self,ids):
     return {'cmd':'drop_rows', 'table_name':self.subentity_name, 'ids':ids}
 
-  def pkg_prepend_rows(self,rows,rowid=None):
-    ''' Добавить строки rows за rowid. Если rowid is None, то строки будут добавляться за последнюю'''
-    pkg={'cmd':'prepend_rows','table_name':self.subentity_name,'rows':rows}
+  def pkg_insert_rows(self,rows,rowid=None):
+    ''' Добавить строки rows перед строкой с id=rowid. Если rowid is None, то строки будут добавляться за последнюю'''
+    pkg={'cmd':'insert_rows','table_name':self.subentity_name,'rows':rows}
     if not rowid is None:
       pkg['rowid']=rowid
     return pkg
 
-  def pkg_append_rows(self,row):
-    return self.pkg_prepend_rows(rows,rowid=-1)
+  def pkg_append_rows(self,rows):
+    return self.pkg_insert_rows(rows)
 
   def pkg_transaction(self,pkgs):
     ''' Сначала будут выполнены команды из всхе пакетов. и только потом будет сделана перерисовка'''
-    return {'cmd':'transaction','table_name':self.subentity_name,'pkgs':pkgs}
+    assert type(pkgs) is list
+    pkgs=filter(lambda x:x is not None,pkgs)
+    if pkgs:
+      if not type(pkgs[0]) is dict:
+        gdb_print('pkg='+str(pkgs[0])+'\n\n')
+      assert type(pkgs[0]) is dict
+      return {'cmd':'transaction','table_name':self.subentity_name,'pkgs':pkgs}
 
   def one_row_one_cell(self,msg):
     return {'rows':[{'columns':[{'chunks':[{'str':msg}]}]}]}
@@ -212,11 +214,8 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
 
   @exec_main
   def init_subentities(self):
-    kw={
-      'communication_fd':self.get_communication_fd(),
-    }
     for cls in self.subentities_cls:
-      self.subentities[cls.subentity_name] = cls(**kw)
+      self.subentities[cls.subentity_name] = cls(communication_fd=self.get_communication_fd())
 
   def make_runwin_cmd(self):
     ''' Данный метод формирует shell-команду для запуска окна с editor.

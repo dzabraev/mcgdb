@@ -3,8 +3,8 @@
 import gdb
 
 import mcgdb.basewin
-from mcgdb.common import exec_main, gdb_print, INDEX, TABID_TMP, TablePackages
-from mcgdb.basewin import BaseWin
+from mcgdb.common import exec_main, gdb_print, INDEX, TABID_TMP
+from mcgdb.basewin import BaseWin, TablePackages
 from mcgdb.valuetochunks import ValueToChunks
 
 
@@ -17,6 +17,7 @@ class AsmWin(BaseWin,ValueToChunks,TablePackages):
   type='asmwin'
   startcmd='mcgdb open asm'
   subentity_cls=[]
+  subentity_name='asm'
 
   @exec_main
   def __init__(self,**kwargs):
@@ -102,29 +103,6 @@ class AsmWin(BaseWin,ValueToChunks,TablePackages):
       self.update_asm_code()
     return rc
 
-  def tablemsg_rows(self,msg):
-    col={'chunks':[self.text_chunk(msg)]}
-    row={'columns':[col]}
-    rows=[row]
-    return rows
-
-
-  def tablemsg(self,msg):
-    rows=self.tablemsg_rows(msg)
-    table = {'rows':rows}
-    self.selected_asm_op_id=None
-    return {'cmd':'exemplar_create','table_name':'asm','id':TABID_TMP,'table':table,'set':True,}
-
-  def send_tablemsg(self,msg):
-    self.send(self.tablemsg(msg))
-
-#  def asm_to_chunks(self):
-#    try:
-#      return self.asm_to_chunks_1()
-#    except gdb.error as e:
-#      self.selected_asm_op_id = None
-#      return self.tablemsg_rows(str(e)),-1
-
   @exec_main
   def asm_to_chunks(self):
     if self.location:
@@ -176,15 +154,16 @@ class AsmWin(BaseWin,ValueToChunks,TablePackages):
 
   @exec_main
   def update_asm_code(self):
+    pkgs=[]
     try:
       funcname,start_addr,end_addr = self.get_selected_frame_func()
     except gdb.error as e:
-      self.unselect_asm_op()
-      pkg=self.tablemsg(str(e))
-      self.send(pkg)
+      pkgs.append(self.pkg_unselect_asm_op())
+      pkgs.append(self.pkg_message_in_table(unicode(e)))
       self.cur_displayed_succ=False
       self.start_addr=None
       self.end_addr=None
+      self.send_pkg_transaction(pkgs)
       return
     try:
       frame=gdb.selected_frame()
@@ -201,11 +180,10 @@ class AsmWin(BaseWin,ValueToChunks,TablePackages):
       id,data=self.id_get((start_addr,end_addr))
       if id==None:
         self.cur_displayed_succ=False
-        self.unselect_asm_op() #убираем красную линию
+        pkgs.append(self.pkg_unselect_asm_op()) #убираем красную линию
         #текущая функция ранее не отрисовывалась. Необходимо создать новый экземпляр таблицы
         if not frame:
-          pkg=self.tablemsg('not frame selected')
-          self.send(pkg)
+          pkgs.append(self.pkg_message_in_table('not frame selected'))
           self.selected_asm_op_id=None
         else:
           #генерация таблицы с asm-кодом текущей функции
@@ -215,25 +193,24 @@ class AsmWin(BaseWin,ValueToChunks,TablePackages):
             table={'rows':asm_rows, 'draw_vline':False, 'draw_hline':False}
             if selected_row!=None:
               table['selected_row']=selected_row
-            pkg={'cmd':'exemplar_create','table_name':'asm','id':id,'table':table,'set':True}
-            self.send(pkg)
+            pkgs.append(self.pkg_exemplar_create(table,id,set=True))
             self.cur_displayed_succ=True
           except gdb.error as e:
             self.selected_asm_op_id = None
-            pkg=self.tablemsg(str(e))
-            self.send(pkg)
+            pkgs.append(self.pkg_message_in_table(unicode(e)))
       else:
         #экземпляр таблицы был отрисова ранее.
         #убираем отметку с текущего экземпляра и загружаем ранее отрисовывавшийся
-        self.unselect_asm_op()
+        pkgs.append(self.pkg_unselect_asm_op())
         self.addr_to_row = data['addr_to_row']
-        self.exemplar_set(id,'asm')
+        pkgs.append(self.pkg_exemplar_set(id=id))
         self.cur_displayed_succ=True
-        self.select_asm_op()
+        pkgs.append(self.pkg_select_asm_op())
     elif need_update_current_op:
-      self.update_asm_op()
+      pkgs += self.pkgs_update_asm_op()
     self.start_addr=start_addr
     self.end_addr=end_addr
+    self.send_pkg_transaction(pkgs)
     if self.cur_displayed_succ:
       assert self.selected_asm_op_id==frame.pc()
     if frame:
@@ -241,44 +218,44 @@ class AsmWin(BaseWin,ValueToChunks,TablePackages):
     else:
       self.pc=None
 
-  def select_asm_op(self):
+  def pkg_select_asm_op(self):
+    pkg=None
     if not self.cur_displayed_succ:
       return
     try:
       frame = gdb.selected_frame()
       pc=frame.pc()
-      self.select_node('asm',pc,True)
+      pkg = self.pkg_select_node(id=pc,selected=True,visible=True)
       self.selected_asm_op_id=pc
-      self.do_row_visible(self.addr_to_row[pc])
     except gdb.error:
       pass
+    return pkg
 
-  def unselect_asm_op(self):
+  def pkg_unselect_asm_op(self):
     if self.selected_asm_op_id!=None:
-      self.select_node('asm',self.selected_asm_op_id,False)
+      pkg=self.pkg_select_node(self.selected_asm_op_id,False)
       self.selected_asm_op_id=None
+      return pkg
 
-  def update_asm_op(self):
+  def pkgs_update_asm_op(self):
     if not self.cur_displayed_succ:
-      return
-    data=[]
+      return []
+    pkgs=[]
     if self.selected_asm_op_id:
-      data.append({'id':self.selected_asm_op_id,'selected':False})
+      pkgs.append(self.pkg_select_node(id=self.selected_asm_op_id,selected=False))
       self.selected_asm_op_id=None
     pc=None
     try:
       frame = gdb.selected_frame()
       pc=frame.pc()
-      data.append({'id':pc,'selected':True,'visible':True})
+      pkgs.append(self.pkg_select_node(id=pc,selected=True,visible=True))
       self.selected_asm_op_id=pc
     except gdb.error:
       pass
-    if data:
-      pkg={'cmd':'update_nodes', 'table_name':'asm', 'nodes':data}
-      self.send(pkg)
+    return pkgs
 
   def gdbevt_exited(self,evt):
-    self.send_tablemsg(u'target program exited')
+    self.send_pkg_message_in_table('target program exited')
 
   def gdbevt_stop(self,evt):
     self.update_asm_code()
@@ -297,6 +274,6 @@ class AsmWin(BaseWin,ValueToChunks,TablePackages):
     self.update_asm_code()
 
   def mcgdbevt_frame(self,data):
-    return self.update_asm_code()
+    self.update_asm_code()
 
 
