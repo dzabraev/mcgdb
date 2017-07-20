@@ -1,0 +1,34 @@
+1. встать на функцию факториала и быстро пошагать.
+
+Thread 1 "main" hit Breakpoint 3, main () at main.cc:135
+135   x=f2(x);
+f2 (x=1) at file.c:14
+14    return x+1;
+15  }
+main () at main.cc:136
+136   x=f3(x);
+f3 (x=2) at main.cc:72
+72    return x+1;
+73  }
+main () at main.cc:137
+137   x=f5(x);
+f5 (x=3) at testdir/file.c:6
+6     int y=7;
+7     return x+y;
+8   }main () at main.cc:138
+138   x=fac(50);
+fac (n=50) at main.cc:76
+76    if (n==1)
+78    return n*fac(n-1);
+fac (n=49) at main.cc:76
+76    if (n==1)
+Exception in thread Thread-1:
+Traceback (most recent call last):
+  File "/usr/lib64/python2.7/threading.py", line 551, in __bootstrap_inner
+      self.run()
+        File "/usr/lib64/python2.7/threading.py", line 504, in run
+            self.__target(*self.__args, **self.__kwargs)
+              File "/home/dza/sources/obj-mcgdb/python/mcgdb/common.py", line 786, in __call__
+                  assert 'gdbevt' not in pkg or pkg['gdbevt'] not in ('exited','stop')
+                  AssertionError
+                  
