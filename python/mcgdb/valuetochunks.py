@@ -120,9 +120,7 @@ class Node(object):
       child = self.childs.get(name.name)
     else:
       child = self.childs.get(name)
-    if child:
-      child.do_capture()
-    else:
+    if not child:
       child = Node(name=name,parent=self,**kwargs)
     if 'tochunks' in kwargs:
       child.tochunks=kwargs['tochunks']
