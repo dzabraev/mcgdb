@@ -783,7 +783,6 @@ class GEThread(object):
             pkg = self.get_pkg_from_gdb()
             if pkg:
               if not gdb_stopped() and not ('gdbevt' in pkg and pkg['gdbevt'] in ('exited',)):
-                gdb_print(str(pkg)+'\n')
                 assert 'gdbevt' not in pkg or pkg['gdbevt'] not in ('stop',)
                 self.pending_gdbpkgs.append(pkg)
               else:
