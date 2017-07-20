@@ -782,8 +782,9 @@ class GEThread(object):
             #обработка пакета из gdb
             pkg = self.get_pkg_from_gdb()
             if pkg:
-              if not gdb_stopped():
-                assert 'gdbevt' not in pkg or pkg['gdbevt'] not in ('exited','stop')
+              if not gdb_stopped() and not ('gdbevt' in pkg and pkg['gdbevt'] in ('exited',)):
+                gdb_print(str(pkg)+'\n')
+                assert 'gdbevt' not in pkg or pkg['gdbevt'] not in ('stop',)
                 self.pending_gdbpkgs.append(pkg)
               else:
                 self.send_pkg_to_entities(pkg)

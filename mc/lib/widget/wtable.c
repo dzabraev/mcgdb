@@ -435,7 +435,7 @@ wtable_gdbevt_common (WTable *wtab, gdb_action_t * act) {
 
 static gint32
 find_row_by_id_compare (gconstpointer a, gconstpointer b) {
-  return TABROW(a)->id - GPOINTER_TO_INT(b);
+  return ((table_row *)a)->id - GPOINTER_TO_INT(b);
 }
 
 static GList *

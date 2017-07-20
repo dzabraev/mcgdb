@@ -127,7 +127,10 @@ class SubentityUpdate(BaseSubentity,StorageId,TablePackages):
 
 
   def gdbevt_exited(self,pkg):
-    self.clear_table()
+    self.send_pkg_message_in_table('inferior exited')
+    self.current_table_id=None
+    self.current_values=None
+
   def gdbevt_stop(self,pkg):
     self.update_values()
   def gdbevt_new_objfile(self,pkg):
@@ -408,7 +411,7 @@ class CurrentThreads(ValuesExemplar,TablePackages):
     gnums.sort()
     for global_num in gnums:
       thread_info=threads_info[global_num]
-      row = self.new_threadrow(global_num,thread_info)
+      row = self.new_threadrow(thread_info)
       rows.append(row)
     return {'rows':rows}
 
@@ -427,7 +430,7 @@ class CurrentThreads(ValuesExemplar,TablePackages):
       thread_info = threads_info[global_num]
       if global_num not in self.saved_threads_info:
         #появился новый поток
-        row = self.new_threadrow(global_num,thread_info)
+        row = self.new_threadrow(thread_info)
         append_rows.append(row) #добавляем для него строку
       else:
         saved_thread_info = self.saved_threads_info[global_num]
@@ -462,8 +465,8 @@ class CurrentThreads(ValuesExemplar,TablePackages):
     node['id'] = getid(global_num)
     return node
 
-  def new_threadrow(self,global_num,thread_info):
-    gn=global_num
+  def new_threadrow(self,thread_info):
+    gn=thread_info['global_num']
     chunks=[
       self.get_node(gn,'global_num',thread_info),
       {'str':' LWP={tid} '.format(tid=thread_info['tid'])},
@@ -475,14 +478,8 @@ class CurrentThreads(ValuesExemplar,TablePackages):
       self.get_node(gn,'func_name',thread_info),
       self.get_node(gn,'func_args',thread_info)
     ]
-#    if len(func_args)==0:
-#      chunks.append({'src':'()'})
-#    else:
-#      chunks.append({'src':'(\n'})
-#      chunks.append(self.get_node(gn,'func_args',func_args))
-#      chunks.append({'src':')'})
     col={'chunks':chunks}
-    row={'columns':[col]}
+    row={'columns':[col],'id':self.id_threadrow(gn)}
     return row
 
 

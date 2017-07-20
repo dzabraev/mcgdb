@@ -78,6 +78,12 @@ int fac(int n) {
   return n*fac(n-1);
 }
 
+void *fac50(void *arg) {
+  sleep(5);
+  fac(50);
+  return NULL;
+}
+
 int main(void) {
   struct {
     const char *s;
@@ -101,8 +107,8 @@ int main(void) {
   incompl_union *iu;
   incompl_union **is2;
   incompl_union ******is6;
-  pthread_t tid;
-  pthread_create(&tid,0,f1,0);
+  pthread_t tid[2];
+  pthread_create(&tid[0],0,fac50,0);
   is6                   = (incompl_union ******)malloc(sizeof(void *));
   is6[0]                = (incompl_union *****)malloc(sizeof(void *));
   is6[0][0]             = (incompl_union ****)malloc(sizeof(void *));
@@ -130,8 +136,7 @@ int main(void) {
   const char * longstr = "123456789abcdef123456789abcdef";
   int x1=1,x2=2,x3=3,x4=4,x5=5,x6=6,x7=7,x888888888888888=8888;
   MyClass mycl;
-  pthread_t thread;
-  pthread_create(&thread,0,f1,0);
+  pthread_create(&tid[1],0,f1,0);
   x=f2(x);
   x=f3(x);
   x=f5(x);
@@ -140,5 +145,7 @@ int main(void) {
   printf("%p\n",iu);
   printf("%p\n",is2);
   printf("%p\n",is6);
+  void *retval;
+  pthread_join(tid[0],&retval);
   return x;
 }
