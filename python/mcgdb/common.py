@@ -34,6 +34,8 @@ LOG_FILENAME='/tmp/mcgdb.log'
 if 'DEBUG' in os.environ and os.path.exists(LOG_FILENAME):
   os.remove(LOG_FILENAME)
 
+WITH_VALGRIND = os.environ.get('VALGRIND')
+
 if 'debug' in os.environ or 'DEBUG' in os.environ:
   level = logging.INFO
   debug_messages=True

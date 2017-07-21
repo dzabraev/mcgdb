@@ -7,7 +7,7 @@ import gdb
 import mcgdb
 from mcgdb.common import  pkgsend,pkgrecv,gdb_print,exec_cmd_in_gdb,gdb_stopped,\
                           error,get_prompt,debug,is_main_thread,exec_main,\
-                          mcgdbBaseException, TABID_TMP, gdbprint
+                          mcgdbBaseException, TABID_TMP, gdbprint, WITH_VALGRIND
 
 
 class StorageId(object):
@@ -180,8 +180,10 @@ class BaseWin(CommunicationMixin,StorageId):
     if os.path.exists(os.path.abspath('~/tmp/mcgdb-debug/core')):
       os.remove(os.path.abspath('~/tmp/mcgdb-debug/core'))
     #self.gui_window_cmd='''gnome-terminal -e 'bash -c "cd ~/tmp/mcgdb-debug/; touch 1; ulimit -c unlimited; {cmd}"' '''
-    #self.gui_window_cmd='''gnome-terminal -e 'valgrind --log-file=/tmp/vlg.log {cmd}' '''
-    self.gui_window_cmd='''gnome-terminal -e '{cmd}' '''
+    if WITH_VALGRIND==self.type:
+      self.gui_window_cmd='''gnome-terminal -e 'valgrind --log-file=/tmp/vlg.log {cmd}' '''
+    else:
+      self.gui_window_cmd='''gnome-terminal -e '{cmd}' '''
     self.lsock=socket.socket()
     self.lsock.bind( ('',0) )
     self.lsock.listen(1)

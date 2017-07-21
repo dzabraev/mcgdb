@@ -74,10 +74,10 @@ static void         table_add_offset(Table *tab, int off);
 WTable  *           find_wtable (WDialog *h);
 
 static int
-print_chunks (GNode *chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table *tab, int * rowcnt, gboolean blank);
+print_chunks (GNode *chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table *tab, int * rowcnt, gboolean blank, int cell_offset);
 
 static int
-print_str_chunk (cell_data_t *chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table * tab, int * rowcnt, gboolean blank);
+print_str_chunk (cell_data_t *chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table * tab, int * rowcnt, gboolean blank, int cell_offset);
 
 static int
 get_chunk_horiz_shift(cell_data_t * chunk);
@@ -1089,7 +1089,7 @@ is_node_match_yx (GNode *node, int y, int x) {
 
 
 static GNode *
-get_moset_depth_node_with_yx (GNode *node, int y, int x) {
+get_most_depth_node_with_yx (GNode *node, int y, int x) {
   cell_data_t * data = CHUNK(node);
   if (is_node_match_yx (node,y,x)) {
     if (data->str) {
@@ -1098,7 +1098,7 @@ get_moset_depth_node_with_yx (GNode *node, int y, int x) {
     else {
       GNode *child = g_node_first_child (node);
       while (child) {
-        GNode *node1 = get_moset_depth_node_with_yx (child,y,x);
+        GNode *node1 = get_most_depth_node_with_yx (child,y,x);
         if (node1)
           return node1;
         child = g_node_next_sibling (child);
@@ -1119,7 +1119,7 @@ process_cell_tree_mouse_callbacks (Table *tab, GNode *root, int y, int x) {
   GNode * node;
   message_assert (tab!=NULL);
   message_assert (root!=NULL);
-  node = get_moset_depth_node_with_yx (root,y,x);
+  node = get_most_depth_node_with_yx (root,y,x);
   if (node==NULL)
     node=root;
   while (node) {
@@ -1198,7 +1198,7 @@ table_process_mouse_click(Table *tab, mouse_event_t * event) {
      return;
   }
   while(g_row) {
-    row = g_row->data;
+    row = TABROW(g_row);
     if (row->y1<=click_y && row->y2>=click_y) {
       break;
     }
@@ -1216,12 +1216,12 @@ table_process_mouse_click(Table *tab, mouse_event_t * event) {
    *`ncol` есть номер столбца таблицы по которому был сделан клик.
   */
   message_assert (ncol<tab->ncols);
-
+  row = TABROW(g_row);
   process_cell_tree_mouse_callbacks(
     tab,
-    TABROW(g_row)->columns[ncol],
+    row->columns[ncol],
     click_y,
-    click_x
+    click_x + row->offset[ncol] /*если пользователь промотал ячейку по горизонтали, то это надо учесть*/
   );
 
 }
@@ -1315,7 +1315,7 @@ insert_value_3(GArray *arr, int val, size_t *idx) {
 }
 
 static int
-print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int left_bound, int right_bound, Table * tab, int * rowcnt, gboolean blank) {
+print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int left_bound, int right_bound, Table * tab, int * rowcnt, gboolean blank, int cell_offset) {
   const char * p;
   int offset; //, offset_start;
   int colcnt=start_pos;
@@ -1333,17 +1333,15 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
   coord = chunk_data->coord;
   //if (blank && coord->len)
   //  g_array_remove_range (coord, 0, coord->len);
-  p = chunk_data->str;
-  if (!p)
-    p="???";
   offset=ROW_OFFSET(tab,rowcnt[0]);
   //offset_start = offset;
+  p = chunk_data->str;
   if (blank) {
     insert_value_3 (coord,offset,&coord_idx);
     insert_value_3 (coord,start_pos,&coord_idx);
   }
   if (!blank)
-    tty_gotoyx(offset,start_pos);
+    tty_gotoyx(offset,start_pos-cell_offset);
   for(;;) {
     if(colcnt>=x2 || newline) {
       /*допечатали до правой границы столбца таблицы
@@ -1354,7 +1352,7 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
       rowcnt[0]++;
       offset=ROW_OFFSET(tab,rowcnt[0]);
       if (!blank && offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab))
-        tty_gotoyx(offset,x1);
+        tty_gotoyx(offset,x1-cell_offset);
       colcnt=x1;
       if (blank) {
         insert_value_3 (coord,offset,&coord_idx);
@@ -1362,8 +1360,8 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
       }
     }
     else if (
-      in_printable_area(colcnt,left_bound,right_bound) &&
-      !in_printable_area(colcnt-1,left_bound,right_bound)
+      in_printable_area(colcnt-cell_offset,left_bound,right_bound) &&
+      !in_printable_area(colcnt-1-cell_offset,left_bound,right_bound)
     ) {
       /* если предыдущая итерация не печатала символ в таблицу,
        * поскольку не позволял row->offset[i], то теперь надо обновить
@@ -1388,18 +1386,18 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
       break;
     default:
       offset=ROW_OFFSET(tab,rowcnt[0]);
-      if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab) && in_printable_area(colcnt,left_bound,right_bound)) {
+      if (offset>=TAB_TOP(tab) && offset<=TAB_BOTTOM(tab) && in_printable_area(colcnt-cell_offset,left_bound,right_bound)) {
         if (!blank)
           cell_data_setcolor (chunk_data);
         p+=tty_print_utf8(p,blank);
       }
       else {
         tty_setalloc_color ("brown", "blue", NULL, FALSE);
-        if (!blank && colcnt>=right_bound) {
+        if (!blank && colcnt-cell_offset>=right_bound) {
           tty_gotoyx(offset,right_bound);
           tty_print_char('>'); /*print on widget frame*/
         }
-        else if(!blank && colcnt<left_bound) {
+        else if(!blank && colcnt-cell_offset<left_bound) {
           tty_gotoyx(offset,left_bound-1);
           tty_print_char('<'); /*print on widget frame*/
         }
@@ -1435,11 +1433,11 @@ get_chunk_horiz_shift(cell_data_t * chunk_data) {
 }
 
 static int
-print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table *tab, int * rowcnt, gboolean blank) {
+print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int right_bound, Table *tab, int * rowcnt, gboolean blank, int cell_offset) {
   message_assert (tab!=NULL);
   message_assert (CHUNK(chunk)!=NULL);
   if (CHUNK(chunk)->str) {
-    return print_str_chunk (CHUNK(chunk),x1,x2,start_pos,left_bound,right_bound,tab,rowcnt, blank);
+    return print_str_chunk (CHUNK(chunk),x1,x2,start_pos,left_bound,right_bound,tab,rowcnt, blank, cell_offset);
   }
   else {
     type_code_t type_code = CHUNK(chunk)->type_code;
@@ -1465,7 +1463,7 @@ print_chunks(GNode * chunk, int x1, int x2, int start_pos, int left_bound, int r
     */
     start_pos_1 = (type_code == TYPE_CODE_STRUCT || type_code == TYPE_CODE_ARRAY || type_code == TYPE_CODE_UNION) ? (x1+horiz_shift) : (start_pos);
     while (child) {
-      start_pos_1 = print_chunks (child,x1+horiz_shift,x2+horiz_shift,start_pos_1,left_bound,right_bound,tab,rowcnt,blank);
+      start_pos_1 = print_chunks (child,x1+horiz_shift,x2+horiz_shift,start_pos_1,left_bound,right_bound,tab,rowcnt,blank, cell_offset);
       child = g_node_next_sibling (child);
     }
     offset=ROW_OFFSET(tab,rowcnt[0]);
@@ -1516,13 +1514,13 @@ table_draw_row (Table * tab, table_row *row, gboolean blank) {
       tty_gotoyx(offset,x1);
     print_chunks (
       column,
-      x1 - (row->offset[i]), /*координата самого левого символа ячейки таблицы*/
-      x2 - (row->offset[i]), /*до этой координаты будет печататься столбец*/
-      x1 - (row->offset[i]), /*позиция, с которой будет печататься первый chunk*/
+      x1, /*координата самого левого символа ячейки таблицы*/
+      x2, /*до этой координаты будет печататься столбец*/
+      x1, /*позиция, с которой будет печататься первый chunk*/
       x1, /*ограничитель на печать слева*/
       x2, /*ограничитель на печать справа*/
       tab,
-      &rowcnt,blank);
+      &rowcnt,blank,row->offset[i]);
     rowcnt++;
     if(rowcnt>max_rowcnt)
       max_rowcnt=rowcnt;
@@ -2074,14 +2072,15 @@ table_process_mouse_up(Table *tab, mouse_event_t * event) {
 
 static void
 table_process_mouse_drag(Table *tab, mouse_event_t * event) {
-  int L,ncol;
+  int L,ncol, cellwidth;
   table_row *tr = tab->active_row;
   if (!tr)
     return;
   ncol = tab->active_col;
   tr->offset[ncol] += tab->mouse_down_x - event->x;
   tr->offset[ncol] = MAX (tr->offset[ncol],0);
-  L = MAX((tr->xr[ncol] - tr->xl[ncol]) - (tab->colstart[ncol+1]-tab->colstart[ncol]),0);
+  cellwidth = (tr->xr[ncol] - tr->xl[ncol]);
+  L = MAX( cellwidth - (tab->colstart[ncol+1]-tab->colstart[ncol]),0);
   tr->offset[ncol] = MIN (tr->offset[ncol],L);
   tab->mouse_down_x = event->x;
   tab->redraw |= REDRAW_TAB;
@@ -2323,6 +2322,30 @@ charlength_utf8(const char *str) {
     return 1;
   return g_utf8_next_char (str) - str;
 }
+
+
+void
+debug_find_nodes_with_text_1(GNode *root, const char *text, GList **found) {
+  GNode *child;
+  const char *str = CHUNK(root)->str;
+  if (str && strstr(str,text))
+    found[0] = g_list_append(found[0],root);
+  child = g_node_first_child (root);
+  while (child) {
+    debug_find_nodes_with_text_1 (child,text,found);
+    child = g_node_next_sibling(child);
+  }
+}
+
+
+GList *
+debug_find_nodes_with_text(GNode *root, const char *text) {
+  GList *found = NULL;
+  debug_find_nodes_with_text_1 (root,text,&found);
+  return found;
+}
+
+
 
 
 

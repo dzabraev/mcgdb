@@ -31,4 +31,20 @@ Traceback (most recent call last):
               File "/home/dza/sources/obj-mcgdb/python/mcgdb/common.py", line 786, in __call__
                   assert 'gdbevt' not in pkg or pkg['gdbevt'] not in ('exited','stop')
                   AssertionError
-                  
+
+
+
+
+2. При переключении фрейма мышкой генерируется mcgdbevt. Этот евент доставляется отправителю.
+Либо отпр. этот евент доставляться не должен, либо его надо игнорировать.
+
+3. Firefox48 если запустить firefox --no-remote. Откроется окно с выобором профиля.
+/home/dza/source/firefox-48.0/embedding/components/windowwatcher/nsWindowWatcher.cpp:372
+nsWindowWatcher::OpenWindow
+Если сделать Expand
+nsCOMPtr<nsIArray> argv = {<Expand>}
+То GDB ловит ошибку
+(gdb) ../../gdb-7.12.1/gdb/dwarf2loc.c:1705: internal-error: Should not be able to create a lazy value with an enclosing type
+A problem internal to GDB has been detected,
+further debugging may prove unreliable.
+Quit this debugging session? (y or n)

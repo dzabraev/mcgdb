@@ -53,7 +53,7 @@ typedef enum table_redraw {
 typedef struct {
   //char **columns;
   GNode **columns;
-  int *offset;
+  int *offset; /*сдвиг ячеек строки по горизонтали. Если ячейка не помещается, то ее можно подвигать.*/
   long ncols;
   long y1;
   long y2;
