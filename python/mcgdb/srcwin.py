@@ -7,7 +7,7 @@ TMP_FILE_NAME="/tmp/mcgdb/mcgdb-tmp-file-{pid}.txt".format(pid=os.getpid())
 
 from mcgdb.basewin import BaseWin
 from mcgdb.common import breakpoint_queue
-from mcgdb.common import gdb_print, exec_main
+from mcgdb.common import gdb_print, exec_main, gdbprint
 
 class SrcWin(BaseWin):
 

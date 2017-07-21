@@ -7,7 +7,7 @@ import gdb
 import mcgdb
 from mcgdb.common import  pkgsend,pkgrecv,gdb_print,exec_cmd_in_gdb,gdb_stopped,\
                           error,get_prompt,debug,is_main_thread,exec_main,\
-                          mcgdbBaseException, TABID_TMP
+                          mcgdbBaseException, TABID_TMP, gdbprint
 
 
 class StorageId(object):

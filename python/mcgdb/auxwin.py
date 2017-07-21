@@ -581,10 +581,11 @@ class ThreadsTable(SubentityUpdate):
 
   @exec_main
   def onclick_select_thread(self,pkg):
-    res=self.current_values.select_thread(int(pkg['global_num']))
-    if res!=None:
-      self.send(res)
-    return [{'cmd':'mcgdbevt','mcgdbevt':'thread', 'data':{}}]
+    if self.current_values and inferior_alive():
+      res=self.current_values.select_thread(int(pkg['global_num']))
+      if res!=None:
+        self.send(res)
+      return [{'cmd':'mcgdbevt','mcgdbevt':'thread', 'data':{}}]
 
 
 
