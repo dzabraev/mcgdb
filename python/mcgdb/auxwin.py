@@ -217,9 +217,18 @@ class CurrentBacktrace(ValuesExemplar,TablePackages):
     self.value_transform={
       'func_args'   : lambda th : frame_func_args(th['func_args']),
       'func_name'   : lambda th : {'str':th['func_name'], 'name':'frame_func_name'},
-      'nframe'      : lambda th : {'str':'#{}'.format(th['nframe']),'selected':th['selected']},
+      'nframe'      : self.printer_nframe,
     }
     self.selected_nframe=None
+
+  def printer_nframe(self,info,add_selected_force=False):
+    node={'str':'#{}'.format(info['nframe'])}
+    if info['selected']:
+      node['selected']=True
+      node['visible']=True
+    if add_selected_force:
+      node['selected'] = info['selected']
+    return node
 
   def get_table(self):
     #return self.one_row_one_cell(msg='Not available')
@@ -264,11 +273,11 @@ class CurrentBacktrace(ValuesExemplar,TablePackages):
   def id_func_args(self,nframe):
     return self.id_per_row*(nframe+1)+2
 
-  def get_node(self,target,info):
+  def get_node(self,target,info,**kwargs):
     ''' Возвращает узел дерева типа target, с содержимым value'''
     getid=getattr(self,'id_{}'.format(target),None)
     if target in self.value_transform:
-      value = self.value_transform[target](info)
+      value = self.value_transform[target](info,**kwargs)
     else:
       value = info[target]
     if type(value) in (dict,):
@@ -318,7 +327,7 @@ class CurrentBacktrace(ValuesExemplar,TablePackages):
       if new[target]!=old[target]:
         upd.append(self.get_node(target,new))
     if new['selected']!=old['selected']:
-      upd.append(self.get_node('nframe',new))
+      upd.append(self.get_node('nframe',new,add_selected_force=True))
     return upd
 
 
@@ -344,17 +353,16 @@ class CurrentBacktrace(ValuesExemplar,TablePackages):
           pkgs.append(self.pkg_unselect_frame(self.selected_nframe))
         pkgs.append(self.pkg_select_frame(nframe))
         self.selected_nframe = nframe
-        gdbprint(pkgs)
         if pkgs:
           return self.pkg_transaction(pkgs)
         else:
           return
-      self.selected_nframe = nframe
       frame = frame.older()
       idx+=1
     self.send_error("can't find selected frame")
     #It seems that in gui window show old frame data, because user select unexisted thread.
     #Update this.
+    self.selected_nframe=None
     return self.need_update()
 
 
@@ -367,7 +375,10 @@ class BacktraceTable(SubentityUpdate):
     addrs=[]
     frame = gdb.newest_frame()
     while frame:
-      _,start,stop = frame_func_addr (frame)
+      try:
+        _,start,stop = frame_func_addr(frame)
+      except gdb.error:
+        start,stop = None,None
       addrs.append((start,stop))
       frame = frame.older()
     global_num = gdb.selected_thread().global_num
