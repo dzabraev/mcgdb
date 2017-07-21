@@ -992,14 +992,14 @@ class FrameFuncAddr(object):
       else:
         start_addr,end_addr = None,None
       return (frame.name(),start_addr,end_addr)
-    except RuntimeError:
+    except (RuntimeError,gdb.error):
       #for ex., if current frame corresponding
       #to malloc function, then selected_frame().block()
       #throw RuntimeError
       pc=frame.pc()
       res=gdb.execute('maintenance translate-address {addr}'.format(addr=pc),False,True)
       name = res.split()[0] #function name
-      res=gdb.execute('disas',False,True)
+      res=gdb.execute('disas {pc}'.format(pc=pc),False,True)
       lines=res.split('\n')
       first=lines[1]
       last=lines[-3]
