@@ -11,9 +11,9 @@ from mcgdb.basewin import BaseWin, StorageId, CommunicationMixin, TablePackages
 from mcgdb.valuetochunks import check_chunks, ValueToChunks, get_frame_funcname, \
                                 get_frame_fileline, get_frame_func_args, frame_func_args
 
-from mcgdb.common  import exec_main, valcache, INDEX, INDEX_tmp, \
+from mcgdb.common  import exec_main, valcache, INDEX, INDEX_tmp, gdbprint, \
                     get_this_thread_num, mcgdbBaseException, mcgdbChangevarErr, \
-                    gdb_stopped,inferior_alive,gdb_print, TABID_TMP
+                    gdb_stopped,inferior_alive,gdb_print, TABID_TMP, frame_func_addr
 
 
 
@@ -77,6 +77,17 @@ class SubentityUpdate(BaseSubentity,StorageId,TablePackages):
   @abstractproperty
   def subentity_name(self):raise NotImplementedError
 
+  @staticmethod
+  def check_inferior_alive(f):
+    def decorated(self,*args,**kwargs):
+      if not inferior_alive():
+        self.send_pkg_message_in_table('Inferior not alive')
+        self.current_table_id=None
+        self.current_values=None
+        return
+      return f(self,*args,**kwargs)
+    return decorated
+
   def get_values_class(self):
     return self.values_class
 
@@ -85,6 +96,11 @@ class SubentityUpdate(BaseSubentity,StorageId,TablePackages):
 
   @exec_main
   def update_values(self):
+    if not inferior_alive():
+      self.send_pkg_message_in_table('Inferior not alive')
+      self.current_table_id=None
+      self.current_values=None
+      return
     try:
       key = self.get_key()
     except (gdb.error,RuntimeError):
@@ -158,24 +174,25 @@ class SubentityUpdate(BaseSubentity,StorageId,TablePackages):
 class OnclickVariables(TablePackages,CommunicationMixin):
   ''' Abstract class'''
   __metaclass__ = ABCMeta
+
   @abstractproperty
   def subentity_name(self): raise NotImplementedError
 
-  @exec_main
+  @SubentityUpdate.check_inferior_alive
   def onclick_expand_variable(self,pkg):
     if hasattr(self.current_values,'onclick_expand_variable'):
       need_update=self.current_values.onclick_expand_variable(pkg)
       if need_update:
         self.send(self.pkg_update_nodes(need_update))
 
-  @exec_main
+  @SubentityUpdate.check_inferior_alive
   def onclick_collapse_variable(self,pkg):
     if hasattr(self.current_values,'onclick_collapse_variable'):
       need_update=self.current_values.onclick_collapse_variable(pkg)
       if need_update:
         self.send(self.pkg_update_nodes(need_update))
 
-  @exec_main
+  @SubentityUpdate.check_inferior_alive
   def onclick_change_slice(self,pkg):
     if hasattr(self.current_values,'onclick_change_slice'):
       need_update=self.current_values.onclick_change_slice(pkg)
@@ -183,7 +200,7 @@ class OnclickVariables(TablePackages,CommunicationMixin):
         self.send(self.pkg_update_nodes(need_update))
 
 
-  @exec_main
+  @SubentityUpdate.check_inferior_alive
   def onclick_change_variable(self,pkg):
     try:
       if hasattr(self.current_values,'onclick_change_variable'):
@@ -195,136 +212,175 @@ class OnclickVariables(TablePackages,CommunicationMixin):
       self.send(self.pkg_update_nodes(need_update))
 
 class CurrentBacktrace(ValuesExemplar,TablePackages):
+  def __init__(self,*args,**kwargs):
+    super(CurrentBacktrace,self).__init__(*args,**kwargs)
+    self.value_transform={
+      'func_args'   : lambda th : frame_func_args(th['func_args']),
+      'func_name'   : lambda th : {'str':th['func_name'], 'name':'frame_func_name'},
+      'nframe'      : lambda th : {'str':'#{}'.format(th['nframe']),'selected':th['selected']},
+    }
+    self.selected_nframe=None
+
   def get_table(self):
-    return self.one_row_one_cell(msg='Not available')
+    #return self.one_row_one_cell(msg='Not available')
+    frames_info = self.get_frames_info()
+    rows=[]
+    for frame_info in frames_info:
+      rows.append(self.new_framerow(frame_info))
+    self.saved_frames_info = frames_info
+    return {'rows':rows}
+
+  def get_frames_info(self):
+    frames_info=[]
+    selected_frame = gdb.selected_frame()
+    frame = gdb.newest_frame()
+    nframe=0
+    while frame:
+      func_name = get_frame_funcname(frame)
+      file_name,file_line = get_frame_fileline(frame)
+      func_args = get_frame_func_args(frame)
+      selected = (frame==selected_frame)
+      if selected:
+        self.selected_nframe = nframe
+      frames_info.append({
+        'nframe'    : nframe,
+        'selected'  : selected,
+        'func_name' : func_name,
+        'file_name' : file_name,
+        'file_line' : file_line,
+        'func_args' : func_args,
+      })
+      frame = frame.older()
+      nframe+=1
+    return frames_info
+
+  id_per_row = 3
+  def id_nframe(self,nframe):
+    return self.id_per_row*(nframe+1)+0
+
+  def id_file_line(self,nframe):
+    return self.id_per_row*(nframe+1)+1
+
+  def id_func_args(self,nframe):
+    return self.id_per_row*(nframe+1)+2
+
+  def get_node(self,target,info):
+    ''' Возвращает узел дерева типа target, с содержимым value'''
+    getid=getattr(self,'id_{}'.format(target),None)
+    if target in self.value_transform:
+      value = self.value_transform[target](info)
+    else:
+      value = info[target]
+    if type(value) in (dict,):
+      #this is already node
+      node = value
+    else:
+      node = {'str':unicode(value)}
+    if getid:
+      node['id'] = getid(info['nframe'])
+    return node
+
+
+  def new_framerow(self,frame_info):
+    nframe=frame_info['nframe']
+    chunks=[
+      self.get_node('nframe',   frame_info),
+      {'str':' '},
+      self.get_node('file_name',frame_info),
+      {'str':':'},
+      self.get_node('file_line',frame_info),
+      {'str':' '},
+      self.get_node('func_name',frame_info),
+      self.get_node('func_args',frame_info)
+    ]
+    onclick_data = {
+      'cmd':'onclick',
+      'onclick':'select_frame',
+      'nframe' : nframe,
+    }
+    col={'chunks':chunks,'onclick_data':onclick_data}
+    row={'columns':[col]}
+    return row
+
+
   def need_update(self):
-    return []
+    frames_info = self.get_frames_info()
+    assert len(frames_info)==len(self.saved_frames_info)
+    nodesdata=[]
+    for new,old in zip(frames_info,self.saved_frames_info):
+      nodesdata+=self.compare_infos(new,old)
+    self.saved_frames_info = frames_info
+    return [self.pkg_update_nodes(nodesdata)]
+
+  def compare_infos(self,new,old):
+    upd=[]
+    for target in ['file_line','func_args']:
+      if new[target]!=old[target]:
+        upd.append(self.get_node(target,new))
+    if new['selected']!=old['selected']:
+      upd.append(self.get_node('nframe',new))
+    return upd
+
+
+  def pkg_select_frame(self,nframe):
+    return self.pkg_select_node(id=self.id_nframe(nframe),selected=True,visible=True)
+
+
+  def pkg_unselect_frame(self,nframe):
+    return self.pkg_select_node(id=self.id_nframe(nframe),selected=False)
+
+
+  def select_frame(self,nframe):
+    if self.selected_nframe == nframe:
+      return
+    frame = gdb.newest_frame()
+    idx=0
+    while frame:
+      if idx==nframe:
+        #found desired frame
+        frame.select()
+        pkgs=[]
+        if self.selected_nframe!=None:
+          pkgs.append(self.pkg_unselect_frame(self.selected_nframe))
+        pkgs.append(self.pkg_select_frame(nframe))
+        self.selected_nframe = nframe
+        gdbprint(pkgs)
+        if pkgs:
+          return self.pkg_transaction(pkgs)
+        else:
+          return
+      self.selected_nframe = nframe
+      frame = frame.older()
+      idx+=1
+    self.send_error("can't find selected frame")
+    #It seems that in gui window show old frame data, because user select unexisted thread.
+    #Update this.
+    return self.need_update()
+
+
 
 class BacktraceTable(SubentityUpdate):
   subentity_name='backtrace'
   values_class=CurrentBacktrace
 
   def get_key(self):
-    return 1
-
-class BacktraceTable1(BaseSubentity,ValueToChunks):
-  subentity_name='backtrace'
-
-  def __init__(self,**kwargs):
-    super(BacktraceTable1,self).__init__(**kwargs)
-
-  def process_connection(self):
-    return self.update_backtrace()
-
-  @exec_main
-  def _select_frame_1(self,nframe):
-    if not gdb_stopped():
-      self.send_error('inferior running')
-      return
-    if not inferior_alive ():
-      self.send_error('inferior not alive')
-      return
-    n_cur_frame=0
-    frame = gdb.newest_frame ()
+    addrs=[]
+    frame = gdb.newest_frame()
     while frame:
-      if n_cur_frame==nframe:
-        frame.select()
-        return
-      n_cur_frame+=1
+      _,start,stop = frame_func_addr (frame)
+      addrs.append((start,stop))
       frame = frame.older()
-    self.send_error("can't find frame #{}".format(nframe))
-    return
+    global_num = gdb.selected_thread().global_num
+    return (global_num,tuple(addrs))
 
+  @SubentityUpdate.check_inferior_alive
   def onclick_select_frame(self,pkg):
-    nframe = pkg['nframe']
-    self._select_frame_1(nframe)
-    return [{'cmd':'mcgdbevt','mcgdbevt':'frame', 'data':{}}]
+    if self.current_values:
+      res=self.current_values.select_frame(int(pkg['nframe']))
+      if res!=None:
+        self.send(res)
+        return [{'cmd':'mcgdbevt','mcgdbevt':'frame', 'data':{}}]
 
-
-  @exec_main
-  def get_stack(self):
-    frame = gdb.newest_frame ()
-    nframe=0
-    frames=[]
-    selected_row=None
-    while frame:
-      col={}
-      framenumber = {'str':'#{}'.format(str(nframe)),'name':'frame_num'}
-      if frame == gdb.selected_frame ():
-        framenumber['selected']=True
-        selected_row=nframe
-      col['onclick_data']={
-          'cmd':'onclick',
-          'onclick':'select_frame',
-          'nframe' : nframe,
-        }
-      chunks = [
-        framenumber,
-        {'str':'  '},
-      ] + self.get_frame_fileline(frame) + \
-      [
-        {'str':'\n'},
-      ] + self.get_frame_funcname_with_args(frame)
-      col['chunks']=chunks
-      row = {'columns' : [col], 'nframe':nframe}
-      frames.append(row)
-      nframe+=1
-      frame = frame.older()
-    table={
-      'rows':frames,
-    }
-    if selected_row!=None:
-      table['selected_row'] = selected_row
-    return table
-
-  def update_backtrace(self):
-    try:
-      backtrace = self.get_stack()
-    except gdb.error:
-      return
-    pkg={
-      'cmd':'exemplar_create',
-      'table_name':'backtrace',
-      'table':backtrace,
-      'id':1024,
-      'set':True
-    }
-    self.send(pkg)
-
-
-
-  def gdbevt_exited(self,pkg):
-    self.clear_table()
-
-  def gdbevt_stop(self,pkg):
-    self.update_backtrace()
-
-  def gdbevt_new_objfile(self,pkg):
-    self.update_backtrace()
-
-  def gdbevt_clear_objfiles(self,pkg):
-    self.update_backtrace()
-
-  def gdbevt_memory_changed(self,pkg):
-    self.update_backtrace()
-
-  def gdbevt_register_changed(self,pkg):
-    self.update_backtrace()
-
-  def shellcmd_up(self,pkg):
-    self.update_backtrace()
-
-  def shellcmd_down(self,pkg):
-    self.update_backtrace()
-
-  def shellcmd_thread(self,pkg):
-    self.update_backtrace()
-
-  def mcgdbevt_frame(self,pkg):
-    self.update_backtrace()
-
-  def mcgdbevt_thread(self,pkg):
-    self.update_backtrace()
 
 
 class ThreadRegs(ValuesExemplar,ValueToChunks, TablePackages):
@@ -505,12 +561,14 @@ class CurrentThreads(ValuesExemplar,TablePackages):
       if thread.global_num==global_num:
         thread.switch()
         pkgs=[
-          self.pkg_select_thread(self.selected_global_num),
-          self.pkg_unselect_thread(global_num),
+          self.pkg_unselect_thread(self.selected_global_num),
+          self.pkg_select_thread(global_num),
         ]
         self.selected_global_num = global_num
         return self.pkg_transaction(pkgs)
     self.send_error("can't find selected thread")
+    #It seems that in gui window show old thread data, because user select unexisted thread.
+    #Update this.
     return self.need_update()
 
   id_per_row = 7

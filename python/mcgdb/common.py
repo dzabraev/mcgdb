@@ -65,6 +65,7 @@ def exec_main(f):
     return exec_in_main_pythread (f,args,kwargs)
   return decorated
 
+
 @exec_main
 def if_gdbstopped_else(stopped=None,running=None):
   flag,cb = (True,stopped) if gdb_stopped() else (False,running)
@@ -956,3 +957,57 @@ class McgdbMain(object):
   def set_color_bp_wait_insert(self,text_color,background_color,attr):
     self.__send_color ('color_bp_wait_insert',text_color,background_color,attr)
 
+
+
+class FrameFuncAddr(object):
+  @exec_main
+  def __init__(self,*args,**kwargs):
+    super(FrameFuncAddr,self).__init__(*args,**kwargs)
+    self.reg_disas_line_addr = re.compile('(=>)?\s+(0x[0-9a-fA-F]+)')
+
+  @exec_main
+  def get_function_block(self,frame):
+    block=frame.block()
+    while block:
+      if block.function:
+        return block
+      block=block.superblock
+
+  @exec_main
+  def get_selected_frame_func(self):
+    try:
+      frame = gdb.selected_frame ()
+    except gdb.error:
+      return None,None,None
+    if not frame:
+      return None,None,None
+    return self.get_frame_func(frame)
+
+  @exec_main
+  def get_frame_func(self,frame):
+    try:
+      block = self.get_function_block(frame)
+      if block:
+        start_addr,end_addr = block.start,block.end
+      else:
+        start_addr,end_addr = None,None
+      return (frame.name(),start_addr,end_addr)
+    except RuntimeError:
+      #for ex., if current frame corresponding
+      #to malloc function, then selected_frame().block()
+      #throw RuntimeError
+      pc=frame.pc()
+      res=gdb.execute('maintenance translate-address {addr}'.format(addr=pc),False,True)
+      name = res.split()[0] #function name
+      res=gdb.execute('disas',False,True)
+      lines=res.split('\n')
+      first=lines[1]
+      last=lines[-3]
+      start_addr = long(self.reg_disas_line_addr.search(first).groups()[1],0)
+      end_addr = long(self.reg_disas_line_addr.search(last).groups()[1],0)
+      return name,start_addr,end_addr
+
+  def __call__(self,frame):
+    return self.get_frame_func(frame)
+
+frame_func_addr=FrameFuncAddr()

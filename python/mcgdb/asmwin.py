@@ -3,65 +3,21 @@
 import gdb
 
 import mcgdb.basewin
-from mcgdb.common import exec_main, gdb_print, INDEX, TABID_TMP, FrmaeNotSelected, gdbprint
+from mcgdb.common import exec_main, gdb_print, INDEX, TABID_TMP, FrmaeNotSelected, gdbprint, frame_func_addr
 from mcgdb.basewin import BaseWin, TablePackages
 from mcgdb.valuetochunks import ValueToChunks
 from mcgdb.auxwin import ValuesExemplar, SubentityUpdate
 
 import re
 
-class AsmCommon(object):
-  @exec_main
-  def __init__(self,*args,**kwargs):
-    super(AsmCommon,self).__init__(*args,**kwargs)
-    self.reg_disas_line_addr = re.compile('(=>)?\s+(0x[0-9a-fA-F]+)')
-    self.selected_asm_op_id=None
-
-  @exec_main
-  def get_function_block(self,frame):
-    block=frame.block()
-    while block:
-      if block.function:
-        return block
-      block=block.superblock
-
-
-  @exec_main
-  def get_selected_frame_func(self):
-    try:
-      frame = gdb.selected_frame ()
-    except gdb.error:
-      return None,None,None
-    if not frame:
-      return None,None,None
-    try:
-      block = self.get_function_block(frame)
-      if block:
-        start_addr,end_addr = block.start,block.end
-      else:
-        start_addr,end_addr = None,None
-      return (frame.name(),start_addr,end_addr)
-    except RuntimeError:
-      #for ex., if current frame corresponding
-      #to malloc function, then selected_frame().block()
-      #throw RuntimeError
-      pc=frame.pc()
-      res=gdb.execute('maintenance translate-address {addr}'.format(addr=pc),False,True)
-      name = res.split()[0] #function name
-      res=gdb.execute('disas',False,True)
-      lines=res.split('\n')
-      first=lines[1]
-      last=lines[-3]
-      start_addr = long(self.reg_disas_line_addr.search(first).groups()[1],0)
-      end_addr = long(self.reg_disas_line_addr.search(last).groups()[1],0)
-      return name,start_addr,end_addr
 
 
 
-class CurrentAsm(ValuesExemplar,AsmCommon,ValueToChunks,TablePackages):
+class CurrentAsm(ValuesExemplar,ValueToChunks,TablePackages):
   def __init__(self,*args,**kwargs):
     super(CurrentAsm,self).__init__(*args,**kwargs)
     self.addr_to_row={}
+    self.selected_asm_op_id=None
 
   def get_table(self):
     try:
@@ -72,12 +28,11 @@ class CurrentAsm(ValuesExemplar,AsmCommon,ValueToChunks,TablePackages):
   def need_update(self):
     return self.pkgs_update_asm_op()
 
-  @exec_main
   def asm_to_chunks(self):
     frame = gdb.selected_frame()
     if frame==None:
       raise FrmaeNotSelected
-    _,start_addr,end_addr = self.get_selected_frame_func()
+    _,start_addr,end_addr = frame_func_addr(frame)
     assert start_addr!=None
     assert end_addr!=None
     arch = frame.architecture()
@@ -142,13 +97,13 @@ class CurrentAsm(ValuesExemplar,AsmCommon,ValueToChunks,TablePackages):
     return pkgs
 
 
-class AsmTable(SubentityUpdate,AsmCommon):
+class AsmTable(SubentityUpdate):
   subentity_name='asm'
   values_class = CurrentAsm
 
-  @exec_main
   def get_key(self):
-    _,start_addr,end_addr = self.get_selected_frame_func()
+    frame = gdb.selected_frame()
+    _,start_addr,end_addr = frame_func_addr(frame)
     return (start_addr,end_addr)
 
 
