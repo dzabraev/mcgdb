@@ -3,48 +3,19 @@
 import gdb
 
 import mcgdb.basewin
-from mcgdb.common import exec_main, gdb_print, INDEX, TABID_TMP
+from mcgdb.common import exec_main, gdb_print, INDEX, TABID_TMP, FrmaeNotSelected, gdbprint
 from mcgdb.basewin import BaseWin, TablePackages
 from mcgdb.valuetochunks import ValueToChunks
-
+from mcgdb.auxwin import ValuesExemplar, SubentityUpdate
 
 import re
 
-class AsmWin(BaseWin,ValueToChunks,TablePackages):
-  '''Окно для отображение ассемблерного кода.
-  '''
-
-  type='asmwin'
-  startcmd='mcgdb open asm'
-  subentity_cls=[]
-  subentity_name='asm'
-
+class AsmCommon(object):
   @exec_main
-  def __init__(self,**kwargs):
-    super(AsmWin,self).__init__(subentity_name=None,**kwargs)
-    self.location=kwargs.get('location') #display only this function.
-    self.start_addr=None
-    self.end_addr=None
-    self.pc=None
-    self.selected_asm_op_id=None
-    self.current_display_blocks=None
-    self.need_redisplay_asm=True
+  def __init__(self,*args,**kwargs):
+    super(AsmCommon,self).__init__(*args,**kwargs)
     self.reg_disas_line_addr = re.compile('(=>)?\s+(0x[0-9a-fA-F]+)')
-    self.reg_find_addr = re.compile('\s0x[0-9a-fA-F]+\s')
-    self.addr_to_row=None
-    self.cur_displayed_succ = False #данный флаг имеет значение True тогда и только тогда,
-    #когда asm для текущей позиции исполнения был успешно отправлен на отрисовку. Данный флаг
-    #используется для определения того, нужно ли уставить/убирать текущую позицию исполнения
-    #в граф. окне.
-
-  def onclick_breakpoint(self,pkg): pass
-
-  @exec_main
-  def get_selected_frame_pc(self):
-    frame = gdb.selected_frame ()
-    if not frame:
-      return None
-    return frame.pc()
+    self.selected_asm_op_id=None
 
   @exec_main
   def get_function_block(self,frame):
@@ -53,6 +24,7 @@ class AsmWin(BaseWin,ValueToChunks,TablePackages):
       if block.function:
         return block
       block=block.superblock
+
 
   @exec_main
   def get_selected_frame_func(self):
@@ -84,50 +56,35 @@ class AsmWin(BaseWin,ValueToChunks,TablePackages):
       end_addr = long(self.reg_disas_line_addr.search(last).groups()[1],0)
       return name,start_addr,end_addr
 
-  @exec_main
-  def get_func_addr_by_location(self,location):
+
+
+class CurrentAsm(ValuesExemplar,AsmCommon,ValueToChunks,TablePackages):
+  def __init__(self,*args,**kwargs):
+    super(CurrentAsm,self).__init__(*args,**kwargs)
+    self.addr_to_row={}
+
+  def get_table(self):
     try:
-      dl=gdb.decode_line(self.location)
-    except gdb.error as err:
-      return (None,None)
-    if dl[0]!=None:
-      return (None,None)
-    sal=dl[1][0]
-    start_addr,end_addr = sal.pc,sal.last
-    return start_addr,end_addr
+      return self.asm_to_chunks()
+    except FrmaeNotSelected:
+      return self.one_row_one_cell('No frame selected')
 
-
-  def process_connection(self):
-    rc=super(AsmWin,self).process_connection()
-    if rc:
-      self.update_asm_code()
-    return rc
+  def need_update(self):
+    return self.pkgs_update_asm_op()
 
   @exec_main
   def asm_to_chunks(self):
-    if self.location:
-      #try:
-      #  dl=gdb.decode_line(self.location)
-      #except gdb.error as err:
-      #  return self.text_chunk(str(err))
-      #if dl[0]!=None:
-      #  return self.text_chunk(dl[0])
-      #sal=dl[1][0]
-      #start_addr,end_addr = sal.pc,sal.last
-      pass
-    else:
-      _,start_addr,end_addr = self.get_selected_frame_func()
-    assert start_addr!=None
-    assert end_addr!=None
     frame = gdb.selected_frame()
     if frame==None:
-      return self.text_chunk('you must select thread')
+      raise FrmaeNotSelected
+    _,start_addr,end_addr = self.get_selected_frame_func()
+    assert start_addr!=None
+    assert end_addr!=None
     arch = frame.architecture()
     disas = arch.disassemble(start_addr,end_addr)
     rows=[]
     pc=frame.pc()
     selected_row=None
-    self.addr_to_row={}
     for idx,row in enumerate(disas):
       asm=row['asm'].split()
       cmd=asm[0]
@@ -142,86 +99,18 @@ class AsmWin(BaseWin,ValueToChunks,TablePackages):
       self.addr_to_row[addr]=idx
       cols={'columns':[
         {'chunks':[
-          self.text_chunk('0x{:016x}'.format(addr)),
-          self.text_chunk(spaces),
+          self.text_chunk('0x{addr:016x}{spaces}'.format(addr=addr,spaces=spaces)),
           self.text_chunk(cmd,name='asm_op', **kw),
-          self.text_chunk('  '),
-          self.text_chunk(code),
+          self.text_chunk('  {}'.format(code)),
         ]},
       ]}
       rows.append(cols)
-    return rows,selected_row
+    return {'rows':rows, 'draw_vline':False, 'draw_hline':False}
 
-  @exec_main
-  def update_asm_code(self):
-    pkgs=[]
-    try:
-      funcname,start_addr,end_addr = self.get_selected_frame_func()
-    except gdb.error as e:
-      pkgs.append(self.pkg_unselect_asm_op())
-      pkgs.append(self.pkg_message_in_table(unicode(e)))
-      self.cur_displayed_succ=False
-      self.start_addr=None
-      self.end_addr=None
-      self.send_pkg_transaction(pkgs)
-      return
-    try:
-      frame=gdb.selected_frame()
-    except gdb.error:
-      frame=None
-    need_update_current_op=frame and self.pc!=frame.pc()
-    if self.location:
-      need_update_asm_code=self.need_redisplay_asm
-    else:
-      need_update_asm_code=self.need_redisplay_asm or self.start_addr!=start_addr or self.end_addr!=end_addr
-    if need_update_asm_code:
-      self.need_redisplay_asm=False
-      selected_row=None
-      id,data=self.id_get((start_addr,end_addr))
-      if id==None:
-        self.cur_displayed_succ=False
-        pkgs.append(self.pkg_unselect_asm_op()) #убираем красную линию
-        #текущая функция ранее не отрисовывалась. Необходимо создать новый экземпляр таблицы
-        if not frame:
-          pkgs.append(self.pkg_message_in_table('not frame selected'))
-          self.selected_asm_op_id=None
-        else:
-          #генерация таблицы с asm-кодом текущей функции
-          try:
-            asm_rows,selected_row = self.asm_to_chunks()
-            id=self.id_insert((start_addr,end_addr),{'addr_to_row':self.addr_to_row})
-            table={'rows':asm_rows, 'draw_vline':False, 'draw_hline':False}
-            if selected_row!=None:
-              table['selected_row']=selected_row
-            pkgs.append(self.pkg_exemplar_create(table,id,set=True))
-            self.cur_displayed_succ=True
-          except gdb.error as e:
-            self.selected_asm_op_id = None
-            pkgs.append(self.pkg_message_in_table(unicode(e)))
-      else:
-        #экземпляр таблицы был отрисова ранее.
-        #убираем отметку с текущего экземпляра и загружаем ранее отрисовывавшийся
-        pkgs.append(self.pkg_unselect_asm_op())
-        self.addr_to_row = data['addr_to_row']
-        pkgs.append(self.pkg_exemplar_set(id=id))
-        self.cur_displayed_succ=True
-        pkgs.append(self.pkg_select_asm_op())
-    elif need_update_current_op:
-      pkgs += self.pkgs_update_asm_op()
-    self.start_addr=start_addr
-    self.end_addr=end_addr
-    self.send_pkg_transaction(pkgs)
-    if self.cur_displayed_succ:
-      assert self.selected_asm_op_id==frame.pc()
-    if frame:
-      self.pc=frame.pc()
-    else:
-      self.pc=None
+
 
   def pkg_select_asm_op(self):
     pkg=None
-    if not self.cur_displayed_succ:
-      return
     try:
       frame = gdb.selected_frame()
       pc=frame.pc()
@@ -238,8 +127,6 @@ class AsmWin(BaseWin,ValueToChunks,TablePackages):
       return pkg
 
   def pkgs_update_asm_op(self):
-    if not self.cur_displayed_succ:
-      return []
     pkgs=[]
     if self.selected_asm_op_id:
       pkgs.append(self.pkg_select_node(id=self.selected_asm_op_id,selected=False))
@@ -254,26 +141,24 @@ class AsmWin(BaseWin,ValueToChunks,TablePackages):
       pass
     return pkgs
 
-  def gdbevt_exited(self,evt):
-    self.send_pkg_message_in_table('target program exited')
 
-  def gdbevt_stop(self,evt):
-    self.update_asm_code()
+class AsmTable(SubentityUpdate,AsmCommon):
+  subentity_name='asm'
+  values_class = CurrentAsm
 
-  def gdbevt_new_objfile(self,evt):
-    self.need_redisplay_asm=True
-    self.update_asm_code()
+  @exec_main
+  def get_key(self):
+    _,start_addr,end_addr = self.get_selected_frame_func()
+    return (start_addr,end_addr)
 
-  def shellcmd_up(self,pkg):
-    self.update_asm_code()
 
-  def shellcmd_down(self,pkg):
-    self.update_asm_code()
+class AsmWin(BaseWin):
+  '''Окно для отображение ассемблерного кода.'''
 
-  def shellcmd_thread(self,pkg):
-    self.update_asm_code()
+  type='asmwin'
+  startcmd='mcgdb open asm'
+  subentities_cls=[AsmTable]
 
-  def mcgdbevt_frame(self,data):
-    self.update_asm_code()
+
 
 
