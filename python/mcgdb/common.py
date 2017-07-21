@@ -19,6 +19,7 @@ import mcgdb
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 
+class FrmaeNotSelected(Exception): pass
 
 TABID_TMP=1 #Временный экземпляр таблицы. Используется для выведения пользователю каких-либо сообщений.
 #После того, как экземпляр был сделан текущим, и потом на место текущего экземпляра
@@ -63,6 +64,12 @@ def exec_main(f):
   def decorated(*args,**kwargs):
     return exec_in_main_pythread (f,args,kwargs)
   return decorated
+
+@exec_main
+def if_gdbstopped_else(stopped=None,running=None):
+  flag,cb = (True,stopped) if gdb_stopped() else (False,running)
+  res = cb() if cb else None
+  return flag,res
 
 
 import mcgdb.gdb2 as gdb2
@@ -256,6 +263,9 @@ valcache = value_cache
 
 def gdb_print(msg):
   gdb.post_event(lambda : gdb.write(msg))
+
+def gdbprint(*args):
+  gdb_print(' '.join(map(unicode,args))+'\n')
 
 def get_prompt():
   return gdb.parameter('prompt')
@@ -713,7 +723,7 @@ class GEThread(object):
     return pkg
 
 
-  def send_pkg_to_entities (self, pkg):
+  def send_pkg_to_entities (self, pkg, entity_key=None):
     cmd=pkg['cmd']
     if debug_messages:
       logging.info('time={time} sendToEntities cmd={cmd}'.format(cmd=(pkg[cmd] if cmd in pkg else cmd),time=time.time()))
@@ -721,7 +731,11 @@ class GEThread(object):
       breakpoint_queue.process()
     else:
       died_entity=[]
-      for fd in self.fte:
+      entity_keys = [entity_key] if entity_key is not None else self.fte.keys()
+      for fd in entity_keys:
+        if fd not in self.fte:
+          #entity was died (meybe window was closed)
+          continue
         entity=self.fte[fd]
         try:
           res = entity.process_pkg (pkg)
@@ -732,7 +746,7 @@ class GEThread(object):
         if res:
           if debug_messages:
             logging.info('time={time} sender={type} pkgs={pkgs}'.format(type=entity.type,pkgs=res,time=time.time()))
-          self.entities_evt_queue+=res
+          self.put_pkg_into_queue(res)
       for fd in died_entity:
         del self.fte[fd]
 
@@ -740,26 +754,19 @@ class GEThread(object):
   def __call__(self):
     assert not self.WasCalled
     self.WasCalled=True
-    self.entities_evt_queue=[] #Если при обработке пакета от editor или от чего-то еще
-    #трубется оповестить другие окна о каком-то событии, то entity.process_pkg()
-    #должен вернуть пакет(ы), которые будут обрабатываться в классах, которые соотв. окнам
-    self.pending_gdbpkgs=[] #Если target_running, а от gdb приходит event, например, new_objfile
+    self.pending_pkgs=[] #Если target_running, а от gdb приходит event, например, new_objfile
     #и если при работающем target попытаться, например, обновить локальные переменные, то первое же
     #gdb.parse_and_eval() выбросит exception. Поэтому будем сохранять события от gdb пока не получим
     # 'exited' или 'stop'
     while True:
-      if gdb_stopped():
-        if len(self.entities_evt_queue)>0:
-          self.send_pkg_to_entities(self.entities_evt_queue.pop(0))
-          continue
-        elif len(self.pending_gdbpkgs)>0:
-          self.send_pkg_to_entities(self.pending_gdbpkgs.pop(0))
-          continue
+      if not self.pkg_queue_is_empty():
+        if_gdbstopped_else(stopped=self.process_pending_pkg)
       rfds=self.fte.keys()
       rfds+=self.wait_connection.keys()
       rfds.append(self.gdb_rfd)
+      timeout = None if self.pkg_queue_is_empty() else 0
       try:
-        fds=select.select(rfds,[],[])
+        fds=select.select(rfds,[],[], timeout)
       except select.error as se:
         if se[0]==errno.EINTR:
           continue
@@ -778,36 +785,50 @@ class GEThread(object):
           if ok:
             self.fte[entity.fd]=entity
         else:
+          entity_key,pkg=None,None
           if fd==self.gdb_rfd:
             #обработка пакета из gdb
             pkg = self.get_pkg_from_gdb()
-            if pkg:
-              if not gdb_stopped() and not ('gdbevt' in pkg and pkg['gdbevt'] in ('exited',)):
-                assert 'gdbevt' not in pkg or pkg['gdbevt'] not in ('stop',)
-                self.pending_gdbpkgs.append(pkg)
-              else:
-                self.send_pkg_to_entities(pkg)
           else:
-            #обработка пакета из удаленного (графического) окна
-            entity = self.fte[fd]
             try:
-              pkg=self.get_pkg_from_remote(fd)
-              if pkg:
-                ret_pkgs = entity.process_pkg(pkg)
-                if ret_pkgs:
-                  if debug_messages:
-                    logging.info('time={time} sender={type} pkgs={pkgs}'.format(type=entity.type,pkgs=ret_pkgs,time=time.time()))
-                  self.entities_evt_queue += ret_pkgs
+              pkg = self.get_pkg_from_remote(fd)
+              entity_key = fd
             except IOFailure:
-              #возможно удаленное окно было закрыто =>
-              #уничтожаем объект, который соответствует
-              #потерянному окну.
-              del self.fte[fd]
+              #probably remote window was clased =>
+              #we need destroy corresponding entity
+              entity=self.fte[fd]
               debug('connection type={} was closed'.format(entity.type))
+              del self.fte[fd]
               entity.byemsg()
               entity=None #forgot reference to object
+          if pkg:
+            self.put_pkg_into_queue(pkg,entity_key)
     debug('event_loop stopped\n')
 
+  def process_pending_pkg(self):
+    pkg,entity_key = self.pending_pkgs.pop(0)
+    self.send_pkg_to_entities(pkg,entity_key)
+
+  def pkg_queue_is_empty(self):
+    return len(self.pending_pkgs)==0
+
+  def put_pkg_into_queue(self,pkg,entity_key=None):
+    ''' If entity_key is None, then send pkg to all entities.
+        Else send to self.fte[entity_key]
+    '''
+    pkgs = pkg if type(pkg) is list else [pkg]
+    for pkg in pkgs:
+      if 'gdbevt' in pkg:
+        assert entity_key is None
+        cmd=pkg['gdbevt']
+        if cmd in ('stop',):
+          self.drop_pending_pkgs(lambda pkg:'gdbevt' in pkg and pkg['gdbevt'] in ('stop','register_changed','memory_changed'))
+        if cmd in ('exited',):
+          self.pending_pkgs[:] = [] #clear pending events
+      self.pending_pkgs.append((pkg,entity_key))
+
+  def drop_pending_pkgs(self,predicat):
+    self.pending_pkgs = filter(lambda pkg : not predicat(pkg), self.pending_pkgs)
 
 
 class Singleton(type):
