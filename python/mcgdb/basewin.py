@@ -231,7 +231,7 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     gdb_print("type `{cmd}` to restart {type}\n{prompt}".format(
       cmd=self.startcmd,type=self.type,prompt=get_prompt()))
 
-
+  @exec_main
   def process_connection(self):
     '''Принять (accept) соединение от граф. окна.
     '''

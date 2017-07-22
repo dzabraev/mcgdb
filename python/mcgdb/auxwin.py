@@ -11,19 +11,21 @@ from mcgdb.basewin import BaseWin, StorageId, CommunicationMixin, TablePackages
 from mcgdb.valuetochunks import check_chunks, ValueToChunks, get_frame_funcname, \
                                 get_frame_fileline, get_frame_func_args, frame_func_args
 
-from mcgdb.common  import exec_main, valcache, INDEX, INDEX_tmp, gdbprint, \
-                    get_this_thread_num, mcgdbBaseException, mcgdbChangevarErr, \
-                    gdb_stopped,inferior_alive,gdb_print, TABID_TMP, frame_func_addr
+from mcgdb.common import exec_main, valcache, INDEX, INDEX_tmp, gdbprint, get_this_thread_num,  \
+                         gdb_stopped,inferior_alive,gdb_print, TABID_TMP, frame_func_addr
 
-
+from mcgdb.common import InferiorNotAlive, mcgdbBaseException, mcgdbChangevarErr
 
 from abc import ABCMeta, abstractmethod, abstractproperty
+
+class KeyNotAvailable(mcgdbBaseException): pass
 
 class ValuesExemplar(object):
   __metaclass__ = ABCMeta
 
-  def __init__(self,subentity_name,*args,**kwargs):
+  def __init__(self,subentity_name,id,*args,**kwargs):
     self.__subentity_name = subentity_name
+    self.id=id
     super(ValuesExemplar,self).__init__(*args,**kwargs)
 
   @property
@@ -65,7 +67,6 @@ class SubentityUpdate(BaseSubentity,StorageId,TablePackages):
   @exec_main
   def __init__(self,**kwargs):
     super(SubentityUpdate,self).__init__(**kwargs)
-    self.current_table_id=None
     self.current_values=None
 
   @abstractmethod
@@ -78,14 +79,24 @@ class SubentityUpdate(BaseSubentity,StorageId,TablePackages):
   def subentity_name(self):raise NotImplementedError
 
   @staticmethod
-  def check_inferior_alive(f):
-    def decorated(self,*args,**kwargs):
-      if not inferior_alive():
-        self.send_pkg_message_in_table('Inferior not alive')
-        self.current_table_id=None
-        self.current_values=None
+  def event_handler(f):
+    def decorated(self,pkg):
+      try:
+        self.inferior_alive_or_report()
+        key = self.get_key_or_report()
+      except (InferiorNotAlive, KeyNotAvailable):
         return
-      return f(self,*args,**kwargs)
+      id,values = self.id_get(key)
+      if id==None or id!=self.current_table_id:
+        #table looked by user and current program state not correwsponding each other.
+        self.send_pkg_message_in_table('Loading...')
+        self.update_values(key=key)
+        #ignore package
+      else:
+        if pkg['exemplar_id']!=self.current_table_id:
+          #received package not corresponfing to current_values
+          return
+        return f(self,pkg)
     return decorated
 
   def get_values_class(self):
@@ -94,19 +105,32 @@ class SubentityUpdate(BaseSubentity,StorageId,TablePackages):
   def get_value_class_kwargs(self):
     return {'subentity_name':self.subentity_name}
 
-  @exec_main
-  def update_values(self):
+  def inferior_alive_or_report(self):
     if not inferior_alive():
       self.send_pkg_message_in_table('Inferior not alive')
-      self.current_table_id=None
       self.current_values=None
-      return
+      raise InferiorNotAlive
+
+  def get_key_or_report(self):
     try:
-      key = self.get_key()
+      return self.get_key()
     except (gdb.error,RuntimeError):
       self.send_pkg_message_in_table('not available')
-      self.current_table_id=None
       self.current_values=None
+      raise KeyNotAvailable
+
+  @property
+  def current_table_id(self):
+    if self.current_values is not None:
+      return self.current_values.id
+    else:
+      return None
+
+  def update_values(self,key=None):
+    try:
+      self.inferior_alive_or_report()
+      key = self.get_key_or_report()
+    except (InferiorNotAlive, KeyNotAvailable):
       return
     id,values = self.id_get(key)
     pkgs=[]
@@ -123,25 +147,23 @@ class SubentityUpdate(BaseSubentity,StorageId,TablePackages):
     else:
       #создаем таблицу для блока
       values_class = self.get_values_class()
-      values = values_class(**self.get_value_class_kwargs())
-      id = self.id_insert(key,values)
+      id = self.id_insert(key,None)
+      values = values_class(id=id, **self.get_value_class_kwargs())
+      self.id_update(key,values) #update
       table = values.get_table()
       pkgs.append(self.pkg_exemplar_create(table,id))
     assert id!=None
     assert values!=None
-    self.current_table_id=id
     self.current_values=values
     if pkgs:
       self.send_pkg_transaction(pkgs)
 
-  @exec_main
   def process_connection(self):
     self.update_values()
 
 
   def gdbevt_exited(self,pkg):
     self.send_pkg_message_in_table('inferior exited')
-    self.current_table_id=None
     self.current_values=None
 
   def gdbevt_stop(self,pkg):
@@ -175,21 +197,21 @@ class OnclickVariables(TablePackages,CommunicationMixin):
   @abstractproperty
   def subentity_name(self): raise NotImplementedError
 
-  @SubentityUpdate.check_inferior_alive
+  @SubentityUpdate.event_handler
   def onclick_expand_variable(self,pkg):
     if hasattr(self.current_values,'onclick_expand_variable'):
       need_update=self.current_values.onclick_expand_variable(pkg)
       if need_update:
         self.send(self.pkg_update_nodes(need_update))
 
-  @SubentityUpdate.check_inferior_alive
+  @SubentityUpdate.event_handler
   def onclick_collapse_variable(self,pkg):
     if hasattr(self.current_values,'onclick_collapse_variable'):
       need_update=self.current_values.onclick_collapse_variable(pkg)
       if need_update:
         self.send(self.pkg_update_nodes(need_update))
 
-  @SubentityUpdate.check_inferior_alive
+  @SubentityUpdate.event_handler
   def onclick_change_slice(self,pkg):
     if hasattr(self.current_values,'onclick_change_slice'):
       need_update=self.current_values.onclick_change_slice(pkg)
@@ -197,7 +219,7 @@ class OnclickVariables(TablePackages,CommunicationMixin):
         self.send(self.pkg_update_nodes(need_update))
 
 
-  @SubentityUpdate.check_inferior_alive
+  @SubentityUpdate.event_handler
   def onclick_change_variable(self,pkg):
     try:
       if hasattr(self.current_values,'onclick_change_variable'):
@@ -303,6 +325,7 @@ class CurrentBacktrace(ValuesExemplar,TablePackages):
       'cmd':'onclick',
       'onclick':'select_frame',
       'nframe' : nframe,
+      'exemplar_id':self.id,
     }
     col={'chunks':chunks,'onclick_data':onclick_data}
     row={'columns':[col]}
@@ -381,7 +404,7 @@ class BacktraceTable(SubentityUpdate):
     global_num = gdb.selected_thread().global_num
     return (global_num,tuple(addrs))
 
-  @SubentityUpdate.check_inferior_alive
+  @SubentityUpdate.event_handler
   def onclick_select_frame(self,pkg):
     if self.current_values:
       res=self.current_values.select_frame(int(pkg['nframe']))
@@ -392,7 +415,6 @@ class BacktraceTable(SubentityUpdate):
 
 
 class ThreadRegs(ValuesExemplar,ValueToChunks, TablePackages):
-  @exec_main
   def __init__(self,**kwargs):
     self.regvals={}
     self.regnames=[]
@@ -409,7 +431,6 @@ class ThreadRegs(ValuesExemplar,ValueToChunks, TablePackages):
     super(ThreadRegs,self).__init__(**kwargs)
 
 
-  @exec_main
   def get_table(self):
     if not gdb_stopped() or not inferior_alive ():
       raise RuntimeError
@@ -423,7 +444,7 @@ class ThreadRegs(ValuesExemplar,ValueToChunks, TablePackages):
       rows_regs.append(row)
     return {'rows' : rows_regs}
 
-  @exec_main
+
   def get_register_chunks(self,regname,regvalue):
     chunks=[]
     try:
@@ -436,7 +457,7 @@ class ThreadRegs(ValuesExemplar,ValueToChunks, TablePackages):
       raise
     return chunks
 
-  @exec_main
+
   def need_update(self):
     nodesdata=[]
     for regname in self.regnames:
@@ -550,6 +571,7 @@ class CurrentThreads(ValuesExemplar,TablePackages):
       'cmd' : 'onclick',
       'onclick':'select_thread',
       'global_num':gn,
+      'exemplar_id':self.id,
     }
     col={'chunks':chunks,'onclick_data':onclick_data}
     row={'columns':[col],'id':self.id_threadrow(gn)}
@@ -641,11 +663,10 @@ class ThreadsTable(SubentityUpdate):
   subentity_name='threads'
   values_class = CurrentThreads
 
-  @exec_main
   def get_key(self):
     return 1024
 
-  @exec_main
+  @SubentityUpdate.event_handler
   def onclick_select_thread(self,pkg):
     if self.current_values and inferior_alive():
       res=self.current_values.select_thread(int(pkg['global_num']))
@@ -729,7 +750,6 @@ class LocalvarsTable(SubentityUpdate,OnclickVariables):
   subentity_name='localvars'
   values_class = BlockLocalvarsTable
 
-  @exec_main
   def get_key(self):
     blk=gdb.selected_frame().block()
     return (gdb.selected_thread().ptid[1],blk.start,blk.end)

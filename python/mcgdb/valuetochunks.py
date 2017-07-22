@@ -11,6 +11,7 @@ from mcgdb.common import    exec_main, gdb_print, gdb_stopped, \
                             get_this_thread_num, get_this_frame_num, \
                             mcgdbBaseException, mcgdbChangevarErr, INDEX
 
+
 OPTIMIZED_OUT_CHUNK={'str':'<OptimizedOut>'}
 
 def get_frame_funcname(frame):
@@ -287,7 +288,6 @@ class ValueToChunks(BasePath):
     equals=lambda old_img,old_data,new_img,new_data:  old_img==new_img and old_data==new_data
     super(ValueToChunks,self).__init__(capture=capture,equals=equals,**kwargs)
 
-
   def text_chunk(self,string,**kwargs):
     d=kwargs
     d.update({'str':string})
@@ -305,23 +305,19 @@ class ValueToChunks(BasePath):
       mapped.append(chunks[0])
     return mapped
 
-  @exec_main
   def diff(self,node=None):
     return self.map_nodes_to_chunks(super(ValueToChunks,self).diff(node=node))
 
-  @exec_main
   def onclick_expand_variable(self,pkg):
     path = self.Path(path_id=pkg['path_id'])
     self.expand_variable[path.id]=True
     return self.diff(path)
 
-  @exec_main
   def onclick_collapse_variable(self,pkg):
     path = self.Path(path_id=pkg['path_id'])
     self.expand_variable[path.id]=False
     return self.diff(path)
 
-  @exec_main
   def onclick_change_slice(self,pkg):
     path_id=pkg['path_id']
     path=self.Path(path_id=path_id)
@@ -342,7 +338,6 @@ class ValueToChunks(BasePath):
       raise mcgdbBaseException('bad input: {}'.format(user_input))
     return self.diff(path)
 
-  @exec_main
   def onclick_change_variable(self,pkg):
     #В случае некорректно введенных данных будет осуществляться обновл. переменных.
     #Поскольку после введения данных у пользователя
@@ -384,6 +379,7 @@ class ValueToChunks(BasePath):
       'cmd' : 'onclick',
       'onclick' : cmdname,
       'subentity_dst' : self.subentity_name,
+      'exemplar_id' : self.id,
     }
     onclick_data.update(kwargs)
     return onclick_data
@@ -633,6 +629,7 @@ class ValueToChunks(BasePath):
       'input_text': '{type} {path}'.format(path=path,type=valuetype),
       'path_id' : path.id,
       'subentity_dst' : self.subentity_name,
+      'exemplar_id' : self.id,
     }
     if 'converter' in kwargs:
       onclick_data['converter']=kwargs['converter']
@@ -943,6 +940,7 @@ class ValueToChunks(BasePath):
         'input_text':'enter new slice N or N:M',
         'path_id' : path.id,
         'subentity_dst' : self.subentity_name,
+        'exemplar_id' : self.id,
       }
       slice_chunk['onclick_data']=onclick_data
       slice_chunk['onclick_user_input']=True

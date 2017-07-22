@@ -47,7 +47,7 @@ else:
 logging.basicConfig(filename=LOG_FILENAME,format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
 
 class mcgdbBaseException(Exception):
-  def __init__(self, value):
+  def __init__(self, value=None):
     self.value = value
 
   def __str__(self):
@@ -61,6 +61,8 @@ class mcgdbChangevarErr(Exception):
 
   def __str__(self):
     return str(self.error_msg)
+
+class InferiorNotAlive(mcgdbBaseException): pass
 
 def exec_main(f):
   def decorated(*args,**kwargs):
@@ -752,7 +754,7 @@ class GEThread(object):
         if res:
           if debug_messages:
             logging.info('time={time} sender={type} pkgs={pkgs}'.format(type=entity.type,pkgs=res,time=time.time()))
-          self.put_pkg_into_queue(res)
+          self.prepend_pkg_to_queue(res)
       for fd in died_entity:
         del self.fte[fd]
 
@@ -807,7 +809,7 @@ class GEThread(object):
               entity.byemsg()
               entity=None #forgot reference to object
           if pkg:
-            self.put_pkg_into_queue(pkg,entity_key)
+            self.append_pkg_to_queue(pkg,entity_key)
             has_new_pkg=True
       if has_new_pkg:
         #first fetch all packages from sockets, then process it
@@ -825,11 +827,20 @@ class GEThread(object):
   def pkg_queue_is_empty(self):
     return len(self.pending_pkgs)==0
 
-  def put_pkg_into_queue(self,pkg,entity_key=None):
+  def append_pkg_to_queue(self,*args,**kwargs):
+    return self.put_pkg_into_queue(*args,append=True,**kwargs)
+
+  def prepend_pkg_to_queue(self,*args,**kwargs):
+    return self.put_pkg_into_queue(*args,append=False,**kwargs)
+
+  def put_pkg_into_queue(self,pkg,entity_key=None,append=True):
     ''' If entity_key is None, then send pkg to all entities.
         Else send to self.fte[entity_key]
     '''
+    prepend=not append
     pkgs = pkg if type(pkg) is list else [pkg]
+    if prepend:
+      pkgs = reversed(pkgs)
     for pkg in pkgs:
       if pkg is None:
         continue
@@ -842,7 +853,10 @@ class GEThread(object):
           self.pending_pkgs[:] = [] #clear pending events
         else:
           self.drop_pending_pkgs(lambda pkg:'gdbevt' in pkg and pkg['gdbevt']==cmd)
-      self.pending_pkgs.append((pkg,entity_key))
+      if append:
+        self.pending_pkgs.append((pkg,entity_key))
+      else: #prepend
+        self.pending_pkgs.insert(0,(pkg,entity_key))
 
   def drop_pending_pkgs(self,predicat):
     self.pending_pkgs = filter(lambda pkg__entity_key : not predicat(pkg__entity_key[0]), self.pending_pkgs)
