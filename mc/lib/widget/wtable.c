@@ -1368,6 +1368,7 @@ print_str_chunk(cell_data_t * chunk_data, int x1, int x2, int start_pos, int lef
        * текущую позицию печати.
       */
       offset=ROW_OFFSET(tab,rowcnt[0]);
+      message_assert (colcnt-cell_offset == left_bound);
       if (!blank)
         tty_gotoyx(offset,left_bound);
     }
