@@ -301,7 +301,7 @@ def is_gdb_version_correct():
     gdb_print("ERROR: gdb version must be >= {ma}.{mi}\n".format(
       ma=good_major,mi=good_minor))
     return False
-  if minor < good_minor:
+  elif major == good_major and minor < good_minor:
     gdb_print("ERROR: gdb version must be >= {ma}.{mi}\n".format(
       ma=good_major,mi=good_minor))
     return False

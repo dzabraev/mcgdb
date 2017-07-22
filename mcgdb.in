@@ -14,9 +14,7 @@ err="gdb version should be >= 7.12, but your gdb is $major.$minor"
 if [ "$major" -lt "7" ]; then
   echo $err
   exit 1
-fi
-
-if [[ "$major" -eq "7" && "$minor" -lt "12" ]]; then
+elif [[ "$major" -eq "7" && "$minor" -lt "12" ]]; then
   echo $err
   exit 1
 fi

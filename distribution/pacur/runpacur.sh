@@ -16,5 +16,5 @@
 #hello-world
 #pacur/fedora-21
 
-#docker run --rm -t -v `pwd`:/pacur pacur/ubuntu-trusty
+docker run --rm -t -v `pwd`:/pacur pacur/ubuntu-trusty
 docker run --rm -t -v `pwd`:/pacur pacur/fedora-22

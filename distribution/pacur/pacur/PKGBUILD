@@ -3,11 +3,11 @@ targets=(
 #    "centos"
 #    "debian"
     "fedora-22"
-#    "ubuntu"
+    "ubuntu"
 )
 pkgname="mcgdb"
 pkgver="1.2"
-pkgrel="1"
+pkgrel="4"
 pkgdesc="midnight commander as gdb front end"
 pkgdesclong=(
     "mcgdb adds to gdb two additional windows:"
@@ -21,13 +21,13 @@ license=("GPLv3")
 section="utils"
 priority="optional"
 url="https://github.com/dzabraev/${pkgname}"
-revision="dc1bb40f76348620a3b1ff4dfb5734aaa92368c9"
+revision="bbc2f5d9264d01217324230c8d405a2eb18cdd91"
 sources=(
     "https://github.com/dzabraev/mcgdb/archive/${revision}.zip"
 )
 
 hashsums=(
-    "16d801a23f4592c0fac8080b085d5342"
+    "122a1a87a7104c3b2c7a81f8f08f1e0f"
 )
 
 
