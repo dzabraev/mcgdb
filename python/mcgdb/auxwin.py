@@ -9,7 +9,8 @@ import traceback
 from mcgdb.basewin import BaseWin, StorageId, CommunicationMixin, TablePackages
 
 from mcgdb.valuetochunks import check_chunks, ValueToChunks, get_frame_funcname, \
-                                get_frame_fileline, get_frame_func_args, frame_func_args
+                                get_frame_fileline, get_frame_func_args, frame_func_args, \
+                                get_local_variables
 
 from mcgdb.common import exec_main, valcache, INDEX, INDEX_tmp, gdbprint, get_this_thread_num,  \
                          gdb_stopped,inferior_alive,gdb_print, TABID_TMP, frame_func_addr
@@ -19,6 +20,8 @@ from mcgdb.common import InferiorNotAlive, mcgdbBaseException, mcgdbChangevarErr
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 class KeyNotAvailable(mcgdbBaseException): pass
+
+DEBUG_ENTITIES=[]
 
 class ValuesExemplar(object):
   __metaclass__ = ABCMeta
@@ -53,6 +56,7 @@ class BaseSubentity(TablePackages, CommunicationMixin):
 
   @exec_main
   def __init__(self,**kwargs):
+    DEBUG_ENTITIES.append(self)
     super(BaseSubentity,self).__init__(**kwargs)
 
   @abstractproperty
@@ -92,6 +96,7 @@ class SubentityUpdate(BaseSubentity,StorageId,TablePackages):
         self.send_pkg_message_in_table('Loading...')
         self.update_values(key=key)
         #ignore package
+        return
       else:
         if pkg['exemplar_id']!=self.current_table_id:
           #received package not corresponfing to current_values
@@ -114,7 +119,7 @@ class SubentityUpdate(BaseSubentity,StorageId,TablePackages):
   def get_key_or_report(self):
     try:
       return self.get_key()
-    except (gdb.error,RuntimeError):
+    except KeyNotAvailable:
       self.send_pkg_message_in_table('not available')
       self.current_values=None
       raise KeyNotAvailable
@@ -129,7 +134,8 @@ class SubentityUpdate(BaseSubentity,StorageId,TablePackages):
   def update_values(self,key=None):
     try:
       self.inferior_alive_or_report()
-      key = self.get_key_or_report()
+      if key is None:
+        key = self.get_key_or_report()
     except (InferiorNotAlive, KeyNotAvailable):
       return
     id,values = self.id_get(key)
@@ -475,7 +481,7 @@ class RegistersTable(SubentityUpdate,OnclickVariables):
   def get_key(self):
     thnum = get_this_thread_num() #current thread num
     if thnum==None:
-      raise RuntimeError
+      raise KeyNotAvailable
     return 1024+thnum
 
 class CurrentThreads(ValuesExemplar,TablePackages):
@@ -693,11 +699,11 @@ class BlockLocalvarsTable(ValuesExemplar,ValueToChunks,TablePackages):
   def __init__(self,**kwargs):
     super(BlockLocalvarsTable,self).__init__(**kwargs)
 
-  @exec_main
+
   def get_table(self):
     return self.get_local_vars()
 
-  @exec_main
+
   def need_update(self):
     nodes = self.diff()
     if nodes:
@@ -705,9 +711,8 @@ class BlockLocalvarsTable(ValuesExemplar,ValueToChunks,TablePackages):
     else:
       return None
 
-  @exec_main
   def get_local_vars(self):
-    variables = self.get_local_vars_1 ()
+    variables = get_local_variables (gdb.selected_frame())
     if len(variables)==0:
       return  {'rows':[]}
     lvars=[]
@@ -750,9 +755,54 @@ class LocalvarsTable(SubentityUpdate,OnclickVariables):
   subentity_name='localvars'
   values_class = BlockLocalvarsTable
 
+  def __init__(self,*args,**kwargs):
+    self.key1_type={}
+    super(LocalvarsTable,self).__init__(*args,**kwargs)
+
+  def types_equal(self,types1,types2):
+    for t1,t2 in zip(types1,types2):
+      if t1!=t2:
+        return False
+    return True
+
   def get_key(self):
-    blk=gdb.selected_frame().block()
-    return (gdb.selected_thread().ptid[1],blk.start,blk.end)
+    ''' Evaluate KEY, unique identify set of current local variables
+        KEY consists of:
+        1.  thread id
+        2.  block start addr
+        3.  block end addr
+        4.  variable_names
+        5.  types index
+
+        Note that in the same block (from the point of view of start addr and stop addr of block)
+        may be different sets of variables. Example of this situation observer in Firefox in functions
+          mozilla::detail::AtomicBase<unsigned int, (mozilla::MemoryOrdering)2>::operator=
+          mozilla::detail::IntrinsicMemoryOps<unsigned int, (mozilla::MemoryOrdering)2>::store
+    '''
+    try:
+      blk=gdb.selected_frame().block()
+    except RuntimeError:
+      raise KeyNotAvailable
+    lvars = get_local_variables(gdb.selected_frame()).items()
+    lvars.sort(key=lambda x:x[0]) #sort by variable name
+    names = tuple(map(lambda x:x[0],lvars))
+    types = map(lambda x:x[1].type,lvars)
+    key1 = (gdb.selected_thread().ptid[1],blk.start,blk.end) + names
+    kts = self.key1_type.get(key1)
+    types_idx=None
+    if kts is None:
+      self.key1_type[key1] = [types]
+      types_idx=0
+    else:
+      for idx,saved_types in enumerate(kts):
+        if self.types_equal(saved_types,types):
+          types_idx=idx
+          break
+      if types_idx is None:
+        kts.append(types)
+        types_idx=idx+1
+    key = key1 + (types_idx,)
+    return key
 
 
 
