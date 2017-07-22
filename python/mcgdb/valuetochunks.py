@@ -7,7 +7,7 @@ from abc import abstractmethod, abstractproperty
 
 from mcgdb.common import    exec_main, gdb_print, gdb_stopped, \
                             inferior_alive, cached_stringify_value, \
-                            valcache, stringify_value, \
+                            valcache, stringify_value, gdbprint, \
                             get_this_thread_num, get_this_frame_num, \
                             mcgdbBaseException, mcgdbChangevarErr, INDEX
 
