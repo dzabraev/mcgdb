@@ -23,6 +23,28 @@ def get_frame_fileline(frame):
     frame_filename = symtab.filename if symtab else 'unknown'
     return frame_filename,frame_line
 
+
+def get_local_variables(frame):
+  if not frame:
+    return {}
+  try:
+    block = frame.block()
+  except RuntimeError:
+    return {}
+  variables = {}
+  while block:
+    for symbol in block:
+      if (symbol.is_argument or symbol.is_variable):
+          name = symbol.name
+          if name not in variables:
+            variables[name] = valcache(symbol.value(frame))
+    if block.function:
+      break
+    block = block.superblock
+  return variables
+
+
+
 def get_frame_func_args(frame):
     ''' Возвращает список пар: (имя аргумента, строковое представление аргумента) '''
     args=[]
