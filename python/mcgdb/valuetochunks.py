@@ -11,7 +11,7 @@ from mcgdb.common import    exec_main, gdb_print, gdb_stopped, \
                             get_this_thread_num, get_this_frame_num, \
                             mcgdbBaseException, mcgdbChangevarErr, INDEX
 
-
+OPTIMIZED_OUT_CHUNK={'str':'<OptimizedOut>'}
 
 def get_frame_funcname(frame):
   return frame.name()
@@ -33,8 +33,9 @@ def get_frame_func_args(frame):
       for sym in block:
         if sym.is_argument:
           value = valcache(sym.value(frame))
+          strvalue = stringify_value(value)
           args.append(
-            (sym.name,stringify_value(value))
+            (sym.name,strvalue)
           )
       if block.function:
         break
@@ -552,7 +553,7 @@ class ValueToChunks(BasePath):
     if  kwargs.get('disable_dereference') :
       return []
     if value.is_optimized_out:
-      return self.name_to_chunks(name)+[{'str':'<OptimizedOut>'}]
+      return self.name_to_chunks(name)+[OPTIMIZED_OUT_CHUNK]
     chunks=[]
     if path.id in self.user_slice:
       n1,n2 = self.user_slice.get(path.id)
