@@ -799,6 +799,7 @@ class GEThread(object):
           else:
             try:
               pkg = self.get_pkg_from_remote(fd)
+              logging.info('time={time} sender=remote pkgs={pkgs}'.format(pkgs=pkg,time=time.time()))
               entity_key = fd
             except IOFailure:
               #probably remote window was clased =>
