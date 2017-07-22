@@ -636,16 +636,28 @@ class CurrentThreads(ValuesExemplar,TablePackages):
     threads_info={}
     #сохраняем информацию о текущем треде и текущем фрейме, что бы потом восстановить
     selected_thread = gdb.selected_thread()
-    selected_frame = gdb.selected_frame()
+    try:
+      selected_frame = gdb.selected_frame()
+    except:
+      selected_frame = None
     for thread in gdb.selected_inferior().threads():
       thread.switch()
-      frame = gdb.selected_frame()
+      try:
+        frame = gdb.selected_frame()
+      except gdb.error:
+        #no frame currently selected
+        frame=None
       global_num    =   thread.global_num
       tid           =   str(thread.ptid[1])
       threadname    =   str(thread.name) if thread.name else 'unknown'
-      funcname = get_frame_funcname(frame)
-      filename,fileline = get_frame_fileline(frame)
-      funcargs = get_frame_func_args(frame)
+      if frame:
+        funcname = get_frame_funcname(frame)
+        filename,fileline = get_frame_fileline(frame)
+        funcargs = get_frame_func_args(frame)
+      else:
+        funcname = '<no frame selected>'
+        filename,fileline = 'unknown',0
+        funcargs=[]
       threads_info[global_num] = {
         'tid':tid,
         'thread_name':threadname,
