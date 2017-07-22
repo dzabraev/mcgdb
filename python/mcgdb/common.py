@@ -34,6 +34,7 @@ LOG_FILENAME='/tmp/mcgdb.log'
 if 'DEBUG' in os.environ and os.path.exists(LOG_FILENAME):
   os.remove(LOG_FILENAME)
 
+DEBUG = os.environ.get('DEBUG')
 WITH_VALGRIND = os.environ.get('VALGRIND')
 
 if 'debug' in os.environ or 'DEBUG' in os.environ:
@@ -762,8 +763,6 @@ class GEThread(object):
     #gdb.parse_and_eval() выбросит exception. Поэтому будем сохранять события от gdb пока не получим
     # 'exited' или 'stop'
     while True:
-      if not self.pkg_queue_is_empty():
-        if_gdbstopped_else(stopped=self.process_pending_pkg)
       rfds=self.fte.keys()
       rfds+=self.wait_connection.keys()
       rfds.append(self.gdb_rfd)
@@ -776,6 +775,7 @@ class GEThread(object):
         else:
           raise
       ready_rfds=fds[0]
+      has_new_pkg=False
       for fd in ready_rfds:
         if fd in self.wait_connection.keys():
           entity=self.wait_connection[fd]
@@ -806,6 +806,14 @@ class GEThread(object):
               entity=None #forgot reference to object
           if pkg:
             self.put_pkg_into_queue(pkg,entity_key)
+            has_new_pkg=True
+      if has_new_pkg:
+        #first fetch all packages from sockets, then process it
+        continue
+      if not self.pkg_queue_is_empty():
+        #process packages
+        if_gdbstopped_else(stopped=self.process_pending_pkg)
+
     debug('event_loop stopped\n')
 
   def process_pending_pkg(self):
@@ -821,17 +829,21 @@ class GEThread(object):
     '''
     pkgs = pkg if type(pkg) is list else [pkg]
     for pkg in pkgs:
+      if pkg is None:
+        continue
       if 'gdbevt' in pkg:
         assert entity_key is None
         cmd=pkg['gdbevt']
         if cmd in ('stop',):
           self.drop_pending_pkgs(lambda pkg:'gdbevt' in pkg and pkg['gdbevt'] in ('stop','register_changed','memory_changed'))
-        if cmd in ('exited',):
+        elif cmd in ('exited',):
           self.pending_pkgs[:] = [] #clear pending events
+        else:
+          self.drop_pending_pkgs(lambda pkg:'gdbevt' in pkg and pkg['gdbevt']==cmd)
       self.pending_pkgs.append((pkg,entity_key))
 
   def drop_pending_pkgs(self,predicat):
-    self.pending_pkgs = filter(lambda pkg : not predicat(pkg), self.pending_pkgs)
+    self.pending_pkgs = filter(lambda pkg__entity_key : not predicat(pkg__entity_key[0]), self.pending_pkgs)
 
 
 class Singleton(type):
