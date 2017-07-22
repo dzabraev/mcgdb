@@ -48,3 +48,8 @@ nsCOMPtr<nsIArray> argv = {<Expand>}
 A problem internal to GDB has been detected,
 further debugging may prove unreliable.
 Quit this debugging session? (y or n)
+
+
+4. TESTCASE. Нужно инициировать переключение фрейма (кликом мышью) и сразу же раскрыть указатель.
+Может произойти ситуация, при которой фрейм сменится и придет expand-запрос на переменную, которой нету
+в текущем фрейме.
