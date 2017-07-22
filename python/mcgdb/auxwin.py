@@ -125,11 +125,8 @@ class SubentityUpdate(BaseSubentity,StorageId,TablePackages):
       values_class = self.get_values_class()
       values = values_class(**self.get_value_class_kwargs())
       id = self.id_insert(key,values)
-      try:
-        table = values.get_table()
-        pkgs.append(self.pkg_exemplar_create(table,id))
-      except RuntimeError:
-        self.key_drop(key)
+      table = values.get_table()
+      pkgs.append(self.pkg_exemplar_create(table,id))
     assert id!=None
     assert values!=None
     self.current_table_id=id
