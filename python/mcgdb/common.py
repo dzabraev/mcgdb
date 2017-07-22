@@ -62,7 +62,6 @@ class mcgdbChangevarErr(Exception):
   def __str__(self):
     return str(self.error_msg)
 
-
 def exec_main(f):
   def decorated(*args,**kwargs):
     return exec_in_main_pythread (f,args,kwargs)
@@ -231,6 +230,9 @@ class GdbValueCache(object):
         self.add_valcache_byaddr(valcache1)
     else:
       value=value_or_path
+      if value.is_optimized_out:
+        #can't cache this value
+        return value
       addr=valueaddress_to_ulong(value.address)
       if addr==None:
         return value
