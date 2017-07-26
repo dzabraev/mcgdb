@@ -189,6 +189,9 @@ class SubentityUpdate(BaseSubentity,StorageId,TablePackages):
     self.update_values()
   def shellcmd_thread(self,pkg):
     self.update_values()
+  def shellcmd_frame(self,pkg):
+    self.update_values()
+
 
   def mcgdbevt_frame(self,pkg):
     self.update_values()
@@ -273,7 +276,7 @@ class CurrentBacktrace(ValuesExemplar,TablePackages):
       func_name = get_frame_funcname(frame)
       file_name,file_line = get_frame_fileline(frame)
       func_args = get_frame_func_args(frame)
-      selected = (frame==selected_frame)
+      selected = (frame==selected_frame) and (frame.pc()==selected_frame.pc())
       if selected:
         self.selected_nframe = nframe
       frames_info.append({
@@ -401,10 +404,7 @@ class BacktraceTable(SubentityUpdate):
     addrs=[]
     frame = gdb.newest_frame()
     while frame:
-      try:
-        _,start,stop = frame_func_addr(frame)
-      except gdb.error:
-        start,stop = None,None
+      _,start,stop = frame_func_addr(frame)
       addrs.append((start,stop))
       frame = frame.older()
     global_num = gdb.selected_thread().global_num

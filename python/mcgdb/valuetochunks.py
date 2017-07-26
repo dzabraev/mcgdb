@@ -193,6 +193,7 @@ class Node(object):
       if type(name) is gdb.Type:
         value = value.cast(name)
       else:
+        assert type(name) in (int,str,unicode,gdb.Field), 'path={path}'.format(path=path)
         value = value[name]
     return valcache(value)
 
@@ -229,10 +230,19 @@ class BasePath(object):
     return node
 
   def __diff(self,node,res):
-    for child in node.childs.values():
+    for name,child in node.childs.iteritems():
+      if type(name) is int:
+        n1,n2=self.user_slice[node.id]
+        #check whether user change slice and slice-diapason contains name (name=index in array)
+        if n2==None:
+          if n1!=name:
+            continue
+        else:
+          if not (n1<=name and name<=n2):
+            continue
       if child.is_changed_upd():
         res.append(child)
-      else:
+      elif not (self.expand_variable.get(child.id)==False):
         self.__diff(child,res)
 
   def diff(self,node=None):
@@ -281,7 +291,7 @@ class ValueToChunks(BasePath):
     self.slice_regex=re.compile('^(-?\d+)([:, ](-?\d+))?$')
     self.user_slice={} # Данная переменная хранит информацию о том,
     # что если встречается указатель ptr, то сколько элементов указателя
-    # ptr[0], ptr[1], ... нужно печатать. key=path, value=(n1,n2).
+    # ptr[0], ptr[1], ... нужно печатать. key=path_id, value=(n1,n2).
     #n1,n2 задает диапазон, включая оба конца. Если n2 есть None, то печатается строго
     #один элемент ptr[n1]
     self.expand_variable={}
@@ -460,7 +470,6 @@ class ValueToChunks(BasePath):
 
     '''
     chunks=[]
-    assert name!=None
 
     type_code=value.type.strip_typedefs().code
     if name!=None:
@@ -468,16 +477,16 @@ class ValueToChunks(BasePath):
         chunks+=self.value_type_to_chunks(value,**kwargs)
         chunks.append({'str':' '})
 
-    if type(name) is str:
-      slice_chunk = self.make_slice_chunk(n1,n2,path,slice_clickable=slice_clickable)
-      varname=[
-        {'str':name,'name':'varname'},
-        slice_chunk,
-      ]
-      chunks+=varname
-    else:
-      chunks+=name
-    chunks+=[{'str':' = '}]
+      if type(name) is str:
+        slice_chunk = self.make_slice_chunk(n1,n2,path,slice_clickable=slice_clickable)
+        varname=[
+          {'str':name,'name':'varname'},
+          slice_chunk,
+        ]
+        chunks+=varname
+      else:
+        chunks+=name
+      chunks+=[{'str':' = '}]
     try:
       if type_code==gdb.TYPE_CODE_PTR:
         value_addr = ctypes.c_ulong(long(value)).value
@@ -497,7 +506,11 @@ class ValueToChunks(BasePath):
     deref_value = value[n1]
     deref_type_code = deref_value.type.strip_typedefs().code
     deref_type_str  = str(deref_value.type.strip_typedefs())
-    if deref_type_code==gdb.TYPE_CODE_PTR and not re.match('.*((char \*)|(void \*))$',deref_type_str) and not is_incomplete_type_ptr(deref_value):
+    if deref_type_code==(
+          gdb.TYPE_CODE_PTR and
+          not re.match('.*((char \*)|(void \*))$',deref_type_str) and
+          not is_incomplete_type_ptr(deref_value)
+       ):
       elem_as_array=True
     else:
       elem_as_array=False
@@ -514,10 +527,13 @@ class ValueToChunks(BasePath):
           delimiter={'str':',\n'}
       for i in range(n1,n22):
         value_idx = valcache(value[i])
-        if elem_as_array:
+        if elem_as_array: #pointer, not really array
           tochunks=lambda value,name,path,**kwargs : self.subarray_pointer_data_chunks(value,path,**kwargs)
         else:
-          tochunks=lambda value,name,path,**kwargs : self.value_to_chunks_1(value=value,name=None,path=path,**kwargs)
+          if deref_type_code == gdb.TYPE_CODE_ARRAY:
+            tochunks=lambda value,name,path,**kwargs : self.value_to_chunks_1(value=value,name='',path=path,suppress_array_addr=True,**kwargs)
+          else:
+            tochunks=lambda value,name,path,**kwargs : self.value_to_chunks_1(value=value,name=None,path=path,**kwargs)
         path_idx = path.append(
           name=i,
           tochunks=tochunks,
@@ -896,7 +912,7 @@ class ValueToChunks(BasePath):
       chunks+=self.struct_to_chunks(value,name,path,**kwargs)
     elif type_code==gdb.TYPE_CODE_ARRAY:
       array_addr = value.address
-      if array_addr!=None:
+      if not kwargs.pop('suppress_array_addr',False) and array_addr!=None:
         pointer_chunks = self.pointer_to_chunks (array_addr, name, path, **kwargs)
         if len(pointer_chunks)!=0:
           chunks+=pointer_chunks

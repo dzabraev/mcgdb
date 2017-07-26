@@ -1023,17 +1023,28 @@ class FrameFuncAddr(object):
       else:
         start_addr,end_addr = None,None
       return (frame.name(),start_addr,end_addr)
-    except (RuntimeError,gdb.error):
+    except (RuntimeError,gdb.error,gdb.MemoryError):
       #for ex., if current frame corresponding
       #to malloc function, then selected_frame().block()
       #throw RuntimeError
       pc=frame.pc()
-      res=gdb.execute('maintenance translate-address {addr}'.format(addr=pc),False,True)
-      name = res.split()[0] #function name
-      res=gdb.execute('disas {pc}'.format(pc=pc),False,True)
+      try:
+        res=gdb.execute('maintenance translate-address {addr}'.format(addr=pc),False,True)
+        name = res.split()[0] #function name
+      except gdb.error:
+        name=None
+      try:
+        res=gdb.execute('disas {pc}'.format(pc=pc),False,True)
+      except gdb.error, gdb.MemoryError:
+        #error: No function contains specified address.
+        return None,None,None
       lines=res.split('\n')
       first=lines[1]
       last=lines[-3]
+      if self.reg_disas_line_addr.search(last)==None:
+        gdbprint('WARNING: cant parse end addr of function')
+        gdbprint(lines[-10:])
+        return None,None,None
       start_addr = long(self.reg_disas_line_addr.search(first).groups()[1],0)
       end_addr = long(self.reg_disas_line_addr.search(last).groups()[1],0)
       return name,start_addr,end_addr
