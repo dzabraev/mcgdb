@@ -65,3 +65,4 @@ Quit this debugging session? (y or n)
 7. TESTCASE нужно раскрыть указатель, после чего свернуть, затем изменить значение скрытого элемента массива:
 set variable arr[0]=0x1
 
+
