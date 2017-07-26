@@ -1023,7 +1023,7 @@ class FrameFuncAddr(object):
       else:
         start_addr,end_addr = None,None
       return (frame.name(),start_addr,end_addr)
-    except (RuntimeError,gdb.error):
+    except (RuntimeError,gdb.error,gdb.MemoryError):
       #for ex., if current frame corresponding
       #to malloc function, then selected_frame().block()
       #throw RuntimeError
@@ -1035,7 +1035,7 @@ class FrameFuncAddr(object):
         name=None
       try:
         res=gdb.execute('disas {pc}'.format(pc=pc),False,True)
-      except gdb.error:
+      except gdb.error, gdb.MemoryError:
         #error: No function contains specified address.
         return None,None,None
       lines=res.split('\n')
