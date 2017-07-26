@@ -64,6 +64,9 @@ class mcgdbChangevarErr(Exception):
 
 class InferiorNotAlive(mcgdbBaseException): pass
 
+class ValueUnavailable(mcgdbBaseException):
+  default_stub = '<unavailable>'
+
 def exec_main(f):
   def decorated(*args,**kwargs):
     return exec_in_main_pythread (f,args,kwargs)
@@ -149,7 +152,7 @@ def get_this_thread_num():
   else:
     return None
 
-def stringify_value(value,**kwargs):
+def stringify_value(value,enable_additional_text=False, integer_mode=None, **kwargs):
   '''Конвертация gdb.Value в строку
     Args:
       **enable_additional_text (bool):
@@ -161,18 +164,16 @@ def stringify_value(value,**kwargs):
   if value.is_optimized_out:
     return '<OptimizedOut>'
   type_code = value.type.strip_typedefs().code
-  enable_additional_text=kwargs.get('enable_additional_text',False)
   try:
-    if type_code==gdb.TYPE_CODE_INT and kwargs.get('integer_mode') in ('dec','hex','bin') and value.type.strip_typedefs().sizeof<=8:
-      mode=kwargs.get('integer_mode')
+    if type_code==gdb.TYPE_CODE_INT and integer_mode in ('dec','hex','bin') and value.type.strip_typedefs().sizeof<=8:
       bitsz=value.type.sizeof*8
       #gdb can't conver value to python-long if sizeof(value) > 8
-      if mode=='dec':
+      if integer_mode=='dec':
         return str(long(value))
-      elif mode=='hex':
+      elif integer_mode=='hex':
         pattern='0x{{:0{hexlen}x}}'.format(hexlen=bitsz/4)
         return pattern.format(ctypes.c_ulong(long(value)).value)
-      elif mode=='bin':
+      elif integer_mode=='bin':
         pattern='{{:0{bitlen}b}}'.format(bitlen=bitsz)
         return pattern.format(ctypes.c_ulong(long(value)).value)
     if type_code in (gdb.TYPE_CODE_PTR,) and not enable_additional_text:
@@ -180,14 +181,17 @@ def stringify_value(value,**kwargs):
     else:
       #например, если делать unicode или str для `.*char *`, то память будет читаться дважды.
       return unicode(value)
-  except gdb.error:
-    return "unavailable"
+  except (gdb.error, gdb.MemoryError, MemoryError):
+    raise ValueUnavailable
 
-def stringify_value_safe(*args,**kwargs):
-  try:
-    return stringify_value(*args,**kwargs)
-  except gdb.MemoryError:
-    return 'Cannot access memory'
+
+#def stringify_value_safe(*args,**kwargs):
+#  try:
+#    return stringify_value(*args,**kwargs)
+#  except gdb.MemoryError:
+#    return 'Cannot access memory'
+#  except ValueUnavailable:
+#    return ValueUnavailable.default_stub
 
 
 
@@ -202,17 +206,17 @@ class GdbValueCache(object):
     self.value_cache = {}
     self.value_str_cache = {}
 
-  def cached_stringify_value(self,value,path,**kwargs):
-    frnum=get_this_frame_num()
-    if frnum==None:
-      valcache=None
-    else:
-      key=(frnum,path)
-      valcache=self.value_str_cache.get(key)
-    if valcache==None:
-      valcache=stringify_value_safe(value,**kwargs)
-      self.value_str_cache[key]=valcache
-    return valcache
+#  def cached_stringify_value(self,value,path,**kwargs):
+#    frnum=get_this_frame_num()
+#    if frnum==None:
+#      valcache=None
+#    else:
+#      key=(frnum,path)
+#      valcache=self.value_str_cache.get(key)
+#    if valcache==None:
+#      valcache=stringify_value_safe(value,**kwargs)
+#      self.value_str_cache[key]=valcache
+#    return valcache
 
 
   def valcache(self,value_or_path,**kwargs):
@@ -259,7 +263,7 @@ class GdbValueCache(object):
 
 
 value_cache = GdbValueCache()
-cached_stringify_value = value_cache.cached_stringify_value
+#cached_stringify_value = value_cache.cached_stringify_value
 valcache = value_cache
 
 

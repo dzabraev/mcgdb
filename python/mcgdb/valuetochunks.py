@@ -6,13 +6,14 @@ from abc import abstractmethod, abstractproperty
 
 
 from mcgdb.common import    exec_main, gdb_print, gdb_stopped, \
-                            inferior_alive, cached_stringify_value, \
+                            inferior_alive, \
                             valcache, stringify_value, gdbprint, \
                             get_this_thread_num, get_this_frame_num, \
-                            mcgdbBaseException, mcgdbChangevarErr, INDEX
+                            mcgdbBaseException, mcgdbChangevarErr, INDEX, ValueUnavailable
 
 
 OPTIMIZED_OUT_CHUNK={'str':'<OptimizedOut>'}
+UNAVAILABLE_CHUNK={'str':'<Unavailable>'}
 
 def get_frame_funcname(frame):
   return frame.name()
@@ -23,6 +24,8 @@ def get_frame_fileline(frame):
     frame_filename = symtab.filename if symtab else 'unknown'
     return frame_filename,frame_line
 
+def text(txt):
+  return {'str':txt}
 
 def get_local_variables(frame):
   if not frame:
@@ -56,7 +59,10 @@ def get_frame_func_args(frame):
       for sym in block:
         if sym.is_argument:
           value = valcache(sym.value(frame))
-          strvalue = stringify_value(value)
+          try:
+            strvalue = stringify_value(value)
+          except ValueUnavailable:
+            strvalue = ValueUnavailable.default_stub
           args.append(
             (sym.name,strvalue)
           )
@@ -194,7 +200,10 @@ class Node(object):
         value = value.cast(name)
       else:
         assert type(name) in (int,str,unicode,gdb.Field), 'path={path}'.format(path=path)
-        value = value[name]
+        try:
+          value = value[name]
+        except gdb.error:
+          gdb_print(str(self))
     return valcache(value)
 
   def assign(self,new_value):
@@ -517,52 +526,58 @@ class ValueToChunks(BasePath):
 
     arr_elem_size=deref_value.type.strip_typedefs().sizeof
     arr_size=n2-n1+1 if n2!=None else 1
-    if value_addr==None or self.is_array_fetchable(value,n1,n2):
-      if 'delimiter' in kwargs:
-        delimiter=kwargs['delimiter']
+    if 'delimiter' in kwargs:
+      delimiter=kwargs['delimiter']
+    else:
+      if deref_type_code in (gdb.TYPE_CODE_INT,gdb.TYPE_CODE_FLT):
+        delimiter={'str':', '}
       else:
-        if deref_type_code in (gdb.TYPE_CODE_INT,gdb.TYPE_CODE_FLT):
-          delimiter={'str':', '}
+        delimiter={'str':',\n'}
+    for i in range(n1,n22):
+      value_idx = valcache(value[i])
+      if elem_as_array: #pointer, not really array
+        tochunks=lambda value,name,path,**kwargs : self.subarray_pointer_data_chunks(value,path,**kwargs)
+      else:
+        if deref_type_code == gdb.TYPE_CODE_ARRAY:
+          tochunks=lambda value,name,path,**kwargs : self.value_to_chunks_1(value=value,name='',path=path,suppress_array_addr=True,**kwargs)
         else:
-          delimiter={'str':',\n'}
-      for i in range(n1,n22):
-        value_idx = valcache(value[i])
-        if elem_as_array: #pointer, not really array
-          tochunks=lambda value,name,path,**kwargs : self.subarray_pointer_data_chunks(value,path,**kwargs)
-        else:
-          if deref_type_code == gdb.TYPE_CODE_ARRAY:
-            tochunks=lambda value,name,path,**kwargs : self.value_to_chunks_1(value=value,name='',path=path,suppress_array_addr=True,**kwargs)
-          else:
-            tochunks=lambda value,name,path,**kwargs : self.value_to_chunks_1(value=value,name=None,path=path,**kwargs)
-        path_idx = path.append(
-          name=i,
-          tochunks=tochunks,
-        )
-        id=path_idx.id if elem_as_array else None
-        #Если не elem_as_array, то id было добавлено в value_to_chunks_1, поэтому тут его не добавляем
+          tochunks=lambda value,name,path,**kwargs : self.value_to_chunks_1(value=value,name=None,path=path,**kwargs)
+      path_idx = path.append(
+        name=i,
+        tochunks=tochunks,
+      )
+      id=path_idx.id if elem_as_array else None
+      #Если не elem_as_array, то id было добавлено в value_to_chunks_1, поэтому тут его не добавляем
+      try:
         array_data_chunks__1=tochunks(value_idx,None,path_idx)
         chs = {'chunks':array_data_chunks__1}
         if id!=None: #Данное id приписывается узлу дерева в граф. окне. При помощи данного id осуществляется операция обновления дерева
           chs['id']=id
-        array_data_chunks.append(chs)
-        if delimiter and i!=n22-1:
-          array_data_chunks.append(delimiter)
-      array_data_chunks.append({'str':'\n'})
-      chunks1.append({'chunks':array_data_chunks,'type_code':'TYPE_CODE_ARRAY'})
-      chunks.append({
-        'str':'[\n',
-        'onclick_data':self.base_onclick_data('collapse_variable',path_id=path.id)
-      })
-      chunks.append ({
-        'chunks'  : chunks1,
-        'name'    : 'parenthesis',
-      })
-      chunks.append({
-        'str':'\n]\n',
-        'onclick_data':self.base_onclick_data('collapse_variable',path_id=path.id)
-      })
-    else:
-      chunks+=self.chunks_error('accs_mem')
+      except ValueUnavailable:
+        #we can try read memory that occupies element of array, but it is bad approach.
+        #Because in this check we read memory and if PK then when we will convert value to tree
+        #we secondary will be read memory. In embedding systems reading of memory can take a lot of time.
+        #
+        # According to this, we convert value to and if in some place we get error, exception
+        # ValueUnavailable will be raised.
+        chs=UNAVAILABLE_CHUNK
+      array_data_chunks.append(chs)
+      if delimiter and i!=n22-1:
+        array_data_chunks.append(delimiter)
+    array_data_chunks.append({'str':'\n'})
+    chunks1.append({'chunks':array_data_chunks,'type_code':'TYPE_CODE_ARRAY'})
+    chunks.append({
+      'str':'[\n',
+      'onclick_data':self.base_onclick_data('collapse_variable',path_id=path.id)
+    })
+    chunks.append ({
+      'chunks'  : chunks1,
+      'name'    : 'parenthesis',
+    })
+    chunks.append({
+      'str':'\n]\n',
+      'onclick_data':self.base_onclick_data('collapse_variable',path_id=path.id)
+    })
     return chunks
 
   def chunks_error(self,name):
@@ -647,17 +662,18 @@ class ValueToChunks(BasePath):
       valuetype='{} aka {}'.format(valuetype1,valuetype2)
     return valuetype
 
-  def changable_value_to_chunks(self,value,path,**kwargs):
-    if kwargs.get('enable_additional_text',False)==True:
-      valuestr  = cached_stringify_value(value,str(path),**kwargs)
+  def changable_value_to_chunks(self,value,path,enable_additional_text=False,proposed_text=None,**kwargs):
+    if value.is_optimized_out:
+      return [OPTIMIZED_OUT_CHUNK]
     else:
-      valuestr  = stringify_value(value,**kwargs)
-    if 'proposed_text' not in kwargs:
-      kwargs['enable_additional_text']=False
-      strvalue_pure=stringify_value(value,**kwargs)
-      kwargs['proposed_text'] = strvalue_pure
+      try:
+        valuestr  = stringify_value(value,enable_additional_text=enable_additional_text,**kwargs)
+      except ValueUnavailable:
+        return [text(ValueUnavailable.default_stub)]
+    if proposed_text is None:
+      proposed_text=stringify_value(value,**kwargs)
     valuetype = self.stringify_type(value.type)
-    return self.changable_strvalue_to_chunks(valuestr,path,valuetype,**kwargs)
+    return self.changable_strvalue_to_chunks(valuestr,path,valuetype,proposed_text=proposed_text,**kwargs)
 
   def changable_strvalue_to_chunks(self,valuestr,path,valuetype,**kwargs):
     onclick_data={
@@ -685,13 +701,11 @@ class ValueToChunks(BasePath):
     '''
         :param fields: list of gdb.Field If this argument specified then only this fields will be print
     '''
-    type_code = value.type.strip_typedefs().code
+    type_code = value.type.strip_typedefs().code #may be union or struct
     chunks=[]
     chunks+=self.chunks_type_name(value,name,**kwargs)
-    #try:
     value_addr = value.address
-    #except gdb.MemoryError:
-    #  value_addr=None
+    #first check whether we can read memory occupied by struct (value)
     collapsed=self.expand_variable.get(path.id)
     expand_single = self.expand_single_array_elem(path) #True, Если данная структура получается в результате разыменования уазателя,
     #причем в slice у указателя стоит только один элемент, а не диапазон.
@@ -705,55 +719,58 @@ class ValueToChunks(BasePath):
     base_classes=[]
 
     target_fields = fields if fields else value.type.strip_typedefs().fields()
-    for idx,field in enumerate(target_fields):
-      field_value,field_name,value_path = None,None,None
-      if field.is_base_class:
-        base_type = gdb.lookup_type(field.name)
-        field_value = value.cast(base_type)
-        tochunks=lambda value, name, path, **kwargs : self.value_to_chunks_1(value=value,name='<INHERITANCE>',path=path, **kwargs)
-        value_path=path.cast(base_type,tochunks=tochunks)
-      else:
-        field_name = field.name
-        if field_name==None:
-          #this is anonymous field. For example:
-          # class A {
-          #    union {
-          #      int x;
-          #      double y;
-          #    };
-          # };
-          # class A have fielns x,y and UNION is anonimous field
-          value_name = self.type_code_to_string[field.type.code]
-          tochunks = (lambda value_name : lambda value,name,path,**kwargs : self.value_to_chunks_1(
-              value=value,
-              name=value_name,
-              path=path,
-              **self.update_kwargs(expand_depth=max(1,expand_depth-1),print_typename=False,kwargs=kwargs)
-            )
-          )(value_name)
-          field_value = value[field]
-          value_path=path.append(name=(idx,None),tochunks=tochunks, field=field)
+    try:
+      for idx,field in enumerate(target_fields):
+        field_value,field_name,value_path = None,None,None
+        if field.is_base_class:
+          base_type = gdb.lookup_type(field.name)
+          field_value = value.cast(base_type)
+          tochunks=lambda value, name, path, **kwargs : self.value_to_chunks_1(value=value,name='<INHERITANCE>',path=path, **kwargs)
+          value_path=path.cast(base_type,tochunks=tochunks)
         else:
-          field_value = valcache(value[field_name])
-          value_path=path.append(name=field_name)
-          tochunks = lambda value,name,path,**kwargs : self.value_to_chunks_1(value,name,path,**kwargs)
-      data_chunks+=tochunks(field_value,field_name,value_path,expand_depth=expand_depth-1,**kwargs)
-      data_chunks.append({'str':'\n'})
-    if type_code==gdb.TYPE_CODE_STRUCT:
-      chunks1.append({'chunks':data_chunks,'type_code':'TYPE_CODE_STRUCT'})
-    elif type_code==gdb.TYPE_CODE_UNION:
-      chunks1.append({'chunks':data_chunks,'type_code':'TYPE_CODE_UNION'})
-    chunks.append({
-      'str':'{\n',
-      'onclick_data':self.base_onclick_data('collapse_variable',path_id=path.id),
-    })
-    chunks.append ({
-      'chunks'  : chunks1,
-    })
-    chunks.append({
-      'str':'\n}\n',
-      'onclick_data':self.base_onclick_data('collapse_variable',path_id=path.id),
-    })
+          field_name = field.name
+          if field_name==None:
+            #this is anonymous field. For example:
+            # class A {
+            #    union {
+            #      int x;
+            #      double y;
+            #    };
+            # };
+            # class A have fielns x,y and UNION is anonimous field
+            value_name = self.type_code_to_string[field.type.code]
+            tochunks = (lambda value_name : lambda value,name,path,**kwargs : self.value_to_chunks_1(
+                value=value,
+                name=value_name,
+                path=path,
+                **self.update_kwargs(expand_depth=max(1,expand_depth-1),print_typename=False,kwargs=kwargs)
+              )
+            )(value_name)
+            field_value = value[field]
+            value_path=path.append(name=(idx,None),tochunks=tochunks, field=field)
+          else:
+            field_value = valcache(value[field_name])
+            value_path=path.append(name=field_name)
+            tochunks = lambda value,name,path,**kwargs : self.value_to_chunks_1(value,name,path,**kwargs)
+        data_chunks+=tochunks(field_value,field_name,value_path,expand_depth=expand_depth-1,**kwargs)
+        data_chunks.append({'str':'\n'})
+      if type_code==gdb.TYPE_CODE_STRUCT:
+        chunks1.append({'chunks':data_chunks,'type_code':'TYPE_CODE_STRUCT'})
+      elif type_code==gdb.TYPE_CODE_UNION:
+        chunks1.append({'chunks':data_chunks,'type_code':'TYPE_CODE_UNION'})
+      chunks.append({
+        'str':'{\n',
+        'onclick_data':self.base_onclick_data('collapse_variable',path_id=path.id),
+      })
+      chunks.append ({
+        'chunks'  : chunks1,
+      })
+      chunks.append({
+        'str':'\n}\n',
+        'onclick_data':self.base_onclick_data('collapse_variable',path_id=path.id),
+      })
+    except:
+      chunks = [UNAVAILABLE_CHUNK]
     return chunks
 
 
@@ -775,7 +792,14 @@ class ValueToChunks(BasePath):
   def value_withstr_to_chunks(self,value,name,path,**kwargs):
     chunks=[]
     chunks+=self.name_to_chunks(name)
-    chunks.append({'str':cached_stringify_value(value,str(path),enable_additional_text=True), 'name':'varvalue'})
+    if value.is_optimized_out:
+      value_chunk = OPTIMIZED_OUT_CHUNK
+    else:
+      try:
+        value_chunk = {'str':stringify_value(value,enable_additional_text=True), 'name':'varvalue'}
+      except ValueUnavailable:
+        value_chunk = text(ValueUnavailable.default_stub)
+    chunks.append(value_chunk)
     return chunks
 
   def ptrval_to_ulong(self,value):
@@ -941,7 +965,11 @@ class ValueToChunks(BasePath):
         pointer_data_chunks = []
         if not value.is_optimized_out and not re.match('.*void \*$',type_str) and not is_incomplete_type_ptr(value):
           #все OK
-          if value.dereference().type.strip_typedefs().code == gdb.TYPE_CODE_FUNC:
+          try:
+            deref_type_code = value.dereference().type.strip_typedefs().code
+          except:
+            raise ValueUnavailable
+          if deref_type_code == gdb.TYPE_CODE_FUNC:
             is_funct_ptr=True
           else:
             pointer_data_chunks = self.pointer_data_to_chunks (value, name, path, **kwargs)
