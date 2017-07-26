@@ -193,6 +193,7 @@ class Node(object):
       if type(name) is gdb.Type:
         value = value.cast(name)
       else:
+        assert type(name) in (int,str,unicode,gdb.Field), 'path={path}'.format(path=path)
         value = value[name]
     return valcache(value)
 

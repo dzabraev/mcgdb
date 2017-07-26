@@ -65,7 +65,7 @@ Quit this debugging session? (y or n)
 7. TESTCASE нужно раскрыть указатель, после чего свернуть, затем изменить значение скрытого элемента массива:
 set variable arr[0]=0x1
 
-8. БАГ
+8. BUG FIXED
 CPZero::adjust_timer_interrupt (this=0x265d610) at /home/dza/job/vmips64/src/k64/cpzero.cc:2737
 2737		if (timer_interrupt_by_wait) {
 2750			if (timer_ready && ((reg[0][Count] == reg[0][Compare]) ||
@@ -113,4 +113,56 @@ Traceback (most recent call last):
   File "/home/dza/sources/obj-mcgdb/python/mcgdb/valuetochunks.py", line 472, in array_to_chunks
     assert name!=None
 AssertionError
+
+
+
+
+9. BUG
+Options::optstruct (this=0x2657a10, name=0x4dc0c8 "snoop_dont_change_ws", install=false) at /home/dza/job/vmips64/src/k64/options.cc:447
+447		for (y = x; y < TABLESIZE; y++) {
+#1  0x0000000000435072 in Options::option (this=0x2657a10, name=0x4dc0c8 "snoop_dont_change_ws") at /home/dza/job/vmips64/src/k64/options.h:74
+74			const Option *o = optstruct(name);
+Exception in thread Thread-1:
+Traceback (most recent call last):
+  File "/usr/lib64/python2.7/threading.py", line 551, in __bootstrap_inner
+    self.run()
+  File "/usr/lib64/python2.7/threading.py", line 504, in run
+    self.__target(*self.__args, **self.__kwargs)
+  File "/home/dza/sources/obj-mcgdb/python/mcgdb/common.py", line 820, in __call__
+    if_gdbstopped_else(stopped=self.process_pending_pkg)
+  File "/home/dza/sources/obj-mcgdb/python/mcgdb/common.py", line 69, in decorated
+    return exec_in_main_pythread (f,args,kwargs)
+  File "/home/dza/sources/obj-mcgdb/python/mcgdb/common.py", line 632, in exec_in_main_pythread_1
+    result['retval']=func(*args,**kwargs)
+  File "/home/dza/sources/obj-mcgdb/python/mcgdb/common.py", line 76, in if_gdbstopped_else
+    res = cb() if cb else None
+  File "/home/dza/sources/obj-mcgdb/python/mcgdb/common.py", line 826, in process_pending_pkg
+    self.send_pkg_to_entities(pkg,entity_key)
+  File "/home/dza/sources/obj-mcgdb/python/mcgdb/common.py", line 749, in send_pkg_to_entities
+    res = entity.process_pkg (pkg)
+  File "/home/dza/sources/obj-mcgdb/python/mcgdb/basewin.py", line 331, in process_pkg
+    ret=cb(pkg)
+  File "/home/dza/sources/obj-mcgdb/python/mcgdb/auxwin.py", line 104, in decorated
+    return f(self,pkg)
+  File "/home/dza/sources/obj-mcgdb/python/mcgdb/auxwin.py", line 212, in onclick_expand_variable
+    need_update=self.current_values.onclick_expand_variable(pkg)
+  File "/home/dza/sources/obj-mcgdb/python/mcgdb/valuetochunks.py", line 345, in onclick_expand_variable
+    return self.diff(path)
+  File "/home/dza/sources/obj-mcgdb/python/mcgdb/valuetochunks.py", line 340, in diff
+    return self.map_nodes_to_chunks(super(ValueToChunks,self).diff(node=node))
+  File "/home/dza/sources/obj-mcgdb/python/mcgdb/valuetochunks.py", line 334, in map_nodes_to_chunks
+    chunks=func(value=node.value(), name=str(node.name), path=node)
+  File "/home/dza/sources/obj-mcgdb/python/mcgdb/valuetochunks.py", line 911, in value_to_chunks_1
+    chunks+=self.struct_to_chunks(value,name,path,**kwargs)
+  File "/home/dza/sources/obj-mcgdb/python/mcgdb/valuetochunks.py", line 734, in struct_to_chunks
+    value_path=path.append(name=(idx,None),tochunks=tochunks, field=field)
+  File "/home/dza/sources/obj-mcgdb/python/mcgdb/valuetochunks.py", line 148, in append
+    child = Node(name=name,parent=self,**kwargs)
+  File "/home/dza/sources/obj-mcgdb/python/mcgdb/valuetochunks.py", line 107, in __init__
+    self.do_capture()
+  File "/home/dza/sources/obj-mcgdb/python/mcgdb/valuetochunks.py", line 116, in do_capture
+    self.saved_img =self.get_value_img(self.value())
+  File "/home/dza/sources/obj-mcgdb/python/mcgdb/valuetochunks.py", line 196, in value
+    value = value[name]
+error: No field with matching bitpos and type.
 
