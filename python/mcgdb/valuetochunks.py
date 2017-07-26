@@ -241,7 +241,7 @@ class BasePath(object):
             continue
       if child.is_changed_upd():
         res.append(child)
-      else:
+      elif not (self.expand_variable.get(child.id)==False):
         self.__diff(child,res)
 
   def diff(self,node=None):
