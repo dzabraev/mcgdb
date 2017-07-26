@@ -229,7 +229,16 @@ class BasePath(object):
     return node
 
   def __diff(self,node,res):
-    for child in node.childs.values():
+    for name,child in node.childs.iteritems():
+      if type(name) is int:
+        n1,n2=self.user_slice[node.id]
+        #check whether user change slice and slice-diapason contains name (name=index in array)
+        if n2==None:
+          if n1!=name:
+            continue
+        else:
+          if not (n1<=name and name<=n2):
+            continue
       if child.is_changed_upd():
         res.append(child)
       else:
@@ -281,7 +290,7 @@ class ValueToChunks(BasePath):
     self.slice_regex=re.compile('^(-?\d+)([:, ](-?\d+))?$')
     self.user_slice={} # Данная переменная хранит информацию о том,
     # что если встречается указатель ptr, то сколько элементов указателя
-    # ptr[0], ptr[1], ... нужно печатать. key=path, value=(n1,n2).
+    # ptr[0], ptr[1], ... нужно печатать. key=path_id, value=(n1,n2).
     #n1,n2 задает диапазон, включая оба конца. Если n2 есть None, то печатается строго
     #один элемент ptr[n1]
     self.expand_variable={}
