@@ -85,6 +85,7 @@ void *fac50(void *arg) {
 }
 
 int main(void) {
+  int arr[3][3][3];
   struct {
     const char *s;
   } test_utf8;
