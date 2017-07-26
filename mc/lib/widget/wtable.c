@@ -986,6 +986,9 @@ json_to_celltree (Table *tab, GNode *parent, json_t *json_chunk) {
   for (size_t nc=0; nc<json_array_size (json_child_chunks); nc++) {
     json_t * json_node_data = json_array_get (json_child_chunks,nc);
     GNode * node = table_add_node (tab,parent,json_node_data);
+    if (json_boolean_value(json_object_get(json_node_data,"visible"))) {
+      tab->selected_row = g_list_index(tab->rows,CHUNK(node)->row);
+    }
     json_to_celltree(tab,node,json_node_data);
   }
 }

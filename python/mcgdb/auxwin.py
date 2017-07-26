@@ -401,10 +401,7 @@ class BacktraceTable(SubentityUpdate):
     addrs=[]
     frame = gdb.newest_frame()
     while frame:
-      try:
-        _,start,stop = frame_func_addr(frame)
-      except gdb.error:
-        start,stop = None,None
+      _,start,stop = frame_func_addr(frame)
       addrs.append((start,stop))
       frame = frame.older()
     global_num = gdb.selected_thread().global_num

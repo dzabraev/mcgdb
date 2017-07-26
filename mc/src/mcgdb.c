@@ -230,6 +230,7 @@ read_pkg_from_gdb (void) {
   }
   *p=0;
   pkg = json_loads(buf, 0, &error);
+  message_assert (json_is_object(pkg));
   free(buf);
   return pkg;
 
@@ -315,11 +316,7 @@ check_action_from_gdb(struct gdb_action * act) {
   enum gdb_cmd cmd;
   json_t *pkg;
   pkg = read_pkg_from_gdb();
-  if (!json_is_object(pkg)) {
-    act->command = MCGDB_ERROR;
-    json_decref(pkg);
-    return;
-  }
+  message_assert (json_is_object(pkg));
   cmd=get_command_num(pkg);
   if (cmd==MCGDB_ERROR_MESSAGE) {
     edit_error_dialog("ERROR",json_string_value (json_object_get (pkg,"message")));
