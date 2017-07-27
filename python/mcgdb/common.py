@@ -31,20 +31,19 @@ mcgdb_main=None
 
 LOG_FILENAME='/tmp/mcgdb.log'
 
-if 'DEBUG' in os.environ and os.path.exists(LOG_FILENAME):
-  os.remove(LOG_FILENAME)
-
 DEBUG = os.environ.get('DEBUG')
-WITH_VALGRIND = os.environ.get('VALGRIND')
+WITH_VALGRIND = os.environ.get('VALGRIND') #run gui window under valgrind
+WIN_LIST = os.environ.get('WIN_LIST',"aux src").split()
 
 if 'debug' in os.environ or 'DEBUG' in os.environ:
   level = logging.INFO
   debug_messages=True
+  os.remove(LOG_FILENAME)
+  logging.basicConfig(filename=LOG_FILENAME,format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
 else:
   level = logging.CRITICAL
   debug_messages = False
-
-logging.basicConfig(filename=LOG_FILENAME,format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
+  logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
 
 class mcgdbBaseException(Exception):
   def __init__(self, value=None):
@@ -911,8 +910,9 @@ class McgdbMain(object):
     gdb.events.breakpoint_deleted.connect( self.notify_gdb_breakpoint_deleted  )
     gdb.events.breakpoint_modified.connect(self.notify_gdb_breakpoint_modified )
 
-    self.open_window('src')
-    self.open_window('aux')
+    for win_name in ['src','aux','asm']:
+      if win_name in WIN_LIST:
+        self.open_window(win_name)
 
 
   def stop_event_loop(self):
