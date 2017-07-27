@@ -343,7 +343,10 @@ class ValueToChunks(BasePath):
         func=self.value_to_chunks_1
       chunks=func(value=node.value(), name=str(node.name), path=node)
       assert len(chunks)==1
-      mapped.append(chunks[0])
+      chunk = chunks[0]
+      if 'id' not in chunk:
+        chunk['id'] = node.id
+      mapped.append(chunk)
     return mapped
 
   def diff(self,node=None):
@@ -469,6 +472,14 @@ class ValueToChunks(BasePath):
     except gdb.MemoryError:
       return False
 
+  @staticmethod
+  def catch_unavailable(cb):
+    def decorated(value,name,path,**kwargs):
+      try:
+        return cb(value,name,path,**kwargs)
+      except ValueUnavailable:
+        return [{'chunks':[UNAVAILABLE_CHUNK],'id':path.id}]
+    return decorated
 
   def array_to_chunks (self, value, name, n1, n2, path,
       slice_clickable=True, **kwargs):
@@ -543,7 +554,7 @@ class ValueToChunks(BasePath):
     for i in range(n1,n22):
       value_idx = valcache(value[i])
       if value_idx.is_optimized_out:
-        chs=OPTIMIZED_OUT_CHUNK
+        elem_chunk = OPTIMIZED_OUT_CHUNK
       else:
         if elem_as_array: #pointer, not really array
           tochunks=lambda value,name,path,**kwargs : self.subarray_pointer_data_chunks(value,path,**kwargs)
@@ -552,26 +563,22 @@ class ValueToChunks(BasePath):
             tochunks=lambda value,name,path,**kwargs : self.value_to_chunks_1(value=value,name='',path=path,suppress_array_addr=True,**kwargs)
           else:
             tochunks=lambda value,name,path,**kwargs : self.value_to_chunks_1(value=value,name=None,path=path,**kwargs)
+        #we can try read memory that occupies element of array, but it is bad approach.
+        #Because in this check we read memory and if OK then when we will convert value to tree
+        #we secondary will be read memory. In embedding systems reading of memory can take a lot of time.
+        #
+        # According to this, we convert value to and if in some place we get error, exception
+        # ValueUnavailable will be raised.
+        tochunks = self.catch_unavailable(tochunks)
         path_idx = path.append(
           name=i,
           tochunks=tochunks,
         )
-        id=path_idx.id if elem_as_array else None
-        #Если не elem_as_array, то id было добавлено в value_to_chunks_1, поэтому тут его не добавляем
-        try:
-          array_data_chunks__1=tochunks(value_idx,None,path_idx)
-          chs = {'chunks':array_data_chunks__1}
-          if id!=None: #Данное id приписывается узлу дерева в граф. окне. При помощи данного id осуществляется операция обновления дерева
-            chs['id']=id
-        except ValueUnavailable:
-          #we can try read memory that occupies element of array, but it is bad approach.
-          #Because in this check we read memory and if PK then when we will convert value to tree
-          #we secondary will be read memory. In embedding systems reading of memory can take a lot of time.
-          #
-          # According to this, we convert value to and if in some place we get error, exception
-          # ValueUnavailable will be raised.
-          chs=UNAVAILABLE_CHUNK
-      array_data_chunks.append(chs)
+        chs=tochunks(value_idx,None,path_idx) #inside this function id must be appended
+        assert len(chs)==1
+        elem_chunk = chs[0]
+        assert 'id' in elem_chunk
+      array_data_chunks.append(elem_chunk)
       if delimiter and i!=n22-1:
         array_data_chunks.append(delimiter)
     array_data_chunks.append({'str':'\n'})
