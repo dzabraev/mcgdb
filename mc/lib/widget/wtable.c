@@ -983,6 +983,7 @@ json_to_celltree (Table *tab, GNode *parent, json_t *json_chunk) {
   json_t *json_child_chunks = json_object_get (json_chunk, "chunks");
   if (!json_child_chunks)
     return;
+  message_assert (json_is_array (json_child_chunks));
   for (size_t nc=0; nc<json_array_size (json_child_chunks); nc++) {
     json_t * json_node_data = json_array_get (json_child_chunks,nc);
     GNode * node = table_add_node (tab,parent,json_node_data);
