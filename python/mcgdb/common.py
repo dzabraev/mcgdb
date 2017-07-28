@@ -63,7 +63,7 @@ class mcgdbChangevarErr(Exception):
 
 class InferiorNotAlive(mcgdbBaseException): pass
 
-class ValueUnavailable(mcgdbBaseException):
+class ValueUnavailable(Exception):
   default_stub = '<unavailable>'
 
 def exec_main(f):
