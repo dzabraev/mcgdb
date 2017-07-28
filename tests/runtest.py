@@ -27,6 +27,18 @@ class Singleton(type):
             cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
         return cls._instances[cls]
 
+class ExecutableNotFound(Exception):
+  def __init__(self,name):
+    self.name=name
+  def __str__(self,name):
+    return 'cant find program `{name}` in PATH'.format(name=name)
+
+def which(name):
+    for path in os.getenv("PATH").split(os.path.pathsep):
+        full_path = path + os.sep + name
+        if os.path.exists(full_path):
+          return full_path
+    raise ExecutableNotFound(name)
 
 class Display(object):
   __metaclass__ = Singleton
@@ -51,7 +63,7 @@ class McgdbWin(object):
   ButtonRelease = -1
 
   @cleanup__init__
-  def __init__(self,cmd,xterm='/usr/bin/xterm'):
+  def __init__(self,cmd):
     ENV={
       'DISPLAY':Display().DISPLAY,
     }
@@ -59,26 +71,31 @@ class McgdbWin(object):
     sock.bind(('', 0))
     port = sock.getsockname()[1]
     iostub = os.path.abspath('iostub.py')
-    args=[xterm,'-geometry','+0+0','-e',' '.join([iostub, str(port), cmd])]
+    python = which('python')
+    xterm=which('xterm')
+    args=[xterm,'-geometry','+0+0','-e',' '.join([python,iostub, str(port), cmd])+'; sleep 999']
     print args
     self.xterm = subprocess.Popen(args,env=ENV)
     sock.listen(1)
     conn, addr = sock.accept()
+    print '{cmd} started'.format(cmd=cmd)
     self.conn = conn
     atexit.register(self.close)
 
-  def mouse_event_msg(self,button,col,row,end,shift=0,meta=0,ctrl=0,motion=0,wheel=0):
-    return '{ESC}[{button};{col};{row}{end}'.format(
+  def mouse_click_msg(self,row,col):
+    pat = lambda end : '{ESC}[{button};{row};{col}{end}'.format(
       ESC=chr(27),
-      button=32 + (shift<<2) + (meta<<3) + (ctrl<<4) + (motion<<5) + (wheel<<6) + button,
+      button='<0',
       col=col,
       row=row,
-      end=end
+      end=end,
     )
+    return pat('M')+pat('m')
 
-  def mouse_click(self,col,row):
-    self.conn.sendall(self.mouse_event_msg(self.ButtonPress,col,row,'M'))
-    self.conn.sendall(self.mouse_event_msg(self.ButtonRelease,col,row,'m'))
+  def click(self,row,col):
+    msg=self.mouse_click_msg(row,col)
+    print msg
+    self.conn.sendall(self.mouse_click_msg(row=row,col=col))
 
   @cleanup__close__
   def close(self):
@@ -86,7 +103,7 @@ class McgdbWin(object):
 
 class Gdb(object):
   @cleanup__init__
-  def __init__(self,args,env={}):
+  def __init__(self,args='',env={}):
     ENV={
       'WIN_LIST':'',
     }

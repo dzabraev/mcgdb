@@ -44,7 +44,6 @@ def do_parent(port,child_fd):
           log.flush()
 
 def stub():
-  print sys.argv
   port = int(sys.argv[1])
   executable = sys.argv[2]
   args = sys.argv[2:]
