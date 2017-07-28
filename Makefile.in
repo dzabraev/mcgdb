@@ -886,7 +886,9 @@ mcgdb-python-build:
 	ln -sfn $(abs_srcdir)/tests/testdir/file.c $(abs_builddir)/tests/testdir/file.c
 	ln -sfn $(abs_srcdir)/tests/testdir/file.h $(abs_builddir)/tests/testdir/file.h
 	ln -sfn $(abs_srcdir)/tests/runtest.py $(abs_builddir)/tests/runtest.py
+	ln -sfn $(abs_srcdir)/tests/iostub.py $(abs_builddir)/tests/iostub.py
 	chmod u+x $(abs_builddir)/tests/runtest.py
+	chmod u+x $(abs_builddir)/tests/iostub.py
 	make -C $(abs_builddir)/tests
 
 all : mcgdb-python-build
