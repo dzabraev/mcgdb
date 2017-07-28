@@ -19,10 +19,10 @@ def do_parent(port,child_fd):
   }
   rlist = pair.keys()
   do_nonblock = lambda fd : fcntl.fcntl(fd, fcntl.F_SETFL, fcntl.fcntl(fd, fcntl.F_GETFL) | os.O_NONBLOCK)
-  do_nonblock(stdin_fd)
-  do_nonblock(child_fd)
+  map(do_nonblock,rlist)
   select.select([child_fd],[],[]) #wait first child output and then change terminal settings
   termios.tcsetattr(stdout_fd, termios.TCSANOW, termios.tcgetattr(child_fd))
+  log=open('/tmp/mclog.log','w')
   while True:
     ready_fds = select.select(rlist,[],[])
     ready_read_fds = ready_fds[0]
@@ -39,8 +39,12 @@ def do_parent(port,child_fd):
         os.write(pair[rfd],res)
         if rfd==child_fd:
           sock.sendall(res)
+        elif rfd==stdin_fd:
+          log.write(res)
+          log.flush()
 
 def stub():
+  print sys.argv
   port = int(sys.argv[1])
   executable = sys.argv[2]
   args = sys.argv[2:]

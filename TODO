@@ -168,7 +168,10 @@ error: No field with matching bitpos and type.
 
 
 
+10. Возникает блокировка. Если в gdb сделать interrupt, то исполнение
+питновского потока повиснет на evt.wait()
 
+11.Каким-то образом ValueUnavailable вышло наружу
 
 
 
