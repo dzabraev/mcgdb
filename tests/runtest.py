@@ -79,8 +79,8 @@ class ControlSequence(object):
     esc=NoEsc(cts_esc)
 
     C   = NoEsc('.')
-    Ps  = NoEsc('\d+')
-    Pm  = NoEsc('((\d+)|((\d+;)+\d+))')
+    Ps  = NoEsc('(\d+)?')
+    Pm  = NoEsc('((\d+)?|((\d+;)+\d+))')
     Pt  = NoEsc('[a-z]+')
 
     IND     =esc+'D'
@@ -195,6 +195,9 @@ class ControlSequence(object):
       (CSI,Ps,'"q'),
       (CSI,Ps,';',Ps,'r'),
       (CSI,'?',Pm,'r'),
+      (CSI,'?',Ps,'s'),
+      (CSI,'H'),
+      #(CSI,'K'),
 
     ]
 
