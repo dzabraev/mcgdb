@@ -4,6 +4,8 @@
 import pexpect, subprocess, time, os, socket, sys, re, select
 import atexit
 
+FNULL = open(os.devnull, 'w')
+
 def cleanup__init__(func):
   def decorated(self,*args,**kwargs):
     atexit.register(self.close)
@@ -42,14 +44,11 @@ def which(name):
           return full_path
     raise ExecutableNotFound(name)
 
-#search window: DISPLAY=:99 xdotool search --onlyvisible 'mcgdb'
-#change window size DISPLAY=:99 xdotool windowsize --usehints <WINID> <ROW> <COL>
 class Display(object):
   __metaclass__ = Singleton
   @cleanup__init__
   def __init__(self,DISPLAY=':99',port=5906):
     self.DISPLAY=DISPLAY
-    FNULL = open(os.devnull, 'w')
     self.xvfb   = subprocess.Popen(['Xvfb',DISPLAY], stdout=FNULL, stderr=subprocess.STDOUT)
     self.x11vnc = subprocess.Popen(['x11vnc', '-display', DISPLAY, '-rfbport', str(port)], stdout=FNULL, stderr=subprocess.STDOUT)
     print 'VIEW DISPLAY: `vncviewer localhost:{port}`'.format(port=port)
@@ -412,6 +411,18 @@ class McgdbWin(object):
       #DEC Special Character and Line Drawing Set
       return self.dec_lines_charset[data]
 
+  def resize(self,row,col):
+    cmd='''DISPLAY={DISPLAY} xdotool search --onlyvisible 'mcgdb' '''.format(DISPLAY=Display().DISPLAY)
+    p=subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=FNULL)
+    winid = int(p.stdout.read(1024))
+    cmd='''DISPLAY={DISPLAY} xdotool windowsize --usehints {winid} {row} {col}'''.format(
+      DISPLAY=Display().DISPLAY,
+      winid=winid,
+      row=row,
+      col=col,
+    )
+    subprocess.Popen(cmd, shell=True, stdout=FNULL, stderr=FNULL)
+
   @cleanup__close__
   def close(self):
     self.xterm.kill()
@@ -447,6 +458,7 @@ class Gdb(object):
 def runtest():
   gdb=Gdb('main')
   aux=gdb.open_aux_win()
+  aux.resize(row=60,col=80)
   gdb.gdb.sendline('break main')
   gdb.gdb.sendline('run')
   while True:
