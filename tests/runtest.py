@@ -42,6 +42,8 @@ def which(name):
           return full_path
     raise ExecutableNotFound(name)
 
+#search window: DISPLAY=:99 xdotool search --onlyvisible 'mcgdb'
+#change window size DISPLAY=:99 xdotool windowsize --usehints <WINID> <ROW> <COL>
 class Display(object):
   __metaclass__ = Singleton
   @cleanup__init__
@@ -78,7 +80,7 @@ class ControlSequence(object):
     # http://www.xfree86.org/4.7.0/ctlseqs.html#VT100%20Mode
     esc=NoEsc(cts_esc)
 
-    C   = NoEsc('.')
+    C   = NoEsc('(.)')
     Ps  = NoEsc('(\d+)?')
     Pm  = NoEsc('((\d+)?|((\d+;)+\d+))')
     Pt  = NoEsc('[a-z]+')
@@ -198,17 +200,56 @@ class ControlSequence(object):
       (CSI,'?',Ps,'s'),
       (CSI,'H'),
       #(CSI,'K'),
-
     ]
 
-    escape_regex = lambda x : re.escape(x) if type(x) is not NoEsc else str(x)
+    rc = lambda *x: re.compile(self.tuple_to_regex(x),re.MULTILINE|re.DOTALL)
+    self.parse_cs=[
+      ('color',          rc(CSI,Pm,'m'),         self.parse_color),
+      ('cursor_position',rc(CSI,Ps,';',Ps,'H'),  self.parse_cursor_positin),
+      ('charset',        rc(esc,'(',C),         lambda cs,match : {'G':0,'charset':cs[-1]} ), #)
+    ]
+
     self.regexes=[]
     self.cregexes=[]
     for cs in self.cts:
-      reg=''.join(map(escape_regex,cs))
-      reg='^('+reg+')$'
+      reg = self.tuple_to_regex(cs)
       self.regexes.append(reg)
       self.cregexes.append(re.compile(reg,re.MULTILINE|re.DOTALL))
+
+  def parse(self,cs):
+    for name,regex,parser in self.parse_cs:
+      m = regex.match(cs)
+      if m:
+        return name,parser(cs,match=m)
+    return None,None
+
+  def parse_color(self,cs,**kwargs):
+    colors = map(int,filter(None,cs[2:-1].split(';')))
+    bg=None
+    fg=None
+    for color in colors:
+      if 40<=color<=47:
+        bg=color
+      elif 30<=color<=37:
+        fg=color
+    return {'bg':bg,'fg':fg}
+
+  def parse_cursor_positin(self,cs,**kwargs):
+    coords=map(int,cs[2:-1].split(';'))
+    assert len(coords) in (2,0)
+    if len(coords)==2:
+      row = coords[0]
+      col = coords[1]
+    else:
+      row=1
+      col=1
+    return {'col':col,'row':row}
+
+  def tuple_to_regex(self,cs):
+    escape_regex = lambda x : re.escape(x) if type(x) is not NoEsc else str(x)
+    reg=''.join(map(escape_regex,cs))
+    reg='^('+reg+')$'
+    return reg
 
   def is_control_sequence(self,text):
     for creg in self.cregexes:
@@ -224,12 +265,45 @@ class ControlSequence(object):
 
 control_sequence = ControlSequence()
 
+class Token(object):
+  def __init__(self,data,is_control_seq=False):
+    self.is_control_seq = is_control_seq
+    self.data = data
+
+  def parse(self):
+    assert self.is_control_seq
+    return control_sequence.parse(self.data)
+
+class InsertChar(object):
+  def __init__(self,char,row,col,bg=None,fg=None):
+    self.char = char
+    self.row=row
+    self.col=col
+    self.bg=bg
+    self.fg=fg
+
+  def __str__(self):
+    #return u'InsertChar char={char} col={col} row={row} bg={bg} fg={fg}'.format(
+    return '\x1b[{bg};{fg}m{char}\x1b[m col={col} row={row} {rp}'.format(
+      char=self.char.encode('utf8'),
+      col=self.col,
+      row=self.row,
+      bg=self.bg,
+      fg=self.fg,
+      rp=repr(self.char.encode('utf8')),
+    )
+
 class McgdbWin(object):
   ButtonPress = 0
   ButtonRelease = -1
 
   @cleanup__init__
   def __init__(self,cmd):
+    self.col=0
+    self.row=0
+    self.bg=None
+    self.fg=None
+    self.charset='B'
     ENV={
       'DISPLAY':Display().DISPLAY,
     }
@@ -247,6 +321,19 @@ class McgdbWin(object):
     print '{cmd} started'.format(cmd=cmd)
     self.conn = conn
     atexit.register(self.close)
+    self.dec_lines_charset={
+      '\x6a':u'\u2518', #j ┘
+      '\x6b':u'\u2510', #k ┐
+      '\x6c':u'\u250c', #l ┌
+      '\x6d':u'\u2514', #m └
+      '\x6e':u'\u253c', #n ┼
+      '\x71':u'\u2500', #q ─
+      '\x74':u'\u251c', #t ├
+      '\x75':u'\u2524', #u ┤
+      '\x76':u'\u2534', #v ┴
+      '\x77':u'\u252c', #w ┬
+      '\x78':u'\u2502', #x │
+    }
 
   def mouse_click_msg(self,row,col):
     pat = lambda end : '{ESC}[{button};{row};{col}{end}'.format(
@@ -270,7 +357,7 @@ class McgdbWin(object):
     seq=''
     b=self.conn.recv(1)
     if b!=cts_esc:
-      return b
+      return Token(b)
     seq+=b
     while True:
       rready,_,_ = select.select([self.conn.fileno()],[],[],timeout)
@@ -280,15 +367,50 @@ class McgdbWin(object):
       assert b != cts_esc, repr('unparsed: `{seq}`'.format(seq=seq))
       seq+=b
       if control_sequence.is_control_sequence(seq):
-        return seq
+        return Token(seq,is_control_seq=True)
 
-  def get_changes(self,predicate,timeout=5):
-    wd=WindowData()
-    t0=time.time()
-    while not predicate(wd):
-      if time.time()-t0>timeout:
-        raise TimeoutReached
-      seq = self.get_control_seq()
+  def get_action(self):
+    while True:
+      token = self.get_token()
+      if token.data=='\r':
+        self.col=1
+      elif token.data=='\n':
+        self.col=1
+        self.row+=1
+      elif token.data=='\x08':
+        self.col-=1
+      elif token.is_control_seq:
+        name,args = token.parse()
+        if name=='color':
+          if args['fg'] is not None:
+            self.fg=args['fg']
+          if args['bg'] is not None:
+            self.bg=args['bg']
+        elif name == 'cursor_position':
+          self.col = args['col']
+          self.row = args['row']
+        elif name=='charset':
+          self.charset=args['charset']
+          self.G=args['G']
+          assert args['G'] in (0,) and args['charset'] in ('0','B'), 'uniplemented G{} charset={}'.format(args['G'],args['charset'])
+      else:
+        ret=InsertChar(
+          char=self.to_unicode(token.data),
+          row=self.row,
+          col=self.col,
+          fg=self.fg,
+          bg=self.bg
+        )
+        self.col+=1
+        return ret
+
+  def to_unicode(self,data):
+    if self.charset=='B':
+      #USASCII
+      return unicode(data)
+    elif self.charset=='0':
+      #DEC Special Character and Line Drawing Set
+      return self.dec_lines_charset[data]
 
   @cleanup__close__
   def close(self):
@@ -329,7 +451,8 @@ def runtest():
   gdb.gdb.sendline('run')
   while True:
     #print repr(aux.conn.recv(1024)),
-    print repr(aux.get_token(timeout=None))
+    #print repr(aux.get_token(timeout=None).data)
+    print aux.get_action()
     sys.stdout.flush()
 
 if __name__ == "__main__":
