@@ -20,4 +20,4 @@ elif [[ "$major" -eq "7" && "$minor" -lt "12" ]]; then
 fi
 
 
-$GDB $@ -x $STARTUP_SCRIPT
+exec $GDB $@ -x $STARTUP_SCRIPT
