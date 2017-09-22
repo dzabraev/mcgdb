@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 #coding=utf8
-import pexpect,os,socket,subprocess,json,signal
+import pexpect,os,socket,subprocess,json,signal,select
 import pexpect.fdpexpect
 
 import distutils.spawn
 which = distutils.spawn.find_executable
+
+from abc import abstractmethod, ABCMeta
 
 from common import Gdb,FNULL
 
@@ -19,70 +21,238 @@ PYTHON=which('python')
 IOSTUB=os.path.join(os.path.dirname(os.path.abspath(__file__)),'iostub.py')
 GDB=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),'mcgdb')
 
+ESC='\x1b'
+CSI=ESC+'['
 
 def split_first(s,ch='\n'):
   spl=s.split(ch)
   return spl[0], ch.join(spl[1:])
 
-class XtermGdb(Gdb):
+class XtermSpawn(object):
+  __metaclass__ = ABCMeta
+
+  def __init__(self,journal,name):
+    self.journal = journal
+    self.name = name
+    gen_recv = self._recv()
+    self.recv = gen_recv.next
+    gen_recv_json = self._recv_json()
+    self.recv_json = gen_recv_json.next
+    self.feed = self._feed()
+    self.feed.next()
+    self.spawn()
+    self.recvfeed = self._recvfeed().next
+
+  @abstractmethod
+  def _feed(self): pass
+
+  @abstractmethod
+  def get_executable(self): pass
+
+
+  def _recv(self):
+    n=1024
+    while True:
+      cnt=0
+      s = self.xconn.recv(n)
+      if not s:
+        yield None
+      total=len(s)
+      while cnt<total:
+        yield s[cnt]
+        cnt+=1
+
+  def _recv_json(self):
+    while True:
+      data=''
+      while True:
+        b=self.recv()
+        if not b:
+          yield None
+          continue
+        if b=='\n':
+          break
+        data+=b
+      token = json.loads(data)
+      yield token
+
+
+  def _recvfeed(self):
+    while True:
+      token = self.recv_json()
+      if not token:
+        yield
+        continue
+      if 'stream' in token:
+        stream = token['stream'].encode('utf8')
+        for ch in stream:
+          self.feed.send(ch)
+        yield
+      elif 'sig' in token:
+        token['name']=self.name
+        self.journal.append(token)
+        yield
+
+
   def spawn(self):
-    xsock,xport = open_sock()
-    psock,pport = open_sock()
-    cmd='{XTERM} -e "{PYTHON} {IOSTUB} --executable={GDB} --xport={XPORT} --pport={PPORT}; sleep 999"'.format(
+    self.xsock,self.xport = open_sock()
+    self.psock,self.pport = open_sock()
+    exec_args = self.get_exec_args()
+    environ = self.get_environ()
+    cmd='''{XTERM} -e "{PYTHON} {IOSTUB} --executable={EXECUTABLE} {EXEC_ARGS} {ENVIRON} --xport={XPORT} --pport={PPORT}; sleep 999"'''.format(
       XTERM=XTERM,
       PYTHON=PYTHON,
       IOSTUB=IOSTUB,
-      GDB=GDB,
-      XPORT=xport,
-      PPORT=pport,
+      EXECUTABLE=self.get_executable(),
+      EXEC_ARGS = '' if not exec_args  else '''--args '{}' '''.format(exec_args),
+      ENVIRON = '' if not environ  else '--env {}'.format(','.join(map(lambda x:'{}:{}'.format(x[0],x[1]),environ.iteritems()))),
+      XPORT=self.xport,
+      PPORT=self.pport,
     )
     print cmd
     self.proc = subprocess.Popen(cmd,shell=True,stdout=FNULL,stderr=FNULL)
-    pconn = psock.accept()[0]
-    xconn = xsock.accept()[0]
-    self.gdb = pexpect.fdpexpect.fdspawn(pconn.fileno())
-    self.xconn = xconn
-    self.pconn = pconn
+    self.pconn = self.psock.accept()[0]
+    self.xconn = self.xsock.accept()[0]
+
+  def get_feed_fd(self):
+    return self.xconn.fileno()
+
+  def get_exec_args(self):
+    return None
+
+  def get_environ(self):
+    return {'TERM':'xterm'}
+
+  def journal_add_stream(self,data):
+    self.journal.append({'stream':data, 'name':self.name})
+
+
+
+class XtermMcgdbWin(XtermSpawn):
+  def __init__(self,executable,exec_args,journal,name):
+    self.executable = executable
+    self.exec_args = exec_args
+    super(XtermMcgdbWin,self).__init__(journal,name)
+
+  def get_executable(self):
+    return self.executable
+  def get_exec_args(self):
+    return self.exec_args
+
+  def _feed(self):
+    while True:
+      char = yield
+      if char == ESC:
+        char = yield
+        if char == '[':
+          char = CSI
+        elif char == 'O':
+          current=ESC+'O'
+          current+=yield
+          self.journal_add_stream(current)
+          continue
+        else:
+          self.journal_add_stream(ESC+char)
+          continue
+      if char == CSI:
+        char = yield
+        if char=='<': #button push or release
+          current=CSI+'<'
+          char = yield
+          while char.isdigit(): #button number
+            current+=char
+            char = yield
+          if char != ';':
+            continue #ERROR
+          current+=char
+          char = yield
+          while char.isdigit(): #column
+            current+=char
+            char = yield
+          if char != ';':
+            continue #ERROR
+          current+=char
+          char = yield
+          while char.isdigit(): #row
+            current+=char
+            char = yield
+          if char not in  'mM':
+            continue #ERROR
+          current+=char
+          self.journal_add_stream(current)
+          continue
+      else:
+        #wait whole unicode character
+        current=char
+        while True:
+          assert len(current)<=6
+          try:
+            current.decode('utf8')
+            self.journal_add_stream(current)
+            break
+          except UnicodeDecodeError:
+            pass
+          current+=yield
+
+
+class XtermGdb(XtermSpawn,Gdb):
+  def __init__(self,journal,name):
     self.saved=''
+    super(XtermGdb,self).__init__(journal,name)
+
+  def spawn(self):
+    super(XtermGdb,self).spawn()
+    self.program = pexpect.fdpexpect.fdspawn(self.pconn.fileno())
+
+  def get_executable(self):
+    return GDB
+  def get_environ(self):
+    env = super(XtermGdb,self).get_environ()
+    env['WIN_LIST']=''
+    return env
+
 
   def kill(self):
     os.kill(self.proc.pid,signal.SIGTERM)
     os.system('killall -9 gdb')
 
-  def get_token(self):
-    data=''
+  def _feed(self):
     while True:
-      b=self.xconn.recv(1)
-      if b=='\n':
-        return json.loads(data)
-      data+=b
+      current = ''
+      while True:
+        char = yield
+        if char == '\n':
+          self.journal_add_stream(current)
+          break
+        current+=char
 
-  def get_action(self):
-    while True:
-      if '\n' in self.saved:
-        s1,self.saved = split_first(self.saved)
-        if len(s1)>0:
-          return {'command':s1}
-        else:
-          continue
-      token=self.get_token()
-      if 'stream' in token:
-        stream = token['stream']
-        if '\n' in stream:
-          s1,self.saved = split_first(stream)
-          res = self.saved + s1
-          if len(res)==0:
-            continue
-          return {'command':res}
-        else:
-          self.saved+=stream
-      if 'sig' in token:
-        return token
+def open_window(gdb,journal,name):
+  executable,args = split_first(gdb.open_window_cmd(name),' ')
+  return XtermMcgdbWin(executable,args,journal,name)
+
+class Journal(object):
+  def __init__(self,fname=None):
+    #self.data=[]
+    self.logfile = open(fname,'wb') if fname else sys.stdout
+  def append(self,x):
+    self.logfile.write(json.dumps(x)+'\n')
+    self.logfile.flush()
+    #self.data.append(x)
 
 def main():
-  gdb=XtermGdb()
+  FNAME='record.log'
+  journal=Journal(FNAME)
+  print 'start recording to {}'.format(FNAME)
+  gdb=XtermGdb(journal,'gdb')
+  aux=open_window(gdb,journal,'aux')
+  asm=open_window(gdb,journal,'asm')
+  src=open_window(gdb,journal,'src')
+  entities=dict(map(lambda x:(x.get_feed_fd(),x), [gdb,aux,asm,src]))
+  rlist=list(entities.keys())
   while True:
-    print gdb.get_action()
+    ready,[],[] = select.select(rlist,[],[])
+    for fd in ready:
+      entities[fd].recvfeed()
 
 
 if __name__ == "__main__":

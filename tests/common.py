@@ -54,40 +54,35 @@ class McgdbWin(object):
 class Gdb(object):
   @cleanup__init__
   def __init__(self,args='',env={}):
-    ENV={
+    self.ENV={
       'WIN_LIST':'',
     }
-    ENV.update(env)
+    self.ENV.update(env)
+    self.exec_args=args
     self.spawn()
     atexit.register(self.close)
     self.closed=False
 
   def spawn(self):
-    self.gdb = pexpect.spawn('../mcgdb {args}'.format(args=args),env=ENV)
+    self.program = pexpect.spawn('../mcgdb {args}'.format(args=self.exec_args),env=self.ENV)
 
   def open_window_cmd(self,win_name):
-    self.gdb.sendline('mcgdb open {win_name} --manually'.format(win_name=win_name))
-    self.gdb.expect('Execute manually `(/.+/mcgdb_mc -e --gdb-port=\d+)` for start window')
-    exec_cmd = self.gdb.match.groups()[0]
+    self.program.sendline('mcgdb open {win_name} --manually'.format(win_name=win_name))
+    self.program.expect('Execute manually `(/.+/mcgdb_mc -e --gdb-port=\d+)` for start window')
+    exec_cmd = self.program.match.groups()[0]
     return exec_cmd
 
   def open_aux_win(self):
     return McgdbWin(self.open_window_cmd('aux'))
 
   def kill(self):
-    if hasattr(self,'gdb'):
-      self.gdb.kill(9)
+    if hasattr(self,'program'):
+      self.program.kill(9)
 
   @cleanup__close__
   def close(self):
     self.kill()
 
-def record_mcgdb():
-  gdb=Gdb('main')
-  cmd=gdb.open_window_cmd('aux')
-  aux=gdb.open_aux_win()
-  gdb.gdb.sendline('break main')
-  gdb.gdb.sendline('run')
 
 
 def runtest():
