@@ -11,6 +11,20 @@ def copy_termsize(from_fd,to_fd):
   fcntl.ioctl(to_fd, termios.TIOCSWINSZ,
     fcntl.ioctl(from_fd, termios.TIOCGWINSZ, '\0'*8))
 
+def rawmode(fd):
+  [iflag, oflag, cflag, lflag, ispeed, ospeed, cc] = list(range(7))
+  raw = termios.tcgetattr(fd)
+  raw[iflag] &=~ (termios.BRKINT | termios.INPCK |
+                 termios.ISTRIP | termios.IXON)
+  raw[oflag] &=~ (termios.OPOST)
+  raw[cflag] &=~ (termios.CSIZE|termios.PARENB)
+  raw[cflag] |=  (termios.CS8)
+  raw[lflag] &=~ (termios.ICANON|termios.ECHO|
+                 termios.IEXTEN|(termios.ISIG*1))
+  raw[cc][termios.VMIN] = 1
+  raw[cc][termios.VTIME] = 0
+  termios.tcsetattr(fd, termios.TCSADRAIN, raw)
+
 class SigHandler(object):
   def __init__(self,sig,cb):
     self.cb = cb
@@ -102,7 +116,8 @@ def do_parent(child_fd,child_pid,pport,xport,pfname,xfname):
   SigHandler(signal.SIGWINCH,lambda signo,frame : stream_from_term.retranslate_sigwinch())
   SigHandler(signal.SIGWINCH,lambda signo,frame : copy_termsize(from_fd=stdin_fd,to_fd=child_fd))
   select.select([child_fd],[],[]) #wait first child output and then change terminal settings
-  termios.tcsetattr(stdout_fd, termios.TCSANOW, termios.tcgetattr(child_fd))
+  #termios.tcsetattr(stdout_fd, termios.TCSANOW, termios.tcgetattr(child_fd))
+  rawmode(stdout_fd)
   copy_termsize(from_fd=stdin_fd,to_fd=child_fd)
   while True:
     try:

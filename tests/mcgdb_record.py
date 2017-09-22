@@ -109,7 +109,6 @@ class XtermSpawn(object):
       XPORT=self.xport,
       PPORT=self.pport,
     )
-    print cmd
     self.proc = subprocess.Popen(cmd,shell=True,stdout=FNULL,stderr=FNULL)
     self.pconn = self.psock.accept()[0]
     self.xconn = self.xsock.accept()[0]
@@ -224,6 +223,9 @@ class XtermGdb(XtermSpawn,Gdb):
         if char == '\n':
           self.journal_add_stream(current)
           break
+        elif char=='\x03': #Ctrl+C
+          self.journal_add_stream('\x03')
+          break
         current+=char
 
 def open_window(gdb,journal,name):
@@ -243,16 +245,20 @@ def main():
   FNAME='record.log'
   journal=Journal(FNAME)
   print 'start recording to {}'.format(FNAME)
+  print 'type Ctrl+C for stop recording'
   gdb=XtermGdb(journal,'gdb')
   aux=open_window(gdb,journal,'aux')
   asm=open_window(gdb,journal,'asm')
   src=open_window(gdb,journal,'src')
   entities=dict(map(lambda x:(x.get_feed_fd(),x), [gdb,aux,asm,src]))
   rlist=list(entities.keys())
-  while True:
-    ready,[],[] = select.select(rlist,[],[])
-    for fd in ready:
-      entities[fd].recvfeed()
+  try:
+    while True:
+      ready,[],[] = select.select(rlist,[],[])
+      for fd in ready:
+        entities[fd].recvfeed()
+  except KeyboardInterrupt:
+    pass
 
 
 if __name__ == "__main__":
