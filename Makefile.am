@@ -45,6 +45,7 @@ mcgdb-python-build:
 	ln -sfn $(abs_srcdir)/tests/testdir/file.h $(abs_builddir)/tests/testdir/file.h
 	ln -sfn $(abs_srcdir)/tests/common.py $(abs_builddir)/tests/common.py
 	ln -sfn $(abs_srcdir)/tests/mcgdb_record.py $(abs_builddir)/tests/mcgdb_record.py
+	ln -sfn $(abs_srcdir)/tests/mcgdb_play.py $(abs_builddir)/tests/mcgdb_play.py
 	ln -sfn $(abs_srcdir)/tests/iostub.py $(abs_builddir)/tests/iostub.py
 	chmod u+x $(abs_builddir)/tests/mcgdb_record.py
 	chmod u+x $(abs_builddir)/tests/iostub.py
