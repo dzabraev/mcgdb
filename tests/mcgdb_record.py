@@ -236,7 +236,10 @@ class Journal(object):
   def __init__(self,fname=None):
     #self.data=[]
     self.logfile = open(fname,'wb') if fname else sys.stdout
+    self.cnt=0
   def append(self,x):
+    self.cnt+=1
+    x['action_num'] = self.cnt
     self.logfile.write(json.dumps(x)+'\n')
     self.logfile.flush()
     #self.data.append(x)

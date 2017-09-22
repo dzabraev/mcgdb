@@ -38,6 +38,7 @@ class McgdbWin(object):
     else:
       print self.p_pid
       print cmd
+      self.master_file = os.fdopen(self.master_fd,'wb',0)
 
   def feeding(self,timeout=5):
     t0=time.time()
@@ -50,6 +51,9 @@ class McgdbWin(object):
         return
       data=os.read(self.master_fd,1024)
       self.stream.feed(data)
+
+  def send(self,data):
+    self.master_file.write(data)
 
 class Gdb(object):
   @cleanup__init__
@@ -72,8 +76,9 @@ class Gdb(object):
     exec_cmd = self.program.match.groups()[0]
     return exec_cmd
 
-  def open_aux_win(self):
-    return McgdbWin(self.open_window_cmd('aux'))
+  def open_win(self,name):
+    #name in aux, asm, src
+    return McgdbWin(self.open_window_cmd(name))
 
   def kill(self):
     if hasattr(self,'program'):
@@ -83,13 +88,14 @@ class Gdb(object):
   def close(self):
     self.kill()
 
-
+  def send(self,data):
+    self.program.sendline(data+'\n')
 
 def runtest():
   gdb=Gdb('main')
-  aux=gdb.open_aux_win()
-  gdb.gdb.sendline('break main')
-  gdb.gdb.sendline('run')
+  aux=gdb.open_win('aux')
+  gdb.program.sendline('break main')
+  gdb.program.sendline('run')
 
   try:
     print "\x1b[?47h" #alternate screen
