@@ -160,8 +160,9 @@ def stub():
   pid,fd = pty.fork()
   if pid==0:
     env={}
-    for name,value in map(lambda x : x.split(':'), args.env.split(',')):
-      env[name]=value
+    if args.env is not None:
+      for name,value in map(lambda x : x.split(':'), args.env.split(',')):
+        env[name]=value
     exec_args = args.args.split(' ') if args.args else []
     do_child(args.executable,exec_args,env)
   else:
