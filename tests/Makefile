@@ -1,6 +1,6 @@
 CFLAGS=-g3 -O0
 
-all : main nframes
+all : main nframes encoding
 
 infinite : infinite.c
 	g++ $(CFLAGS) infinite.c -o infinite
@@ -21,6 +21,9 @@ myclass.o : myclass.cpp myclass.h
 
 nframes : nframes.c
 	gcc $(CFLAGS) nframes.c -o nframes
+
+encoding : encoding.cc
+	g++ $(CFLAGS) encoding.cc -o encoding
 
 clean:
 	rm *.o
