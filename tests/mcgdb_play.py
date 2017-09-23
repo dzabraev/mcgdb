@@ -68,6 +68,7 @@ def play():
     journal_play.append({
       'action_num':action_num,
       'screenshots':screenshots,
+      'record':record,
     })
   output.write(pickle.dumps(journal_play))
 
