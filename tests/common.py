@@ -24,7 +24,7 @@ def cleanup__close__(func):
   return decorated
 
 class McgdbWin(object):
-  def __init__(self,cmd,cols=80,lines=24):
+  def __init__(self,cmd,cols=80,lines=24,env={}):
     self.cols=cols
     self.lines=lines
     self.screen = pyte.Screen(cols, lines)
@@ -34,7 +34,9 @@ class McgdbWin(object):
     if self.p_pid == 0: #Child
       args=cmd.split()
       efile=args[0]
-      os.execve(efile,args,dict(TERM="xterm", COLUMNS=str(cols), LINES=str(lines)))
+      ENV=dict(TERM="xterm", COLUMNS=str(cols), LINES=str(lines))
+      ENV.update(env)
+      os.execve(efile,args,ENV)
     else:
       print self.p_pid
       print cmd
@@ -47,6 +49,19 @@ class McgdbWin(object):
       if d<0:
         return
       rready,_wready,_xready = select.select([self.master_fd],[],[],d)
+      if rready==[]:
+        return
+      data=os.read(self.master_fd,1024)
+      self.stream.feed(data)
+
+  def recvfeed(self,timeout=None):
+    if timeout:
+      t0=time.time()
+    while True:
+      d = timeout - (time.time() - t0) if timeout else 0
+      if d<0:
+        return
+      rready,[],[] = select.select([self.master_fd],[],[],d)
       if rready==[]:
         return
       data=os.read(self.master_fd,1024)
@@ -76,9 +91,9 @@ class Gdb(object):
     exec_cmd = self.program.match.groups()[0]
     return exec_cmd
 
-  def open_win(self,name):
+  def open_win(self,name,env={}):
     #name in aux, asm, src
-    return McgdbWin(self.open_window_cmd(name))
+    return McgdbWin(self.open_window_cmd(name),env=env)
 
   def kill(self):
     if hasattr(self,'program'):
