@@ -891,6 +891,7 @@ mcgdb-python-build:
 	ln -sfn $(abs_srcdir)/tests/mcgdb_play.py $(abs_builddir)/tests/mcgdb_play.py
 	ln -sfn $(abs_srcdir)/tests/iostub.py $(abs_builddir)/tests/iostub.py
 	ln -sfn $(abs_srcdir)/tests/__init__.py $(abs_builddir)/tests/__init__.py
+	ln -sfn $(abs_srcdir)/tests/screenshot.py $(abs_builddir)/tests/screenshot.py
 	chmod u+x $(abs_builddir)/tests/mcgdb_record.py
 	chmod u+x $(abs_builddir)/tests/iostub.py
 	make -C $(abs_builddir)/tests
