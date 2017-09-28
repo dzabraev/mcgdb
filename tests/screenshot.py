@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 #coding=utf8
 
-import argparse,pickle,sys,termios
+import argparse,pickle,sys,termios, copy
 
 ESC='\x1b'
 CSI=ESC+'['
+QUIT='q'
 
 def read_char():
-  ch = lambda : sys.stdout.read(1)
+  ch = lambda : sys.stdin.read(1)
   char = ch()
   if char == ESC:
     char = ch()
@@ -23,7 +24,7 @@ def read_char():
 ARROW_RIGHT=CSI+'C'
 ARROW_LEFT=CSI+'D'
 
-def make_terminal():
+def make_terminal(fd):
   [iflag, oflag, cflag, lflag, ispeed, ospeed, cc] = list(range(7))
   raw = termios.tcgetattr(fd)
   saved = copy.deepcopy(raw)
@@ -40,21 +41,32 @@ def make_terminal():
   return saved
 
 
+
 def to_control_sequence(screen):
-  cols=screen.cols
-  rows=screen.rows
+  from colored import fg,bg,attr
+  res=''
+  cols=screen['cols']
+  rows=screen['rows']
+  buffer=screen['buffer']
   for row in range(rows):
     for col in range(cols):
-      char = screen[row][col]
-      sys.stdout.write(char.data)
-    sys.stdout.write('\r\n')
+      char = buffer[row][col]
+      res+=fg(char.fg)+bg(char.bg)
+      for name in ['bold','italics','underscore','strikethrough','reverse']:
+        if getattr(char,name):
+          res+=attr(name)
+      res+=char.data.encode('utf8')
+      res+=attr('reset')
+    res+='\r\n'
+  res+=attr('reset')
+  return res
 
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('play_journal',help='read screenshots from given file')
-  parser.add_argument('--action_num',help='show screenshots starts with given number')
-  args = parser.parser_args()
-  while open(args.play_journal) as f:
+  parser.add_argument('--action_num',help='show screenshots starts with given number',type=int)
+  args = parser.parse_args()
+  with open(args.play_journal) as f:
     play_journal = pickle.load(f)
   screenshots=[]
   if args.action_num:
@@ -63,12 +75,12 @@ def main():
     start_pos=0
   cnt=0
   for play_record in play_journal:
-    for data in play_record:
+    for screenshot in play_record['screenshots']:
       cnt+=1
       screenshots.append({
-        'screenshot':data['screenshot'],
+        'screenshot':screenshot,
         'action_num':play_record['action_num'],
-        'name':play_record['name'],
+        'name':screenshot['name'],
       })
       if start_pos is None and play_record['action_num']==args.action_num:
         start_pos=cnt
@@ -77,23 +89,35 @@ def main():
     sys.exit(0)
 
   current = start_pos
+  prev=None
   total = len(screenshots)
   print "\x1b[?47h" #alternate screen
   saved_attrs = make_terminal(sys.stdout.fileno())
   try:
     while True:
-      sys.stdout.write('\x1bc') #clear screen
-      sys.stdout.write('\x1b[1;1H') #goto left upper corner
-      sys.stdout.write(to_control_sequence(screenshots[current]))
+      if current!=prev:
+        sys.stdout.write('\x1bc') #clear screen
+        sys.stdout.write('\x1b[1;1H') #goto left upper corner
+        screenshot=screenshots[current]
+        sys.stdout.write(to_control_sequence(screenshot['screenshot']))
+        sys.stdout.write('action_num={}\r\nname={}'.format(
+          screenshot['action_num'],
+          screenshot['name']))
+        prev=current
       ch = read_char()
       if ch==ARROW_LEFT:
         current = max(current-1,0)
       elif ch==ARROW_RIGHT:
-        current = min(current+1,total)
-  except:
+        current = min(current+1,total-1)
+      elif ch==QUIT:
+        break
+  except Exception:
     print "\x1b[?47l" #normal screen
-    termios.tcsetattr(fd, termios.TCSADRAIN, saved_attrs)
+    termios.tcsetattr(sys.stdout.fileno(), termios.TCSADRAIN, saved_attrs)
     raise
+  else:
+    print "\x1b[?47l" #normal screen
+    termios.tcsetattr(sys.stdout.fileno(), termios.TCSADRAIN, saved_attrs)
 
 
 
