@@ -61,9 +61,13 @@ def play():
     #take screenshots
     screenshots=[]
     for name,win in wins_with_name.iteritems():
+      cols=win.screen.columns
+      rows=win.screen.lines
       screenshots.append({
-        'screenshot':copy.deepcopy(win.screen.buffer.items()),
-        'name':name,
+          'buffer':copy_buffer(win.screen.buffer,cols,rows),
+          'cols':cols,
+          'rows':rows,
+          'name':name,
       })
     journal_play.append({
       'action_num':action_num,
@@ -71,6 +75,19 @@ def play():
       'record':record,
     })
   output.write(pickle.dumps(journal_play))
+
+def copy_buffer(buf,cols,rows):
+  sbuf=[]
+  for row in range(rows):
+    line=[]
+    for col in range(cols):
+      ch=buf[row][col]
+      line.append(
+        ch
+      )
+    sbuf.append(line)
+  return sbuf
+
 
 if __name__ == "__main__":
   play()
