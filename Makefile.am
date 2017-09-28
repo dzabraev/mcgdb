@@ -32,18 +32,29 @@ mcgdb-python-build:
 	sed "s#__PATH_TO_MC__#$(abs_builddir)/mc/src/mcgdb_mc#"               $(abs_builddir)/python/mcgdb/__init__.py -i
 #testing file.c  file.h  file.o  head.h  main  main.c  main.o  Makefile  myclass.cpp  myclass.h  myclass.o  nframes  nframes.c  nrun.py  testdir
 	mkdir -p $(abs_builddir)/tests
-	mkdir -p $(abs_builddir)/tests/testdir
-	ln -sfn $(abs_srcdir)/tests/file.c $(abs_builddir)/tests/file.c
-	ln -sfn $(abs_srcdir)/tests/file.h $(abs_builddir)/tests/file.h
-	ln -sfn $(abs_srcdir)/tests/head.h $(abs_builddir)/tests/head.h
-	ln -sfn $(abs_srcdir)/tests/main.cc $(abs_builddir)/tests/main.cc
-	ln -sfn $(abs_srcdir)/tests/Makefile $(abs_builddir)/tests/Makefile
-	ln -sfn $(abs_srcdir)/tests/myclass.cpp $(abs_builddir)/tests/myclass.cpp
-	ln -sfn $(abs_srcdir)/tests/myclass.h $(abs_builddir)/tests/myclass.h
-	ln -sfn $(abs_srcdir)/tests/nframes.c $(abs_builddir)/tests/nframes.c
-	ln -sfn $(abs_srcdir)/tests/testdir/file.c $(abs_builddir)/tests/testdir/file.c
-	ln -sfn $(abs_srcdir)/tests/testdir/file.h $(abs_builddir)/tests/testdir/file.h
-	ln -sfn $(abs_srcdir)/tests/encoding.cc $(abs_builddir)/tests/encoding.cc
+	mkdir -p $(abs_builddir)/tests/testcases
+	ln -sfn $(abs_srcdir)/tests/Makefile        $(abs_builddir)/tests//Makefile
+
+	mkdir -p $(abs_builddir)/tests/testcases/variables
+	mkdir -p $(abs_builddir)/tests/testcases/variables/testdir
+	ln -sfn $(abs_srcdir)/tests/testcases/variables/Makefile        $(abs_builddir)/tests/testcases/variables/Makefile
+	ln -sfn $(abs_srcdir)/tests/testcases/variables/file.c          $(abs_builddir)/tests/testcases/variables/file.c
+	ln -sfn $(abs_srcdir)/tests/testcases/variables/file.h          $(abs_builddir)/tests/testcases/variables/file.h
+	ln -sfn $(abs_srcdir)/tests/testcases/variables/head.h          $(abs_builddir)/tests/testcases/variables/head.h
+	ln -sfn $(abs_srcdir)/tests/testcases/variables/main.cc         $(abs_builddir)/tests/testcases/variables/main.cc
+	ln -sfn $(abs_srcdir)/tests/testcases/variables/Makefile        $(abs_builddir)/tests/testcases/variables/Makefile
+	ln -sfn $(abs_srcdir)/tests/testcases/variables/myclass.cpp     $(abs_builddir)/tests/testcases/variables/myclass.cpp
+	ln -sfn $(abs_srcdir)/tests/testcases/variables/myclass.h       $(abs_builddir)/tests/testcases/variables/myclass.h
+	ln -sfn $(abs_srcdir)/tests/testcases/variables/testdir/file.c  $(abs_builddir)/tests/testcases/variables/testdir/file.c
+	ln -sfn $(abs_srcdir)/tests/testcases/variables/testdir/file.h  $(abs_builddir)/tests/testcases/variables/testdir/file.h
+
+	mkdir -p $(abs_builddir)/tests/testcases/encoding
+	ln -sfn $(abs_srcdir)/tests/testcases/encoding/Makefile         $(abs_builddir)/tests/testcases/encoding/Makefile
+	ln -sfn $(abs_srcdir)/tests/testcases/encoding/encoding.cc      $(abs_builddir)/tests/testcases/encoding/encoding.cc
+
+	make -C $(abs_builddir)/tests
+
+
 	ln -sfn $(abs_srcdir)/tests/common.py $(abs_builddir)/tests/common.py
 	ln -sfn $(abs_srcdir)/tests/mcgdb_record.py $(abs_builddir)/tests/mcgdb_record.py
 	ln -sfn $(abs_srcdir)/tests/mcgdb_play.py $(abs_builddir)/tests/mcgdb_play.py
@@ -51,8 +62,9 @@ mcgdb-python-build:
 	ln -sfn $(abs_srcdir)/tests/__init__.py $(abs_builddir)/tests/__init__.py
 	ln -sfn $(abs_srcdir)/tests/screenshot.py $(abs_builddir)/tests/screenshot.py
 	chmod u+x $(abs_builddir)/tests/mcgdb_record.py
+	chmod u+x $(abs_builddir)/tests/mcgdb_play.py
+	chmod u+x $(abs_builddir)/tests/screenshot.py
 	chmod u+x $(abs_builddir)/tests/iostub.py
-	make -C $(abs_builddir)/tests
 
 all : mcgdb-python-build
 
