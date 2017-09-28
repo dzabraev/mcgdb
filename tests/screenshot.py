@@ -41,6 +41,11 @@ def make_terminal(fd):
   return saved
 
 
+def clr(name):
+  m={
+    'brown':'rosy_brown',
+  }
+  return m.get(name,name)
 
 def to_control_sequence(screen):
   from colored import fg,bg,attr
@@ -51,7 +56,7 @@ def to_control_sequence(screen):
   for row in range(rows):
     for col in range(cols):
       char = buffer[row][col]
-      res+=fg(char.fg)+bg(char.bg)
+      res+=fg(clr(char.fg))+bg(clr(char.bg))
       for name in ['bold','italics','underscore','strikethrough','reverse']:
         if getattr(char,name):
           res+=attr(name)
@@ -63,16 +68,23 @@ def to_control_sequence(screen):
 
 def main():
   parser = argparse.ArgumentParser()
-  parser.add_argument('play_journal',help='read screenshots from given file')
+  parser.add_argument('play_journal',help='read screenshots from given file',default='record.play',nargs='?')
   parser.add_argument('--action_num',help='show screenshots starts with given number',type=int)
+  parser.add_argument('--num',help='screenshot number',type=int)
+  parser.add_argument('--name',help='print screenshots only for window with name ')
   args = parser.parse_args()
   with open(args.play_journal) as f:
     play_journal = pickle.load(f)
+  if args.name:
+    def upd(x):
+      x['screenshots'] = filter(lambda y:y['name']==args.name,x['screenshots'])
+      return x
+    play_journal=map(upd,play_journal)
   screenshots=[]
   if args.action_num:
     start_pos=None
   else:
-    start_pos=0
+    start_pos=args.num if args.num is not None else 0
   cnt=0
   for play_record in play_journal:
     for screenshot in play_record['screenshots']:
@@ -100,9 +112,12 @@ def main():
         sys.stdout.write('\x1b[1;1H') #goto left upper corner
         screenshot=screenshots[current]
         sys.stdout.write(to_control_sequence(screenshot['screenshot']))
-        sys.stdout.write('action_num={}\r\nname={}'.format(
+        sys.stdout.write('action_num={}\r\nname={}\r\n{current}/{total}'.format(
           screenshot['action_num'],
-          screenshot['name']))
+          screenshot['name'],
+          current=current+1,
+          total=total,
+        ))
         prev=current
       ch = read_char()
       if ch==ARROW_LEFT:

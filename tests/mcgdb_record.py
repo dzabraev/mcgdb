@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #coding=utf8
-import pexpect,os,socket,subprocess,json,signal,select
+import pexpect,os,socket,subprocess,json,signal,select,argparse,re
 import pexpect.fdpexpect
 
 import distutils.spawn
@@ -233,21 +233,40 @@ def open_window(gdb,journal,name):
   return XtermMcgdbWin(executable,args,journal,name)
 
 class Journal(object):
-  def __init__(self,fname=None):
-    #self.data=[]
-    self.logfile = open(fname,'wb') if fname else sys.stdout
-    self.cnt=0
+  def __init__(self):
+    self.data=[]
+    self.mouse_down = re.compile('\x1b\[<\d+;\d+;\d+M')
+    self.mouse_up = re.compile('\x1b\[<\d+;\d+;\d+m')
   def append(self,x):
-    self.cnt+=1
-    x['action_num'] = self.cnt
-    self.logfile.write(json.dumps(x)+'\n')
-    self.logfile.flush()
-    #self.data.append(x)
+    self.data.append(x)
+  def save(self,fname=None):
+    logfile = open(fname,'wb') if fname else sys.stdout
+    self.concat()
+    cnt=1
+    for x in self.data:
+      x['action_num'] = cnt
+      cnt+=1
+      logfile.write(json.dumps(x)+'\n')
+    logfile.close()
+  def __concat_click(self,x,y):
+    last=x[-1]
+    ys = y.get('stream')
+    ls = last.get('stream')
+    print repr(ls), repr(ys), self.mouse_down.match(ls), self.mouse_up.match(ys)
+    if ys is not None and ls is not None and self.mouse_down.match(ls) and self.mouse_up.match(ys) and ys[:-1]==ls[:-1]:
+      last['stream']+=y['stream']
+      return x[:-1] + [last]
+    else:
+      return x+[y]
+  def concat(self):
+    self.data = reduce(self.__concat_click,self.data[1:],[self.data[0]])
 
 def main():
-  FNAME='record.log'
-  journal=Journal(FNAME)
-  print 'start recording to {}'.format(FNAME)
+  parser=argparse.ArgumentParser()
+  parser.add_argument('fname',default='record.log',nargs='?')
+  args = parser.parse_args()
+  journal=Journal()
+  print 'start recording to {}'.format(args.fname)
   print 'type Ctrl+C for stop recording'
   gdb=XtermGdb(journal,'gdb')
   aux=open_window(gdb,journal,'aux')
@@ -261,7 +280,7 @@ def main():
       for fd in ready:
         entities[fd].recvfeed()
   except KeyboardInterrupt:
-    pass
+    journal.save(args.fname)
 
 
 if __name__ == "__main__":
