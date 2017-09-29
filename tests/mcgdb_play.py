@@ -21,8 +21,10 @@ def play():
   delay = args.delay
   output = open(args.output,'wb')
   with open(args.record_file) as f:
-    for line in f.readlines():
-      journal.append(json.loads(line[:-1]))
+    globs={}
+    exec(f.read(),{},globs)
+    journal=globs['journal']
+    regexes=globs['REGEXES']
   gdb=Gdb()
   aux=gdb.open_win('aux')
   asm=gdb.open_win('asm')
@@ -79,7 +81,7 @@ def play():
       'screenshots':screenshots,
       'record':record,
     })
-  output.write(pickle.dumps(journal_play))
+  output.write(pickle.dumps({'journal_play':journal_play,'regexes':regexes}))
 
 def copy_buffer(buf,cols,rows):
   sbuf=[]

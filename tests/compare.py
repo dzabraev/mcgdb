@@ -3,9 +3,9 @@
 
 import argparse,sys,termcolor
 
-from screenshot import read_journal, linearize
+from screenshot import read_journal, linearize, filter_regexes, get_matched_coord, get_splitbuf
 
-def equals(r1,r2):
+def equals(r1,r2,regexes=[],tostring=None):
   s1=r1['screenshot']
   s2=r2['screenshot']
   if s1['cols']!=s2['cols'] or s1['rows']!=s2['rows']:
@@ -14,6 +14,7 @@ def equals(r1,r2):
   rows=s1['rows']
   b1=s1['buffer']
   b2=s2['buffer']
+  regex_matched = get_matched_coord(b1,tostring,regexes)
   for col in range(cols):
     for row in range(rows):
       if b1[row][col]!=b2[row][col]:
@@ -31,8 +32,11 @@ def main():
 
   colorize=not args.color_disable
 
-  journal1=linearize(read_journal(args.journal1))
-  journal2=linearize(read_journal(args.journal2))
+  regexes1,journal1 = read_journal(args.journal1)
+  _regexes2,journal2 = read_journal(args.journal2)
+
+  journal1=linearize(journal1)
+  journal2=linearize(journal2)
 
   if args.name is not None:
     f=lambda x:x['name']==args.name
@@ -49,7 +53,10 @@ def main():
 
   stat={'PASS':0,'FAIL':0}
   for idx,(r1,r2) in enumerate(zip(journal1,journal2)):
-    if equals(r1,r2):
+    name=r1['name']
+    cur_regexes=filter_regexes(regexes1,name,idx)
+    tostring=get_splitbuf(name)
+    if equals(r1,r2,regexes=cur_regexes,tostring=tostring):
       msg='PASS'
       if colorize:
         msg=termcolor.colored(msg,'green')

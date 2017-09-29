@@ -1,11 +1,65 @@
 #!/usr/bin/env python
 #coding=utf8
 
-import argparse,pickle,sys,copy,pyte.screens,curses
+import argparse,pickle,sys,copy,pyte.screens,curses,re
 
 warnings=[]
 
-def diff(s1,s2):
+def buffer_stringify_lines(buf):
+  return map(lambda line : ''.join(map(lambda ch:ch.data,line)), buf)
+
+def split_aux(buf):
+  rows=len(buf)
+  cols=len(buf[0])
+  buf = buffer_stringify_lines(buf)
+  return [
+    {'str':map(lambda line: line[1:cols//2-1],buf[2:]),
+      'A':(2,1),
+      'B':(rows-1,cols//2-1)
+    },
+    {'str':map(lambda line: line[(cols//2)+1:cols],buf[2:]),
+      'A':(2,(cols//2)+1),
+      'B':(rows-1,cols)
+    },
+  ]
+
+SPLITBUF={
+  'aux':split_aux,
+}
+
+
+def split_dummy(buffer):
+  return [
+    {
+      'str':'\n'.join(map(lambda x: ''.join(map(lambda y:y.data,x)), buffer)),
+      'A':(0,0), #(y,x)
+      'B':(len(buffer),len(buffer[0])),
+    },
+  ]
+
+
+def get_splitbuf(name):
+  return SPLITBUF.get(name,split_dummy)
+
+def linear_to_yx(l,buf):
+  A,B = buf['A'],buf['B']
+  w=B[1]-A[1]
+  x=A[1]+l%w
+  y=A[0]+l//w
+  return y,x
+
+def get_matched_coord(buf,tostring,regexes):
+  regex_matched=set()
+  strbufs = tostring(buf)
+  for sbuf in strbufs:
+    strbuf=''.join(sbuf['str'])
+    for regex in regexes:
+      for l1,l2 in map(lambda x:x.span(),regex.finditer(strbuf)):
+        for l in range(l1,l2):
+          regex_matched.add(linear_to_yx(l,sbuf))
+  return regex_matched
+
+def diff(s1,s2,tostring=split_dummy,regexes=[]):
   assert s1['cols']==s2['cols']
   assert s1['rows']==s2['rows']
   cols=s1['cols']
@@ -13,12 +67,15 @@ def diff(s1,s2):
   b1=s1['buffer']
   b2=s2['buffer']
   buffer=[]
+  regex_matched = get_matched_coord(b1,tostring,regexes)
   for row in range(rows):
     line=[]
     for col in range(cols):
       c1=b1[row][col]
       c2=b2[row][col]
-      if not c1==c2:
+      if (row,col) in regex_matched:
+        line.append(pyte.screens.Char(c1.data,bg='green', fg='white'))
+      elif not c1==c2:
         line.append(pyte.screens.Char(c1.data,bg='red', fg='white'))
       else:
         line.append(pyte.screens.Char(c1.data, bg='black', fg='white'))
@@ -96,9 +153,21 @@ def filter_by_winname(journal,name):
     x['screenshots'] = filter(lambda y:y['name']==name,x['screenshots'])
   return journal
 
+def normalize_regexes(regexes):
+  normalized=[]
+  for regextr in regexes:
+    name=regextr[0]
+    regex=regextr[1]
+    rng=None
+    if len(regextr)==3:
+      rng=list(regextr[2])
+    normalized.append((name,re.compile(regex,re.MULTILINE),rng))
+  return normalized
+
 def read_journal(name):
   with open(name,'rb') as f:
-    return pickle.load(f)
+    d=pickle.load(f)
+    return normalize_regexes(d['regexes']),d['journal_play']
 
 def linearize(journal):
   screenshots=[]
@@ -112,22 +181,32 @@ def linearize(journal):
       })
   return screenshots
 
+def match_regex_range(rng,idx):
+  if rng is None:
+    return True
+  else:
+    return idx in rng
 
+def filter_regexes(regexes,name,idx):
+  return map(lambda x:x[1],filter( lambda x: x[0]==name and match_regex_range(x[2],idx),regexes))
 
-def show(stdscr,journal,journal2=None,start=0):
+def show(stdscr,journal,journal2=None,start=0,regexes=[]):
   idx=start
   total=len(journal)
   while True:
     if journal2:
       #do diff
+      name=journal[idx]['name']
       sshot=journal[idx]['screenshot']
       sshot2=journal2[idx]['screenshot']
       print_screenshot(stdscr,sshot,0,0)
       print_screenshot(stdscr,sshot2,0,sshot['cols']+1)
       y=max(sshot['rows'],sshot2['rows'])+1
       if sshot['cols']==sshot2['cols'] and sshot['rows']==sshot2['rows']:
-        print_screenshot(stdscr,diff(sshot,sshot2),y,0)
-        sdiff=diff(sshot2,sshot)
+        cur_regexes=filter_regexes(regexes,name,idx)
+        tostring=SPLITBUF.get(name,split_dummy)
+        print_screenshot(stdscr,diff(sshot,sshot2,tostring=tostring,regexes=cur_regexes),y,0)
+        sdiff=diff(sshot2,sshot,tostring=tostring,regexes=cur_regexes)
         print_screenshot(stdscr,sdiff,y,sshot['cols']+1)
         line=y+sdiff['rows']+1
       else:
@@ -156,11 +235,17 @@ def main():
   parser.add_argument('--action_num',help='show screenshots starts with given action_num',type=int)
   parser.add_argument('--num',help='show screenshots starts with given screenshot number',type=int)
   parser.add_argument('--name',help='print screenshots only for window with name ')
+  parser.add_argument('--dbg_regexes',help='python file contains REGEX variable')
   args = parser.parse_args()
 
-  play_journal = read_journal(args.play_journal)
+  regexes,play_journal = read_journal(args.play_journal)
+  if args.dbg_regexes is not None:
+    with open(args.dbg_regexes) as f:
+      globs={}
+      exec(f.read(),{},globs)
+      regexes=normalize_regexes(globs['REGEXES'])
   if args.play_journal2 is not None:
-    play_journal2 = read_journal(args.play_journal2)
+    _regexes,play_journal2 = read_journal(args.play_journal2)
   else:
     play_journal2 = None
 
@@ -210,7 +295,7 @@ def main():
         break
 
   try:
-    curses.wrapper(show,play_journal,play_journal2,start)
+    curses.wrapper(show,play_journal,play_journal2,start,regexes)
   except KeyboardInterrupt:
     pass
 

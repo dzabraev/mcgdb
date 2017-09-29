@@ -240,13 +240,13 @@ class Journal(object):
   def append(self,x):
     self.data.append(x)
   def save(self,fname=None):
-    logfile = open(fname,'wb') if fname else sys.stdout
     self.concat()
     cnt=1
     for x in self.data:
       x['action_num'] = cnt
       cnt+=1
-      logfile.write(json.dumps(x)+'\n')
+    logfile = open(fname,'wb') if fname else sys.stdout
+    logfile.write('journal='+json.dumps(self.data,sort_keys=True,indent=4))
     logfile.close()
   def __concat_click(self,x,y):
     last=x[-1]
@@ -262,7 +262,7 @@ class Journal(object):
 
 def main():
   parser=argparse.ArgumentParser()
-  parser.add_argument('fname',default='record.log',nargs='?')
+  parser.add_argument('fname',default='record_log.py',nargs='?')
   args = parser.parse_args()
   journal=Journal()
   print 'start recording to {}'.format(args.fname)
