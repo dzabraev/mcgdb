@@ -8,7 +8,7 @@ from common import Gdb,McgdbWin
 def play():
   parser = argparse.ArgumentParser()
   parser.add_argument('record_file', help='sequence of actions for gdb and windows', default='record.log',nargs='?')
-  parser.add_argument('output', help='this file will be contain screenshots', default='record.play',nargs='?')
+  parser.add_argument('--output', help='this file will be contain screenshots', default='record.play')
   parser.add_argument('--delay',type=float,default=1,help='amount of seconds')
   args = parser.parse_args()
   if args.record_file==args.output:
