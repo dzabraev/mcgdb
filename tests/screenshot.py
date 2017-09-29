@@ -3,6 +3,8 @@
 
 import argparse,pickle,sys,copy,pyte.screens,curses
 
+warnings=[]
+
 def diff(s1,s2):
   assert s1['cols']==s2['cols']
   assert s1['rows']==s2['rows']
@@ -106,6 +108,7 @@ def linearize(journal):
         'screenshot':screenshot,
         'action_num':record['action_num'],
         'name':screenshot['name'],
+        'stream':record['record']['stream'],
       })
   return screenshots
 
@@ -137,6 +140,8 @@ def show(stdscr,journal,journal2=None,start=0):
     stdscr.addstr(line,0,'')
     stdscr.addstr('action_num={}\n\r'.format(journal[idx]['action_num']))
     stdscr.addstr('{}/{}\n\r'.format(idx+1,total))
+    for warn in warnings:
+      stdscr.addstr('%s\n\r' % warn)
     ch = stdscr.getch()
     if ch==curses.KEY_LEFT:
       idx = max(idx-1,0)
@@ -147,7 +152,7 @@ def show(stdscr,journal,journal2=None,start=0):
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('play_journal',help='read screenshots from given file',default='record.play',nargs='?')
-  parser.add_argument('play_journal2',help='if specified then evaluate diff between play_journal and play_journal_correct',nargs='?')
+  parser.add_argument('play_journal2',help='if specified then evaluate diff between play_journal and play_journal2',nargs='?')
   parser.add_argument('--action_num',help='show screenshots starts with given action_num',type=int)
   parser.add_argument('--num',help='show screenshots starts with given screenshot number',type=int)
   parser.add_argument('--name',help='print screenshots only for window with name ')
@@ -169,8 +174,12 @@ def main():
     play_journal2=linearize(play_journal2)
 
   if play_journal2 is not None and len(play_journal)!=len(play_journal2):
-    print('play_journal and play_journal2 has different size')
-    sys.exit(0)
+    warnings.append('play_journal and play_journal2 has different size')
+    l1,l2 = len(play_journal),len(play_journal2)
+    if l1<l2:
+      play_journal2=play_journal2[:l1]
+    else:
+      play_journal=play_journal[:l2]
 
   #check correctness
   if play_journal2 is not None:

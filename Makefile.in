@@ -902,10 +902,12 @@ mcgdb-python-build:
 	ln -sfn $(abs_srcdir)/tests/iostub.py $(abs_builddir)/tests/iostub.py
 	ln -sfn $(abs_srcdir)/tests/__init__.py $(abs_builddir)/tests/__init__.py
 	ln -sfn $(abs_srcdir)/tests/screenshot.py $(abs_builddir)/tests/screenshot.py
+	ln -sfn $(abs_srcdir)/tests/compare.py $(abs_builddir)/tests/compare.py
 	chmod u+x $(abs_builddir)/tests/mcgdb_record.py
 	chmod u+x $(abs_builddir)/tests/mcgdb_play.py
 	chmod u+x $(abs_builddir)/tests/screenshot.py
 	chmod u+x $(abs_builddir)/tests/iostub.py
+	chmod u+x $(abs_builddir)/tests/compare.py
 
 all : mcgdb-python-build
 
