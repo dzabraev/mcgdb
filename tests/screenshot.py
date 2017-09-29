@@ -141,7 +141,7 @@ def show(stdscr,journal,journal2=None,start=0):
     stdscr.addstr('action_num={}\n\r'.format(journal[idx]['action_num']))
     stdscr.addstr('{}/{}\n\r'.format(idx+1,total))
     for warn in warnings:
-      stdscr.addstr('%s\n\r' % warn)
+      stdscr.addstr('WARNING: %s\n\r' % warn)
     ch = stdscr.getch()
     if ch==curses.KEY_LEFT:
       idx = max(idx-1,0)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #coding=utf8
-import pexpect,os,socket,subprocess,json,signal,select,argparse,re
+import pexpect,os,socket,subprocess,json,signal,select,argparse,re,sys
 import pexpect.fdpexpect
 
 import distutils.spawn
@@ -252,7 +252,6 @@ class Journal(object):
     last=x[-1]
     ys = y.get('stream')
     ls = last.get('stream')
-    print repr(ls), repr(ys), self.mouse_down.match(ls), self.mouse_up.match(ys)
     if ys is not None and ls is not None and self.mouse_down.match(ls) and self.mouse_up.match(ys) and ys[:-1]==ls[:-1]:
       last['stream']+=y['stream']
       return x[:-1] + [last]

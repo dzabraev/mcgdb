@@ -106,24 +106,3 @@ class Gdb(object):
   def send(self,data):
     self.program.sendline(data+'\n')
 
-def runtest():
-  gdb=Gdb('main')
-  aux=gdb.open_win('aux')
-  gdb.program.sendline('break main')
-  gdb.program.sendline('run')
-
-  try:
-    print "\x1b[?47h" #alternate screen
-    while True:
-      print '\x1b[1;1H'
-      aux.feeding(timeout=0.1)
-      for line in aux.screen.display:
-        print line
-  except:
-    print "\x1b[?47l" #normal screen
-    raise
-
-
-if __name__ == "__main__":
-  runtest()
-

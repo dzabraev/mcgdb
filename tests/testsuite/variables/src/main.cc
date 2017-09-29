@@ -85,7 +85,7 @@ void *fac50(void *arg) {
 }
 
 int main(void) {
-  int arr[3][3][3];
+  static int arr[3][3][3];
   MyDeriv mm(1);
   char charbuf[4]="abc";
   {
@@ -97,13 +97,29 @@ int main(void) {
   }
   unsigned char ucharbuf[4]="uns";
   const char const_charbuf[4]="def";
-  const char* m_char_ptrbuf[2];
+  const char* m_char_ptrbuf[2] = {0,0};
+  int x=10;
   m_char_ptrbuf[0] = "123";
   m_char_ptrbuf[1] = "456";
-  incompl_struct *is;
-  incompl_union *iu;
-  incompl_union **is2;
-  incompl_union ******is6;
+  incompl_struct *is=0;
+  incompl_union *iu=0;
+  incompl_union **is2=0;
+  incompl_union ******is6=0;
+  int **intarr=0;
+  int ***intarr3=0;
+  double *dblarr=0;
+  double *dblarr2=0;
+  void *retval=0;
+  union {
+    int x;
+    double y;
+  } uni;
+  struct mystruct *d;
+  struct mystruct darr[2];
+  const char * longstr = "123456789abcdef123456789abcdef";
+  int x1=1,x2=2,x3=3,x4=4,x5=5,x6=6,x7=7,x888888888888888=8888;
+  MyClass mycl;
+
   pthread_t tid[2];
   pthread_create(&tid[0],0,fac50,0);
   is6                   = (incompl_union ******)malloc(sizeof(void *));
@@ -112,27 +128,18 @@ int main(void) {
   is6[0][0][0]          = (incompl_union ***)malloc(sizeof(void *));
   is6[0][0][0][0]       = (incompl_union **)malloc(sizeof(void *));
   is6[0][0][0][0][0]    = (incompl_union *)malloc(sizeof(void *));
-  //is6[0][0] = (incompl_union ****)malloc(sizeof(void *));
-  int **intarr = (int **)malloc(10*sizeof(int *));
-  int ***intarr3 = (int ***)malloc(10*sizeof(int **));
+  intarr = (int **)malloc(10*sizeof(int *));
+  intarr3 = (int ***)malloc(10*sizeof(int **));
   intarr[0] = (int *)malloc(10*sizeof(int *));
   intarr[1] = (int *)malloc(10*sizeof(int *));
   intarr[2] = (int *)malloc(10*sizeof(int *));
-  double *dblarr = (double *) malloc(5*sizeof(double));
-  double *dblarr2 = dblarr;
-  union {
-    int x;
-    double y;
-  } uni;
-  int x=1;
-  struct mystruct *d = (struct mystruct *) malloc (sizeof(struct mystruct));
+  dblarr = (double *) malloc(5*sizeof(double));
+  dblarr2 = dblarr;
+  d = (struct mystruct *) malloc (sizeof(struct mystruct));
   d->my1=5;
   d->my2=1.2;
   d->st.arr = (int *)malloc (10*sizeof(int));
-  struct mystruct darr[2];
-  const char * longstr = "123456789abcdef123456789abcdef";
-  int x1=1,x2=2,x3=3,x4=4,x5=5,x6=6,x7=7,x888888888888888=8888;
-  MyClass mycl;
+
   pthread_create(&tid[1],0,f1,0);
   x=f2(x);
   x=f3(x);
@@ -142,7 +149,7 @@ int main(void) {
   printf("%p\n",iu);
   printf("%p\n",is2);
   printf("%p\n",is6);
-  void *retval;
+
   pthread_join(tid[0],&retval);
   return x;
 }

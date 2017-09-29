@@ -2,7 +2,8 @@ AC_PREREQ([2.69])
 AC_INIT([mcgdb], [1.2], [dzabraew@gmail.com])
 AM_INIT_AUTOMAKE
 AC_OUTPUT(Makefile)
-AC_CONFIG_SRCDIR([tests/myclass.h])
+AC_OUTPUT(tests/Makefile)
+
 AC_CONFIG_SRCDIR([mc])
 AC_CONFIG_HEADERS([config.h])
 
@@ -29,4 +30,5 @@ AC_PROG_CC
 # Checks for library functions.
 
 AC_CONFIG_SUBDIRS([mc])
+#AC_CONFIG_FILES([tests/Makefile])
 AC_OUTPUT
