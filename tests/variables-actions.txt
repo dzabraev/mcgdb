@@ -1,0 +1,81 @@
+test only aux(localvars) and gdb. other window closed.
+
+@ ignore charbuf string value until POINT_CHARBUF_INIT
+@ ignore ucharbuf until POINT_INIT_UCHARBUF
+
+* break(gdb) POINT_ARR_INIT_1
+* continue(gdb) to POINT_ARR_INIT_1
+* scroll to arr in aux
+* expand arr recursive
+* collapse all arr
+* expand arr
+* collapse arr[0]
+* collapse arr[1]
+* collapse arr[2]
+* expand arr[0]
+* collapse arr[0][0]
+* collapse arr[0][1]
+* collapse arr[0][2]
+* expand arr[0][0]
+* change slice arr[0:2] to arr[0]
+* change slice arr[0][0:2] to arr[0]
+* change slice arr[0][0] to arr[0][1]
+* expand arr[0][1][0:2]
+* expand all to [0:2] change all elements to 5
+* step(aux) to POINT_ARR_INIT_2
+* expand all
+
+* continue to POINT_MM_INIT_1
+* change mm.MyBase::x to 100
+* change mm.MyBase::y to 101
+* change mm.MyBase2::x to 3.14
+* change mm.uni1 to 123
+* change mm.uni3 to 124
+* step to POINT_MM_INIT_2
+
+* continue to POINT_CHARBUF_INIT
+* scrollto charbuf
+* set variable charbuf[0]='t'
+* set variable charbuf[1]='e'
+* set variable charbuf[2]='s'
+
+* goto POINT_INIT_UCHARBUF
+* set variable ucharbuf[0]='x'
+* set variable ucharbuf[1]='y'
+* set variable ucharbuf[2]='z'
+
+* goto POINT_INIT_M_CHAR_PTRBUF
+* expand m_char_ptrbuf
+* change slice m_char_ptrbuf to [0]
+* change slice m_char_ptrbuf to [1]
+* set variable m_char_ptrbuf[0][0]='1'
+* set variable m_char_ptrbuf[0][1]='2'
+* set variable m_char_ptrbuf[0][2]='3'
+* change slice m_char_ptrbuf to [0:1]
+* set variable m_char_ptrbuf[1][0]='7'
+* set variable m_char_ptrbuf[1][1]='8'
+* set variable m_char_ptrbuf[1][2]='9'
+
+* break INIT_BLOCK_1
+* continue INIT_BLOCK_1
+* scroll to block1 and block2
+* change block1 to 11
+* set variable block1=12
+* break POINT_INIT_BLOCK_2
+* scroll to block3
+* continue POINT_INIT_BLOCK_2
+* step to POINT_CLOSE_BLOCK_1
+* step to POINT_CLOSE_BLOCK_2
+
+* goto POINT_INIT_X
+* chnage x to 17
+* set variable x=15
+
+
+* continue to POINT_INIT_UNI_1
+* scroll to uni
+
+
+
+
+

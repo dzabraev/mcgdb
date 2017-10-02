@@ -59,30 +59,8 @@ struct mystruct {
   } st;
 };
 
-void *f1(void *arg) {
-  int y=10, x=0;
-  for (;;) {
-    int z=15;
-    z+=y;
-    x+=z;
-    sleep(1);
-  }
-}
+void f1(void) {
 
-int f3(int x) {
-  return x+1;
-}
-
-int fac(int n) {
-  if (n==1)
-    return 1;
-  return n*fac(n-1);
-}
-
-void *fac50(void *arg) {
-  sleep(5);
-  fac(50);
-  return NULL;
 }
 
 int main(void) {
@@ -92,12 +70,6 @@ int main(void) {
       for (int k=0;k<3; k++)
         arr[i][j][k] = i+10*j+100*k;
 
-  for (int i=0;i<3;i++)
-    for (int j=0;j<3;j++)
-      for (int k=0;k<3; k++)
-        arr[i][j][k] = k+10*i+100*j;
-
-
   MyDeriv mm(1);
   mm.MyBase::x=11;
   mm.MyBase::y=12;
@@ -105,35 +77,69 @@ int main(void) {
   mm.uni1=13;
   mm.uni3=14;
 
+  char charbuf[4]="abc";
+
+  unsigned char ucharbuf[4]="uns";
+
+  const char const_charbuf[4]="def";
+
+  const char* m_char_ptrbuf[2];
+  m_char_ptrbuf[0] = "123";
+  m_char_ptrbuf[1] = "456";
+
+  int x=10;
+
+  incompl_struct  *is1=(incompl_struct *)0x1; /*check not expandable*/
+  incompl_union   *iu1=(incompl_union  *)0x2; /*check not expandable*/
+
+  const char * longstr = "123456789abcdef123456789abcdef";
+  MyClass mycl;
+
+
+  /*END OF INITIALIZING VARIABLES*/
+
+
+
+  for (int i=0;i<3;i++)
+    for (int j=0;j<3;j++)
+      for (int k=0;k<3; k++)
+        arr[i][j][k] = k+10*i+100*j;
+  //POINT_ARR_INIT_2
+
+
+
   mm.MyBase::x=12;
   mm.MyBase::y=13;
   mm.MyBase2::x=0.6;
   mm.uni1=14;
   mm.uni3=15;
+  //POINT_MM_INIT_2
 
 
 
-
-  char charbuf[4]="abc";
 
   {
     int block1=1;
     int block2=2;
+    printf("%d %d\n",block1,block2);//POINT_INIT_BLOCK_1
     {
       int block3=3;
+      //POINT_INIT_BLOCK_2
+      block1+=block3;
+      block2+=block3+1;
+      printf("%d %d %d\n",block1,block2, block3);
     }
+    printf("%d %d\n",block1,block2);
+    //POINT_CLOSE_BLOCK_1
   }
+  //POINT_CLOSE_BLOCK_2
 
-  unsigned char ucharbuf[4]="uns";
-  const char const_charbuf[4]="def";
-  const char* m_char_ptrbuf[2] = {(char *)7,(char *)8};
-  int x=10;
-  m_char_ptrbuf[0] = "123";
-  m_char_ptrbuf[1] = "456";
-  incompl_struct *is;
-  incompl_union *iu;
-  incompl_union **is2;
-  incompl_union ******is6;
+
+
+
+  incompl_struct **is2; /*check expand 1 level*/
+  incompl_union  **iu2; /*check expand 1 level*/
+
   int **intarr=0;
   int ***intarr3=0;
   double *dblarr=0;
@@ -145,16 +151,22 @@ int main(void) {
     double y;
   } uni;
   uni.y=0.9;
+  //POINT_INIT_UNI_1
 
 
   struct mystruct darr[2];
-  const char * longstr = "123456789abcdef123456789abcdef";
-  int x1=1,x2=2,x3=3,x4=4,x5=5,x6=6,x7=7,x888888888888888=8888;
-  MyClass mycl;
+  darr[0].my1=1;
+  darr[0].my2=2;
+  darr[0].my2=2.1;
+  darr[0].st.arr=0;
+  darr[0].st.i=3;
+  darr[0].st.s=0x0;
+  darr[0].st.s3.x=4;
+  darr[0].st.s3.y=5;
 
-  pthread_t tid[2];
-  pthread_create(&tid[0],0,fac50,0);
 
+
+  incompl_union ******is6;
   is6                   = (incompl_union ******)malloc(sizeof(void *)*1);
   is6[0]=0;
   is6[0]                = (incompl_union *****)malloc(sizeof(void *)*2);
@@ -212,16 +224,13 @@ int main(void) {
   d->st.s3.x=10;
   d->st.s3.y=20;
 
-  pthread_create(&tid[1],0,f1,0);
-  x=f2(x);
-  x=f3(x);
-  x=f5(x);
-  x=fac(50);
-  printf("%p\n",is);
-  printf("%p\n",iu);
-  printf("%p\n",is2);
-  printf("%p\n",is6);
+  f1();
 
-  pthread_join(tid[0],&retval);
+  /*prevent optimizing out*/
+  printf("%p",is1);
+  printf("%p",is2);
+  printf("%p",iu1);
+  printf("%p",iu2);
+
   return x;
 }

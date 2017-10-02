@@ -29,8 +29,6 @@ REGEXES=[
     ('aux',subarray_addr('incompl_union *** ')),
     ('aux',subarray_addr('incompl_union ** ')),
     ('aux','{}\s*{ADDR},\s*{ADDR},\s*{ADDR},\s*{ADDR},\s*{ADDR}\s*\]'.format(re.escape('incompl_union ** *(0x613e60)[0:4] = ['),ADDR=HEXADDR)),
-    ('aux','(unsigned )?((long)|(int)|(long long)|(short)) {}'.format(re.escape('(*)[2] tid = '))),
-    ('aux','(unsigned )?((long)|(int)|(long long)|(short)) {}'.format(re.escape('[2] tid'))),
     ('aux',pattern_addr('mystruct (*)[2] darr = ')),
     ('aux',pattern_addr('const char *(*)[2] m_char_ptrbuf = ')),
     ('aux',pattern_addr('unsigned char (*)[4] ucharbuf = ')),
