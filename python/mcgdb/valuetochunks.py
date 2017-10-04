@@ -3,7 +3,7 @@
 import gdb
 import re, ctypes, copy, traceback
 from abc import abstractmethod, abstractproperty
-
+from collections import OrderedDict
 
 from mcgdb.common import    exec_main, gdb_print, gdb_stopped, \
                             inferior_alive, \
@@ -44,7 +44,10 @@ def get_local_variables(frame):
     if block.function:
       break
     block = block.superblock
-  return variables
+  ordered_vars=OrderedDict()
+  for key in sorted(variables):
+    ordered_vars[key]=variables[key]
+  return ordered_vars
 
 
 
