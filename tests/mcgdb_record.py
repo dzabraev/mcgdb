@@ -248,6 +248,7 @@ class Journal(object):
     self.mouse_down = re.compile('\x1b\[<\d+;\d+;\d+M')
     self.mouse_up = re.compile('\x1b\[<\d+;\d+;\d+m')
   def append(self,x):
+    #print repr(x)
     self.data.append(x)
   def save(self,fname=None):
     self.concat()
@@ -267,8 +268,18 @@ class Journal(object):
       return x[:-1] + [last]
     else:
       return x+[y]
+  def __concat_sigwinch(self,x,y):
+    last=x[-1]
+    ysig = y.get('sig')
+    xsig = last.get('sig')
+    if ysig==xsig==signal.SIGWINCH and last.get('time')-y.get('time')<0.1:
+      return x[:-1] + [y]
+    else:
+      return x+[y]
+
   def concat(self):
     self.data = reduce(self.__concat_click,self.data[1:],[self.data[0]])
+    self.data = reduce(self.__concat_sigwinch,self.data[1:],[self.data[0]])
 
 def main():
   parser=argparse.ArgumentParser()

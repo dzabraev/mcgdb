@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #coding=utf8
 
-import pexpect, subprocess, time, os, socket, sys, re, select, pty
+import pexpect, subprocess, time, os, socket, sys, re, select, pty, struct, fcntl, termios
 import atexit
 import pyte
 
@@ -38,8 +38,6 @@ class McgdbWin(object):
       ENV.update(env)
       os.execve(efile,args,ENV)
     else:
-      print self.p_pid
-      print cmd
       self.master_file = os.fdopen(self.master_fd,'wb',0)
 
   def feeding(self,timeout=5):
@@ -66,6 +64,10 @@ class McgdbWin(object):
         return
       data=os.read(self.master_fd,1024)
       self.stream.feed(data)
+
+  def resize(self,cols,rows):
+    self.screen.resize(columns=cols,lines=rows)
+    fcntl.ioctl(self.master_fd, termios.TIOCSWINSZ,struct.pack('HHHH',rows,cols,0,0))
 
   def send(self,data):
     self.master_file.write(data)

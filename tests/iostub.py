@@ -55,7 +55,7 @@ class StreamJson(object):
   def retranslate_sigwinch(self):
     data=fcntl.ioctl(sys.stdin.fileno(), termios.TIOCGWINSZ, '\0'*8)
     s=struct.unpack('HHHH',data)
-    d={'sig':signal.SIGWINCH,'col':s[1],'row':s[0]}
+    d={'sig':signal.SIGWINCH,'col':s[1],'row':s[0],'time':time.time()}
     self.retranslate(d)
 
 def do_nonblock(fd):

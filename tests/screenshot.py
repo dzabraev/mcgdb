@@ -177,7 +177,7 @@ def linearize(journal):
         'screenshot':screenshot,
         'action_num':record['action_num'],
         'name':screenshot['name'],
-        'stream':record['record']['stream'],
+        'stream':record['record'].get('stream',''),
       })
   return screenshots
 

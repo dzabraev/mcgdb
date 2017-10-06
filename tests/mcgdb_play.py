@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 #coding=utf8
 
-import argparse,pickle,signal,time,select,collections,copy,json
+import argparse,pickle,signal,time,select,collections,copy,json,sys
 
 from common import Gdb,McgdbWin
 
 def play():
   parser = argparse.ArgumentParser()
-  parser.add_argument('record_file', help='sequence of actions for gdb and windows', default='record.log',nargs='?')
+  parser.add_argument('record_file', help='sequence of actions for gdb and windows', default='record_log.py',nargs='?')
   parser.add_argument('--output', help='this file will be contain screenshots', default='record.play')
   parser.add_argument('--delay',type=float,default=1,help='amount of seconds')
   args = parser.parse_args()
@@ -47,7 +47,8 @@ def play():
   record_total = len(journal)
   for record in journal:
     record_cnt+=1
-    print '\r{: 5d}/{: 5d}'.format(record_cnt,record_total)
+    print '{: 5d}/{: 5d}\r'.format(record_cnt,record_total),
+    sys.stdout.flush()
     name=record['name']
     action_num = record['action_num']
     if 'stream' in record:
@@ -55,7 +56,7 @@ def play():
     elif 'sig' in record:
       sig=record['sig']
       if sig==signal.SIGWINCH:
-        wins_with_name[name].display.resize(columns=record['col'],lines=record['row'])
+        wins_with_name[name].resize(cols=record['col'],rows=record['row'])
     #collect window output
     t0 = time.time()
     while True:
@@ -81,6 +82,7 @@ def play():
       'screenshots':screenshots,
       'record':record,
     })
+  print ''
   output.write(pickle.dumps({'journal_play':journal_play,'regexes':regexes}))
 
 def copy_buffer(buf,cols,rows):
