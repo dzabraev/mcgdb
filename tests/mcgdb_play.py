@@ -24,7 +24,7 @@ def play():
     globs={}
     exec(f.read(),{},globs)
     journal=globs['journal']
-    regexes=globs['REGEXES']
+    regexes=globs.get('REGEXES',[])
   gdb=Gdb()
   aux=gdb.open_win('aux')
   asm=gdb.open_win('asm')

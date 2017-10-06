@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #coding=utf8
-import pexpect,os,socket,subprocess,json,signal,select,argparse,re,sys
+import pexpect,os,socket,subprocess,json,signal,select,argparse,re,sys,pickle,time,pprint
 import pexpect.fdpexpect
 
 import distutils.spawn
@@ -16,7 +16,8 @@ def open_sock():
   sock.listen(1)
   return sock, sock.getsockname()[1]
 
-XTERM=which('xterm')
+#XTERM=which('xterm')
+XTERM=which('gnome-terminal')
 PYTHON=which('python')
 IOSTUB=os.path.join(os.path.dirname(os.path.abspath(__file__)),'iostub.py')
 GDB=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),'mcgdb')
@@ -99,7 +100,7 @@ class XtermSpawn(object):
     self.psock,self.pport = open_sock()
     exec_args = self.get_exec_args()
     environ = self.get_environ()
-    cmd='''{XTERM} -e "{PYTHON} {IOSTUB} --executable={EXECUTABLE} {EXEC_ARGS} {ENVIRON} --xport={XPORT} --pport={PPORT}; sleep 999"'''.format(
+    cmd='''{XTERM} -e "sh -c \\"{PYTHON} {IOSTUB} --executable={EXECUTABLE} {EXEC_ARGS} {ENVIRON} --xport={XPORT} --pport={PPORT}; sleep 999\\""'''.format(
       XTERM=XTERM,
       PYTHON=PYTHON,
       IOSTUB=IOSTUB,
@@ -115,6 +116,9 @@ class XtermSpawn(object):
 
   def get_feed_fd(self):
     return self.xconn.fileno()
+
+  def get_program_fd(self):
+    return self.pconn.fileno()
 
   def get_exec_args(self):
     return None
@@ -137,6 +141,12 @@ class XtermMcgdbWin(XtermSpawn):
     return self.executable
   def get_exec_args(self):
     return self.exec_args
+
+  def send(self,msg):
+    self.pconn.send(msg)
+
+  def sendwin(self,msg):
+    self.xconn.send(msg)
 
   def _feed(self):
     while True:
@@ -233,8 +243,8 @@ def open_window(gdb,journal,name):
   return XtermMcgdbWin(executable,args,journal,name)
 
 class Journal(object):
-  def __init__(self):
-    self.data=[]
+  def __init__(self,journal=[]):
+    self.data=journal
     self.mouse_down = re.compile('\x1b\[<\d+;\d+;\d+M')
     self.mouse_up = re.compile('\x1b\[<\d+;\d+;\d+m')
   def append(self,x):
@@ -246,7 +256,7 @@ class Journal(object):
       x['action_num'] = cnt
       cnt+=1
     logfile = open(fname,'wb') if fname else sys.stdout
-    logfile.write('journal='+json.dumps(self.data,sort_keys=True,indent=4))
+    logfile.write('journal='+pprint.pformat(self.data,width=1))
     logfile.close()
   def __concat_click(self,x,y):
     last=x[-1]
@@ -263,16 +273,64 @@ class Journal(object):
 def main():
   parser=argparse.ArgumentParser()
   parser.add_argument('fname',default='record_log.py',nargs='?')
+  parser.add_argument('--play',help='this parameter represents filename. From given file script will read and play actions. After execution of all actions recording will start.')
+  parser.add_argument('--delay',help='only affects with --play', type=float, default=1)
   args = parser.parse_args()
-  journal=Journal()
   print 'start recording to {}'.format(args.fname)
   print 'type Ctrl+C for stop recording'
+  if args.play:
+    with open(args.play) as f:
+      globs={}
+      exec(f.read(),{},globs)
+    if 'journal' in globs:
+      journal=Journal(globs['journal'])
+    else:
+      journal=Journal()
+  else:
+    journal=Journal()
   gdb=XtermGdb(journal,'gdb')
   aux=open_window(gdb,journal,'aux')
   asm=open_window(gdb,journal,'asm')
   src=open_window(gdb,journal,'src')
   entities=dict(map(lambda x:(x.get_feed_fd(),x), [gdb,aux,asm,src]))
   rlist=list(entities.keys())
+  if args.play:
+    print 'Dont touch windows until replay do not end'
+    wins={
+      'gdb':gdb,
+      'aux':aux,
+      'src':src,
+      'asm':asm,
+    }
+    program_fds=list(map(lambda x:x.get_program_fd(), [gdb,aux,asm,src]))
+    record_cnt=0
+    record_total = len(journal.data)
+    for record in journal.data:
+      record_cnt+=1
+      print '\r{: 5d}/{: 5d}'.format(record_cnt,record_total)
+      name=record['name']
+      action_num = record['action_num']
+      if 'stream' in record:
+        wins[name].send(record['stream'].encode('utf8'))
+      elif 'sig' in record:
+        sig=record['sig']
+        if sig==signal.SIGWINCH:
+          wins[name].sendwin('\x1b[8;{rows};{cols}t'.format(rows=record['row'],cols=record['col']))
+        else:
+          raise NotImplementedError
+      #collect window output
+      t0 = time.time()
+      while True:
+        d = t0 - time.time() + args.delay
+        if d<=0:
+          break
+        ready,[],[] = select.select(rlist,[],[],d)
+        for fd in ready:
+          os.read(fd,1024) #clear buffer
+          #entities[fd].read(1024) #clear buffer
+    print 'replay end. you can tocuh widnows.'
+  else:
+    journal=Journal()
   try:
     while True:
       ready,[],[] = select.select(rlist,[],[])

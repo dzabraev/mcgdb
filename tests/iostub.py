@@ -45,7 +45,7 @@ class StreamJson(object):
     return self.retranslate_stream(data)
 
   def retranslate(self,data):
-    ddata = json.dumps(data)+'\n'
+    ddata = json.dumps(data,ensure_ascii=False).encode('utf8')+'\n'
     for cb in self.cbs:
       cb(ddata)
 
