@@ -255,6 +255,9 @@ def main():
       filter_by_winname(play_journal2,args.name)
 
   play_journal=linearize(play_journal)
+  if len(play_journal)==0:
+    print 'length of {} equals 0'.format(args.play_journal)
+    return
   if play_journal2 is not None:
     play_journal2=linearize(play_journal2)
 

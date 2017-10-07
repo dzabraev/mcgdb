@@ -50,7 +50,7 @@ class StreamJson(object):
       cb(ddata)
 
   def retranslate_stream(self,data):
-    self.retranslate({'stream':data})
+    self.retranslate({'stream':data,'time':time.time()})
 
   def retranslate_sigwinch(self):
     data=fcntl.ioctl(sys.stdin.fileno(), termios.TIOCGWINSZ, '\0'*8)

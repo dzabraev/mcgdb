@@ -29,6 +29,9 @@ def split_first(s,ch='\n'):
   spl=s.split(ch)
   return spl[0], ch.join(spl[1:])
 
+class WindowDead(Exception): pass
+class AllWinClosed(Exception): pass
+
 class XtermSpawn(object):
   __metaclass__ = ABCMeta
 
@@ -57,7 +60,8 @@ class XtermSpawn(object):
       cnt=0
       s = self.xconn.recv(n)
       if not s:
-        yield None
+        raise WindowDead
+        #yield None
       total=len(s)
       while cnt<total:
         yield s[cnt]
@@ -100,7 +104,7 @@ class XtermSpawn(object):
     self.psock,self.pport = open_sock()
     exec_args = self.get_exec_args()
     environ = self.get_environ()
-    cmd='''{XTERM} -e "sh -c \\"{PYTHON} {IOSTUB} --executable={EXECUTABLE} {EXEC_ARGS} {ENVIRON} --xport={XPORT} --pport={PPORT}; sleep 999\\""'''.format(
+    cmd='''{XTERM} -e "sh -c \\"{PYTHON} {IOSTUB} --executable={EXECUTABLE} {EXEC_ARGS} {ENVIRON} --xport={XPORT} --pport={PPORT}\\""'''.format(
       XTERM=XTERM,
       PYTHON=PYTHON,
       IOSTUB=IOSTUB,
@@ -252,12 +256,9 @@ class Journal(object):
     self.data.append(x)
   def save(self,fname=None):
     self.concat()
-    cnt=1
-    for x in self.data:
-      x['action_num'] = cnt
-      cnt+=1
+    self.enumerate()
     logfile = open(fname,'wb') if fname else sys.stdout
-    logfile.write('journal='+pprint.pformat(self.data,width=1))
+    logfile.write('journal='+str(self))
     logfile.close()
   def __concat_click(self,x,y):
     last=x[-1]
@@ -277,17 +278,36 @@ class Journal(object):
     else:
       return x+[y]
 
+  def enumerate(self):
+    for idx,x in enumerate(self.data,1):
+      x['action_num'] = idx
+
   def concat(self):
+    if len(self.data)==0:
+      return
     self.data = reduce(self.__concat_click,self.data[1:],[self.data[0]])
     self.data = reduce(self.__concat_sigwinch,self.data[1:],[self.data[0]])
 
+  def __str__(self):
+    self.concat()
+    self.enumerate()
+    return pprint.pformat(self.data,width=1)
+
+def save_variables(fname,variables):
+  with open(fname,'w') as f:
+    for name,value in variables.iteritems():
+      f.write('%s=%s\n\n' % (name,value))
+
 def main():
   parser=argparse.ArgumentParser()
-  parser.add_argument('fname',default='record_log.py',nargs='?')
+  parser.add_argument('output',default='record_log.py',nargs='?')
+  parser.add_argument('--addwin',action='append',choices=['aux','src','asm'],help='if no specified all win will be open')
   parser.add_argument('--play',help='this parameter represents filename. From given file script will read and play actions. After execution of all actions recording will start.')
   parser.add_argument('--delay',help='only affects with --play', type=float, default=1)
   args = parser.parse_args()
-  print 'start recording to {}'.format(args.fname)
+  print 'start recording to {}'.format(args.output)
+  win_names = args.addwin if args.addwin else ['aux','src','asm']
+  win_names = list(set(win_names))
   print 'type Ctrl+C for stop recording'
   if args.play:
     with open(args.play) as f:
@@ -300,20 +320,16 @@ def main():
   else:
     journal=Journal()
   gdb=XtermGdb(journal,'gdb')
-  aux=open_window(gdb,journal,'aux')
-  asm=open_window(gdb,journal,'asm')
-  src=open_window(gdb,journal,'src')
-  entities=dict(map(lambda x:(x.get_feed_fd(),x), [gdb,aux,asm,src]))
+  wins = dict(gdb=gdb,**{name:open_window(gdb,journal,name) for name in win_names})
+  entities=dict(map(lambda x:(x.get_feed_fd(),x), wins.values()))
   rlist=list(entities.keys())
   if args.play:
+    for record in journal.data:
+      if record['name'] not in win_names:
+        print '{} contains name {} but only {} can be open'.format(args.play,record['name'],win_names)
+        sys.exit(0)
     print 'Dont touch windows until replay do not end'
-    wins={
-      'gdb':gdb,
-      'aux':aux,
-      'src':src,
-      'asm':asm,
-    }
-    program_fds=list(map(lambda x:x.get_program_fd(), [gdb,aux,asm,src]))
+    program_fds=list(map(lambda x:x.get_program_fd(), wins.values()))
     record_cnt=0
     record_total = len(journal.data)
     for record in journal.data:
@@ -344,11 +360,20 @@ def main():
     journal=Journal()
   try:
     while True:
+      if len(rlist)==0:
+        raise AllWinClosed
       ready,[],[] = select.select(rlist,[],[])
       for fd in ready:
-        entities[fd].recvfeed()
-  except KeyboardInterrupt:
-    journal.save(args.fname)
+        try:
+          entities[fd].recvfeed()
+        except WindowDead:
+          rlist.remove(fd)
+  except (KeyboardInterrupt,AllWinClosed):
+    variables={
+      'windows':win_names,
+      'journal':journal,
+    }
+    save_variables(args.output,variables)
 
 
 if __name__ == "__main__":

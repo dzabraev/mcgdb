@@ -108,3 +108,5 @@ class Gdb(object):
   def send(self,data):
     self.program.sendline(data+'\n')
 
+def file_to_modname(fname):
+  return fname if not fname.endswith('.py') else fname[:-3]

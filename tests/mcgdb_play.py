@@ -1,15 +1,16 @@
 #!/usr/bin/env python
 #coding=utf8
 
-import argparse,pickle,signal,time,select,collections,copy,json,sys
+import argparse,pickle,signal,time,select,collections,copy,json,sys,os,imp
 
-from common import Gdb,McgdbWin
+from common import Gdb,McgdbWin, file_to_modname
 
 def play():
   parser = argparse.ArgumentParser()
   parser.add_argument('record_file', help='sequence of actions for gdb and windows', default='record_log.py',nargs='?')
   parser.add_argument('--output', help='this file will be contain screenshots', default='record.play')
   parser.add_argument('--delay',type=float,default=1,help='amount of seconds')
+  parser.add_argument('--regexes',help='read regexes from given file and store them into output')
   args = parser.parse_args()
   if args.record_file==args.output:
     print 'record_file must be not equal output'
@@ -20,28 +21,17 @@ def play():
   journal_play=[]
   delay = args.delay
   output = open(args.output,'wb')
-  with open(args.record_file) as f:
-    globs={}
-    exec(f.read(),{},globs)
-    journal=globs['journal']
-    regexes=globs.get('REGEXES',[])
+  module_records = imp.load_source(file_to_modname(args.record_file),os.path.abspath(args.record_file))
+  journal = module_records.journal
+
+  if args.regexes:
+    regexes=getattr(__import__(file_to_modname(args.regexes)),'REGEXES',[])
+  else:
+    regexes=[]
   gdb=Gdb()
-  aux=gdb.open_win('aux')
-  asm=gdb.open_win('asm')
-  src=gdb.open_win('src')
-  entities = {
-    'aux':aux,
-    'asm':asm,
-    'src':src,
-    'gdb':gdb,
-  }
-  wins_with_name = collections.OrderedDict({
-    'aux':aux,
-    'asm':asm,
-    'src':src,
-  })
-  wins = [aux,asm,src]
-  fd_to_win=dict(map(lambda x: (x.master_fd,x), wins))
+  wins_with_name = collections.OrderedDict([(name,gdb.open_win(name)) for name in module_records.windows])
+  entities=dict(wins_with_name, gdb=gdb)
+  fd_to_win=dict(map(lambda x: (x.master_fd,x), wins_with_name.values()))
   rlist = list(fd_to_win.keys())
   record_cnt=0
   record_total = len(journal)
