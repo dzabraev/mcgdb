@@ -300,7 +300,7 @@ def save_variables(fname,variables):
 
 def main():
   parser=argparse.ArgumentParser()
-  parser.add_argument('output',default='record_log.py',nargs='?')
+  parser.add_argument('output',default='record.py',nargs='?')
   parser.add_argument('--addwin',action='append',choices=['aux','src','asm'],help='if no specified all win will be open')
   parser.add_argument('--play',help='this parameter represents filename. From given file script will read and play actions. After execution of all actions recording will start.')
   parser.add_argument('--delay',help='only affects with --play', type=float, default=1)
@@ -325,7 +325,8 @@ def main():
   rlist=list(entities.keys())
   if args.play:
     for record in journal.data:
-      if record['name'] not in win_names:
+      name=record['name']
+      if name!='gdb' and name not in win_names:
         print '{} contains name {} but only {} can be open'.format(args.play,record['name'],win_names)
         sys.exit(0)
     print 'Dont touch windows until replay do not end'
@@ -334,7 +335,8 @@ def main():
     record_total = len(journal.data)
     for record in journal.data:
       record_cnt+=1
-      print '\r{: 5d}/{: 5d}'.format(record_cnt,record_total)
+      print '\r{: 5d}/{: 5d}'.format(record_cnt,record_total),
+      sys.stdout.flush()
       name=record['name']
       action_num = record['action_num']
       if 'stream' in record:

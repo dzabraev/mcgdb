@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 #coding=utf8
 
-import argparse,pickle,signal,time,select,collections,copy,json,sys,os,imp
+import argparse,pickle,signal,time,select,collections,copy,json,sys,os,imp,pprint
 
 from common import Gdb,McgdbWin, file_to_modname
 
 def play():
   parser = argparse.ArgumentParser()
-  parser.add_argument('record_file', help='sequence of actions for gdb and windows', default='record_log.py',nargs='?')
+  parser.add_argument('record_file', help='sequence of actions for gdb and windows', default='record.py',nargs='?')
   parser.add_argument('--output', help='this file will be contain screenshots', default='record.play')
   parser.add_argument('--delay',type=float,default=1,help='amount of seconds')
   parser.add_argument('--regexes',help='read regexes from given file and store them into output')
@@ -25,7 +25,7 @@ def play():
   journal = module_records.journal
 
   if args.regexes:
-    regexes=getattr(__import__(file_to_modname(args.regexes)),'REGEXES',[])
+    regexes=getattr(__import__(file_to_modname(args.regexes)),'regexes',[])
   else:
     regexes=[]
   gdb=Gdb()
@@ -86,7 +86,6 @@ def copy_buffer(buf,cols,rows):
       )
     sbuf.append(line)
   return sbuf
-
 
 if __name__ == "__main__":
   play()

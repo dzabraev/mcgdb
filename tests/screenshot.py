@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 #coding=utf8
 
-import argparse,pickle,sys,copy,pyte.screens,curses,re
+import argparse,pickle,sys,copy,pyte.screens,curses,re,imp,os
+
+from common import file_to_modname
 
 warnings=[]
 
@@ -98,6 +100,8 @@ def print_screenshot(stdscr,sshot,y,x):
     u'\u2518' : curses.ACS_LRCORNER,
     u'\u2500' : curses.ACS_HLINE,
     u'\u2502' : curses.ACS_VLINE,
+    u'\u251c' : 'X',
+    u'\u2524' : 'X',
   }
   for row in range(rows):
     for col in range(cols):
@@ -235,15 +239,13 @@ def main():
   parser.add_argument('--action_num',help='show screenshots starts with given action_num',type=int)
   parser.add_argument('--num',help='show screenshots starts with given screenshot number',type=int)
   parser.add_argument('--name',help='print screenshots only for window with name ')
-  parser.add_argument('--dbg_regexes',help='python file contains REGEX variable')
+  parser.add_argument('--regexes',help='python file contains regexes variable')
   args = parser.parse_args()
 
   regexes,play_journal = read_journal(args.play_journal)
-  if args.dbg_regexes is not None:
-    with open(args.dbg_regexes) as f:
-      globs={}
-      exec(f.read(),{},globs)
-      regexes=normalize_regexes(globs['REGEXES'])
+  if args.regexes is not None:
+    module_regexes = imp.load_source(file_to_modname(args.regexes),os.path.abspath(args.regexes))
+    regexes=normalize_regexes(module_regexes.regexes)
   if args.play_journal2 is not None:
     _regexes,play_journal2 = read_journal(args.play_journal2)
   else:
