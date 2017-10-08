@@ -38,7 +38,8 @@ WIN_LIST = os.environ.get('WIN_LIST',"aux src").split()
 if 'debug' in os.environ or 'DEBUG' in os.environ:
   level = logging.INFO
   debug_messages=True
-  os.remove(LOG_FILENAME)
+  if os.path.exists(LOG_FILENAME):
+    os.remove(LOG_FILENAME)
   logging.basicConfig(filename=LOG_FILENAME,format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
 else:
   level = logging.CRITICAL

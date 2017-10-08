@@ -62,14 +62,22 @@ class CommunicationMixin(object):
     assert self.fd!=None
     return pkgrecv(self.fd)
 
+  def pkg_send_error(self,message):
+    '''Вывести пользователю ошибку в граф. окне.'''
+    return {'cmd':'error_message','message':message}
+
   def send_error(self,message):
     '''Вывести пользователю ошибку в граф. окне.'''
     try:
-      self.send({'cmd':'error_message','message':message})
+      self.send(self.pkg_send_error(message))
     except:
       pass
 
+  def pkg_callback(self,callback_id,type):
+    return {'cmd':'call_cb','callback_id':callback_id,'type':type}
 
+  def send_pkg_callback(self,*args,**kwargs):
+    return self.send(self.pkg_callback(*args,**kwargs))
 
 class TablePackages(CommunicationMixin):
   __metaclass__ = ABCMeta
@@ -87,7 +95,6 @@ class TablePackages(CommunicationMixin):
   def send_pkg_insert_rows      (self,*args,**kwargs): self.send(self.pkg_insert_rows       (*args,**kwargs))
   def send_pkg_transaction      (self,*args,**kwargs): self.send(self.pkg_transaction       (*args,**kwargs))
   def send_pkg_message_in_table (self,*args,**kwargs): self.send(self.pkg_message_in_table  (*args,**kwargs))
-
 
   def pkg_exemplar_set(self,id):
     return {'cmd':'exemplar_set','id':id,'table_name':self.subentity_name}
@@ -324,18 +331,23 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     cmd_name=pkg[cmd]
     method_name = '{}_{}'.format(cmd,cmd_name)
     ret_pkgs=[]
+    err_occurs=False
+    callback_id=pkg.get('callback_id')
     for subsentity in destinations:
       if hasattr(subsentity,method_name):
         cb=getattr(subsentity,method_name)
         try:
           ret=cb(pkg)
         except mcgdbBaseException as e:
+          if callback_id is not None:
+            self.send_pkg_callback(callback_id,type=1)
           self.send_error(str(e))
           ret=None
+          err_occurs=True
         if ret:
           assert type(ret) in (list,tuple)
           ret_pkgs+=ret
-    return ret_pkgs
+    return ret_pkgs #send this packages to gdb entities
 
   def terminate(self):
     try:

@@ -12,9 +12,14 @@ def stat_color(status):
   }
   return termcolor.colored(status,colors.get(status))
 
+ALLTESTS=[
+  'variables.wait_change_bug_1',
+  'variables',
+]
+
 def main():
   parser=argparse.ArgumentParser()
-  parser.add_argument('--test',action='append')
+  parser.add_argument('--test',action='append',choices=ALLTESTS)
   parser.add_argument('--output',default='mcgdb.sum')
   args=parser.parse_args()
 
@@ -27,7 +32,7 @@ def main():
   output = open(args.output,'wb')
 
   if not args.test:
-    testnames=['variables']
+    testnames=ALLTESTS
   else:
     testnames=args.test
 

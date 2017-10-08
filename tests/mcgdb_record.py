@@ -264,7 +264,7 @@ class Journal(object):
     last=x[-1]
     ys = y.get('stream')
     ls = last.get('stream')
-    if ys is not None and ls is not None and self.mouse_down.match(ls) and self.mouse_up.match(ys) and ys[:-1]==ls[:-1]:
+    if ys is not None and ls is not None and last['name']==y['name'] and self.mouse_down.match(ls) and self.mouse_up.match(ys) and ys[:-1]==ls[:-1]:
       last['stream']+=y['stream']
       return x[:-1] + [last]
     else:
@@ -273,7 +273,7 @@ class Journal(object):
     last=x[-1]
     ysig = y.get('sig')
     xsig = last.get('sig')
-    if ysig==xsig==signal.SIGWINCH and last.get('time')-y.get('time')<0.1:
+    if last['name']==y['name'] and ysig==xsig==signal.SIGWINCH and last.get('time')-y.get('time')<0.1:
       return x[:-1] + [y]
     else:
       return x+[y]
@@ -282,11 +282,23 @@ class Journal(object):
     for idx,x in enumerate(self.data,1):
       x['action_num'] = idx
 
+  def __concat_auxinput(self,x,y):
+    x0=x[-1]
+    if not ('stream' in x0 and 'stream' in y and x0['name']=='aux' and x0['stream'][-1]=='\n'):
+      return x+[y]
+    s=y['stream']
+    if y['name']=='aux' and len(s)==1 and ord(s) < 128:
+      x0['stream'] = y['stream']+x0['stream']
+      return x
+    else:
+      return x+[y]
+
   def concat(self):
     if len(self.data)==0:
       return
     self.data = reduce(self.__concat_click,self.data[1:],[self.data[0]])
     self.data = reduce(self.__concat_sigwinch,self.data[1:],[self.data[0]])
+    self.data = list(reversed(reduce(self.__concat_auxinput,reversed(self.data[:-1]),[self.data[-1]])))
 
   def __str__(self):
     self.concat()

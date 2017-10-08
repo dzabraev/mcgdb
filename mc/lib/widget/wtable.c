@@ -174,6 +174,15 @@ static void
 table_row_shift(Table *tab, table_row *row, size_t row_shift);
 
 
+typedef struct wcArgs {
+  char * str;
+  GNode * node;
+  Table * tab;
+  json_t * onclick_data;
+  int color;
+} wcArgs;
+
+
 static table_row *
 TAB_LAST_ROW(Table * tab) {
   return (tab->rows) ? (table_row *)(g_list_last (tab->rows)->data) : NULL;
@@ -1115,6 +1124,32 @@ get_most_depth_node_with_yx (GNode *node, int y, int x) {
   }
 }
 
+
+static void
+wait_change_success(void *data) {
+  wcArgs *args = (wcArgs *)data;
+  if (args->str)
+    free (args->str);
+  drop_childs(args->node,args->tab);
+  json_decref (CHUNK(args->node)->onclick_data);
+  args->tab->redraw|=REDRAW_TAB;
+  args->tab->rowsize_changed=TRUE;
+  CHUNK(args->node)->row->rowsize_changed=TRUE;
+}
+
+static void
+wait_change_error(struct wcArgs *data) {
+  wcArgs *args = (wcArgs *)data;
+  if (args->str)
+    free (args->str); /*free Wait change string*/
+  CHUNK(args->node)->str = args->str;
+  CHUNK(args->node)->onclick_data = args->onclick_data;
+  CHUNK(args->node)->color = args->color;
+  args->tab->redraw|=REDRAW_TAB;
+  args->tab->rowsize_changed=TRUE;
+  CHUNK(args->node)->row->rowsize_changed=TRUE;
+}
+
 static gboolean
 process_cell_tree_mouse_callbacks (Table *tab, GNode *root, int y, int x) {
   /*x,y являются абсолютными координатами*/
@@ -1148,30 +1183,33 @@ process_cell_tree_mouse_callbacks (Table *tab, GNode *root, int y, int x) {
       }
       msg_obj = json_deep_copy (onclick_data);
       json_object_set_new (msg_obj, "user_input", json_string (f));
-      send_pkg_to_gdb (json_dumps (msg_obj,0));
-      json_decref (msg_obj);
 
-/*
-      msg_obj = json_object();
-      json_object_set_new (msg_obj, "cmd", json_string ("onclick"));
-      json_object_set (msg_obj, "data", onclick_data);
-      json_object_set_new (msg_obj, "user_input", json_string (f));
-      send_pkg_to_gdb (json_dumps (msg_obj,0));
-      json_decref (msg_obj);
-*/
       if (insert_wait_text) {
-        //message_assert (CHUNK(node)->str);
-        if (CHUNK(node)->str)
-          free (CHUNK(node)->str);
-        drop_childs(node,tab);
+        int callback_id;
+        cbPair *pair;
+        struct wcArgs *wc_args = g_new(wcArgs,1);
+        wc_args->str = CHUNK(node)->str;
         asprintf(&CHUNK(node)->str,"<Wait change: %s>", f);
-        json_decref (CHUNK(node)->onclick_data);
+        wc_args->node=node;
+        wc_args->tab=tab;
+        wc_args->onclick_data = CHUNK(node)->onclick_data;
         CHUNK(node)->onclick_data=NULL;
+        wc_args->color = CHUNK(node)->color;
         CHUNK(node)->color=EDITOR_NORMAL_COLOR;
         tab->redraw|=REDRAW_TAB;
         tab->rowsize_changed=TRUE; /*была изменена текстовая строка=>надо пересчитать длины*/
         CHUNK(node)->row->rowsize_changed=TRUE;
+        pair = g_new(cbPair,1);
+        pair->err  = wait_change_error;
+        pair->succ = wait_change_success;
+        pair->args = (void *)wc_args;
+        callback_id = data_ptr_register((void *)pair);
+        json_object_set_new (msg_obj, "callback_id", json_integer (callback_id));
       }
+
+      send_pkg_to_gdb (json_dumps (msg_obj,0));
+      json_decref (msg_obj);
+
       g_free (f);
       handled=TRUE;
       return handled;
@@ -1180,6 +1218,12 @@ process_cell_tree_mouse_callbacks (Table *tab, GNode *root, int y, int x) {
   }
   return handled;
 }
+
+
+
+
+
+
 
 static void
 table_process_mouse_click(Table *tab, mouse_event_t * event) {

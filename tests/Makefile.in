@@ -196,7 +196,7 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-testdirs = testsuite/variables
+testdirs = testsuite/variables testsuite/variables.wait_change_bug_1
 all: all-am
 
 .SUFFIXES:

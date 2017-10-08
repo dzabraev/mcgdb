@@ -299,6 +299,7 @@ get_command_num(json_t *pkg) {
     else if (compare_cmd("drop_rows"))       {return MCGDB_DROP_ROWS;}
     else if (compare_cmd("drop_nodes"))      {return MCGDB_DROP_NODES;}
     else if (compare_cmd("insert_rows"))     {return MCGDB_INSERT_ROWS;}
+    else if (compare_cmd("call_cb"))         {return MCGDB_CALL_CB;}
     else {
       cmd = MCGDB_UNKNOWN;
       message_assert (cmd!=MCGDB_UNKNOWN);
@@ -309,7 +310,27 @@ get_command_num(json_t *pkg) {
   return cmd;
 }
 
+static GHashTable * __data_hashtable__ = NULL;
 
+int
+data_ptr_register (void *data) {
+  static int callback_id=1;
+  callback_id++;
+  if (!__data_hashtable__) {
+    __data_hashtable__ = g_hash_table_new (g_direct_hash, g_direct_equal);
+  }
+  g_hash_table_insert (__data_hashtable__, GINT_TO_POINTER (callback_id), data);
+  return callback_id;
+}
+
+static void *
+data_ptr_lookup (int callback_id) {
+  gpointer data;
+  message_assert (__data_hashtable__ != NULL);
+  data = g_hash_table_lookup (__data_hashtable__, GINT_TO_POINTER (callback_id));
+  g_hash_table_remove (__data_hashtable__, GINT_TO_POINTER (callback_id));
+  return data;
+}
 
 static void
 check_action_from_gdb(struct gdb_action * act) {
@@ -320,6 +341,20 @@ check_action_from_gdb(struct gdb_action * act) {
   cmd=get_command_num(pkg);
   if (cmd==MCGDB_ERROR_MESSAGE) {
     edit_error_dialog("ERROR",json_string_value (json_object_get (pkg,"message")));
+    act->command=MCGDB_NONE;
+    act->pkg=NULL;
+  }
+  else if(cmd==MCGDB_CALL_CB) {
+    void (*cb) (void *data);
+    int type;
+    cbPair *pair = data_ptr_lookup(myjson_int(pkg,"callback_id"));
+    message_assert(pair!=NULL);
+    type = myjson_int(pkg,"type");
+    message_assert (type==CALLBACK_SUCCESS || type==CALLBACK_ERROR);
+    cb = (type==CALLBACK_SUCCESS) ? pair->succ : pair->err;
+    cb (pair->args);
+    free (pair->args);
+    free (pair);
     act->command=MCGDB_NONE;
     act->pkg=NULL;
   }

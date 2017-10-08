@@ -65,6 +65,7 @@ typedef enum gdb_cmd {
   MCGDB_DROP_NODES,
   MCGDB_TRANSACTION,
   MCGDB_INSERT_ROWS,
+  MCGDB_CALL_CB,
 } gdb_cmd_t;
 
 enum window_type {
@@ -164,6 +165,18 @@ void send_pkg_to_gdb (const char *msg);
 
 gdb_cmd_t get_command_num(json_t *pkg);
 
+enum {
+  CALLBACK_SUCCESS=0,
+  CALLBACK_ERROR=1,
+};
+
+typedef struct cbPair {
+  void *err;
+  void *succ;
+  void *args;
+} cbPair;
+
+int data_ptr_register (void *data);
 
 #endif /*__mcgdb_h_*/
 

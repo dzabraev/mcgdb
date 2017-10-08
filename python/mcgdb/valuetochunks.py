@@ -368,7 +368,7 @@ class ValueToChunks(BasePath):
   def onclick_change_slice(self,pkg):
     path_id=pkg['path_id']
     path=self.Path(path_id=path_id)
-    user_input = pkg['user_input']
+    user_input = pkg['user_input'].strip()
     match=self.slice_regex.match(user_input)
     if match:
       grps=match.groups()
@@ -377,10 +377,17 @@ class ValueToChunks(BasePath):
         n2=int(grps[2])
       else:
         n2=None
-      if n2!=None and n1>=n2:
+      if n2==n1:
+        n2=None
+      if n2!=None and n1>n2:
         raise mcgdbBaseException('bad input: right bound must be greater than left')
-      self.user_slice[path_id] = (n1,n2)
-      self.force_update[path_id]=True
+      if n1==n2:
+        n2=None
+      if path_id in self.user_slice and self.user_slice[path_id] == (n1,n2):
+        return []
+      else:
+        self.user_slice[path_id] = (n1,n2)
+      #self.force_update[path_id]=True
     else:
       raise mcgdbBaseException('bad input: {}'.format(user_input))
     return self.diff(path)
@@ -960,9 +967,9 @@ class ValueToChunks(BasePath):
         user_slice = self.user_slice.get(path.id)
         if user_slice:
           n1,n2 = user_slice
-          n1 = max(n1,n1_orig)
+          n1 = min(max(n1,n1_orig),n2_orig)
           if n2!=None:
-            n2 = min(n2,n2_orig)
+            n2 = min(max(n2,n1_orig),n2_orig)
         else:
           n1,n2 = n1_orig,n2_orig
         self.user_slice[path.id] = (n1,n2)

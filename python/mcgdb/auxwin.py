@@ -225,7 +225,10 @@ class OnclickVariables(TablePackages,CommunicationMixin):
     if hasattr(self.current_values,'onclick_change_slice'):
       need_update=self.current_values.onclick_change_slice(pkg)
       if need_update:
+        self.send_pkg_callback(callback_id=pkg['callback_id'],type=0) # cleanup
         self.send(self.pkg_update_nodes(need_update))
+      else:
+        self.send_pkg_callback(callback_id=pkg['callback_id'],type=1) #rallback slice
 
 
   @SubentityUpdate.event_handler
