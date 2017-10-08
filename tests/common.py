@@ -6,6 +6,7 @@ import atexit
 import pyte
 
 FNULL = open(os.devnull, 'w')
+MCGDB = '/'.join(os.getcwd().split('/')[:-3] + ['mcgdb'])
 
 def cleanup__init__(func):
   def decorated(self,*args,**kwargs):
@@ -85,7 +86,7 @@ class Gdb(object):
     self.closed=False
 
   def spawn(self):
-    self.program = pexpect.spawn('../mcgdb {args}'.format(args=self.exec_args),env=self.ENV)
+    self.program = pexpect.spawn('{MCGDB} {args}'.format(args=self.exec_args,MCGDB=MCGDB),env=self.ENV)
 
   def open_window_cmd(self,win_name):
     self.program.sendline('mcgdb open {win_name} --manually'.format(win_name=win_name))

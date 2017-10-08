@@ -168,10 +168,14 @@ def normalize_regexes(regexes):
     normalized.append((name,re.compile(regex,re.MULTILINE),rng))
   return normalized
 
+def read_regexes(fname):
+  regexes=imp.load_source('regexes',fname).regexes
+  return normalize_regexes(regexes)
+
 def read_journal(name):
   with open(name,'rb') as f:
     d=pickle.load(f)
-    return normalize_regexes(d['regexes']),d['journal_play']
+    return d['journal_play']
 
 def linearize(journal):
   screenshots=[]
@@ -198,6 +202,7 @@ def show(stdscr,journal,journal2=None,start=0,regexes=[]):
   idx=start
   total=len(journal)
   while True:
+    stdscr.clear()
     if journal2:
       #do diff
       name=journal[idx]['name']
@@ -214,7 +219,7 @@ def show(stdscr,journal,journal2=None,start=0,regexes=[]):
         print_screenshot(stdscr,sdiff,y,sshot['cols']+1)
         line=y+sdiff['rows']+1
       else:
-        stdscr.addstr(y,0,'different sizes')
+        stdscr.addstr(y,0,'different sizes, cant do diff')
         line=y+1
     else:
       sshot=journal[idx]['screenshot']
@@ -242,12 +247,14 @@ def main():
   parser.add_argument('--regexes',help='python file contains regexes variable')
   args = parser.parse_args()
 
-  regexes,play_journal = read_journal(args.play_journal)
+  play_journal = read_journal(args.play_journal)
   if args.regexes is not None:
     module_regexes = imp.load_source(file_to_modname(args.regexes),os.path.abspath(args.regexes))
     regexes=normalize_regexes(module_regexes.regexes)
+  else:
+    regexes=[]
   if args.play_journal2 is not None:
-    _regexes,play_journal2 = read_journal(args.play_journal2)
+    play_journal2 = read_journal(args.play_journal2)
   else:
     play_journal2 = None
 

@@ -1,4 +1,4 @@
-testdirs = testsuite/variables/src testsuite/encoding/src
+testdirs = testsuite/variables
 
 all :
 	for testdir in $(testdirs); do \
@@ -10,3 +10,5 @@ clean :
 	  make -C $$testdir clean ; \
 	done
 
+test :
+	python runtest.py
