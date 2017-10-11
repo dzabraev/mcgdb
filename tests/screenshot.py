@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #coding=utf8
 
-import argparse,pickle,sys,copy,pyte.screens,curses,re,imp,os
+import argparse,pickle,sys,copy,pyte.screens,curses,re,imp,os,itertools
 
 from common import file_to_modname
 
@@ -61,7 +61,30 @@ def get_matched_coord(buf,tostring,regexes):
           regex_matched.add(linear_to_yx(l,sbuf))
   return regex_matched
 
-def diff(s1,s2,s1prev,s2prev,tostring=split_dummy,regexes=[],overlay_regexes=[]):
+
+def matched_coords(r,rprev,tostring,regexes,overlay_regexes):
+  ''' Учитывает перекрытия'''
+  b=r['buffer']
+  if rprev is not None:
+    prev_str = split_dummy(b)[0]['str']
+    if any(itertools.imap(lambda x:x.search(prev_str), overlay_regexes)):
+      bprev=rprev['buffer']
+      return get_matched_coord(bprev,tostring,regexes) - get_diff_coord(rprev,r)
+  return get_matched_coord(b,tostring,regexes)
+
+def get_diff_coord(r1,r2):
+  cols=r1['cols']
+  rows=r1['rows']
+  b1=r1['buffer']
+  b2=r2['buffer']
+  diff=set()
+  for col in range(cols):
+    for row in range(rows):
+      if b1[row][col]!=b2[row][col]:
+        diff.add((row,col))
+  return diff
+
+def diff(s1,s2,s1prev,tostring=split_dummy,regexes=[],overlay_regexes=[]):
   assert s1['cols']==s2['cols']
   assert s1['rows']==s2['rows']
   cols=s1['cols']
@@ -69,12 +92,7 @@ def diff(s1,s2,s1prev,s2prev,tostring=split_dummy,regexes=[],overlay_regexes=[])
   b1=s1['buffer']
   b2=s2['buffer']
   buffer=[]
-  if s1prev is not None and overlay_regexes:
-    if any():
-      b1prev=s1prev['buffer']
-      regex_matched = get_matched_coord(b1prev,tostring,regexes) - 
-  else:
-    regex_matched = get_matched_coord(b1,tostring,regexes)
+  regex_matched = matched_coords(s1,s1prev,tostring,regexes,overlay_regexes)
   for row in range(rows):
     line=[]
     for col in range(cols):
@@ -173,9 +191,11 @@ def normalize_regexes(regexes):
     normalized.append((name,re.compile(regex,re.MULTILINE),rng))
   return normalized
 
-def read_regexes(fname):
-  regexes=imp.load_source('regexes',fname).regexes
-  return normalize_regexes(regexes)
+def read_regexes(fname,name='regexes',default=[]):
+  module=imp.load_source('regexes',fname)
+  if not hasattr(module,name):
+    return default
+  return normalize_regexes(getattr(module,name))
 
 def read_journal(name):
   with open(name,'rb') as f:
@@ -194,6 +214,18 @@ def linearize(journal):
       })
   return screenshots
 
+def get_prev(journal,idx):
+  idx_prev=idx-1
+  r=journal[idx]
+  if r is None:
+    return None
+  name=r['name']
+  while idx_prev>=0:
+    prev=journal[idx_prev]
+    if prev['name']==name:
+      return journal[idx_prev]
+    idx_prev-=1
+
 def match_regex_range(rng,idx):
   if rng is None:
     return True
@@ -203,7 +235,7 @@ def match_regex_range(rng,idx):
 def filter_regexes(regexes,name,idx):
   return map(lambda x:x[1],filter( lambda x: x[0]==name and match_regex_range(x[2],idx),regexes))
 
-def show(stdscr,journal,journal2=None,start=0,regexes=[]):
+def show(stdscr,journal,journal2=None,start=0,regexes=[],overlay_regexes=[]):
   idx=start
   total=len(journal)
   while True:
@@ -211,26 +243,31 @@ def show(stdscr,journal,journal2=None,start=0,regexes=[]):
     if journal2:
       #do diff
       name=journal[idx]['name']
-      sshot=journal[idx]['screenshot']
-      sshot_prev = journal[idx-1]['screenshot'] if idx>0 else None
-      sshot2=journal2[idx]['screenshot']
-      sshot2_prev = journal2[idx-1]['screenshot'] if idx>0 else None
-      print_screenshot(stdscr,sshot,0,0)
-      print_screenshot(stdscr,sshot2,0,sshot['cols']+1)
-      y=max(sshot['rows'],sshot2['rows'])+1
-      if sshot['cols']==sshot2['cols'] and sshot['rows']==sshot2['rows']:
+      r1=journal[idx]
+      r2=journal2[idx]
+      s1=r1['screenshot']
+      s2=r2['screenshot']
+      r1prev=get_prev(journal,idx)
+      r2prev=get_prev(journal2,idx)
+      s1prev = r1prev['screenshot'] if r1prev else None
+      s2prev = r2prev['screenshot'] if r2prev else None
+      print_screenshot(stdscr,s1,0,0)
+      print_screenshot(stdscr,s2,0,s1['cols']+1)
+      y=max(s1['rows'],s2['rows'])+1
+      if s1['cols']==s2['cols'] and s1['rows']==s2['rows']:
         cur_regexes=filter_regexes(regexes,name,idx)
+        cur_overlay_regexes=filter_regexes(overlay_regexes,name,idx)
         tostring=SPLITBUF.get(name,split_dummy)
-        print_screenshot(stdscr,diff(sshot,sshot2,sshot_prev,sshot2_prev,tostring=tostring,regexes=cur_regexes),y,0)
-        sdiff=diff(sshot2,sshot,tostring=tostring,regexes=cur_regexes)
-        print_screenshot(stdscr,sdiff,y,sshot['cols']+1)
+        print_screenshot(stdscr,diff(s1,s2,s1prev,tostring=tostring,regexes=cur_regexes,overlay_regexes=cur_overlay_regexes),y,0)
+        sdiff=diff(s2,s1,s2prev,tostring=tostring,regexes=cur_regexes,overlay_regexes=cur_overlay_regexes)
+        print_screenshot(stdscr,sdiff,y,s1['cols']+1)
         line=y+sdiff['rows']+1
       else:
         stdscr.addstr(y,0,'different sizes, cant do diff')
         line=y+1
     else:
       sshot=journal[idx]['screenshot']
-      print_screenshot(stdscr,sshot,0,0)
+      print_screenshot(stdscr,s1,0,0)
       line = sshot['rows'] #last line
     stdscr.addstr(line,0,'')
     stdscr.addstr('action_num={}\n\r'.format(journal[idx]['action_num']))
@@ -250,7 +287,7 @@ def main():
   parser.add_argument('play_journal2',help='if specified then evaluate diff between play_journal and play_journal2',nargs='?')
   parser.add_argument('--action_num',help='show screenshots starts with given action_num',type=int)
   parser.add_argument('--num',help='show screenshots starts with given screenshot number',type=int)
-  parser.add_argument('--name',help='print screenshots only for window with name ',default='aux')
+  parser.add_argument('--name',help='print screenshots only for window with name ')
   parser.add_argument('--regexes',help='python file contains regexes variable')
   args = parser.parse_args()
 
@@ -258,8 +295,10 @@ def main():
   if args.regexes is not None:
     module_regexes = imp.load_source(file_to_modname(args.regexes),os.path.abspath(args.regexes))
     regexes=normalize_regexes(module_regexes.regexes)
+    overlay_regexes=normalize_regexes(getattr(module_regexes,'overlay_regexes',[]))
   else:
     regexes=[]
+    overlay_regexes=[]
   if args.play_journal2 is not None:
     play_journal2 = read_journal(args.play_journal2)
   else:
@@ -314,7 +353,7 @@ def main():
         break
 
   try:
-    curses.wrapper(show,play_journal,play_journal2,start,regexes)
+    curses.wrapper(show,play_journal,play_journal2,start,regexes,overlay_regexes)
   except KeyboardInterrupt:
     pass
 

@@ -9,6 +9,7 @@ which = distutils.spawn.find_executable
 from abc import abstractmethod, ABCMeta
 
 from common import Gdb,FNULL
+from runtest import is_valid_file
 
 def open_sock():
   sock = socket.socket()
@@ -20,7 +21,6 @@ def open_sock():
 XTERM=which('gnome-terminal')
 PYTHON=which('python')
 IOSTUB=os.path.join(os.path.dirname(os.path.abspath(__file__)),'iostub.py')
-GDB=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),'mcgdb')
 
 ESC='\x1b'
 CSI=ESC+'['
@@ -35,9 +35,11 @@ class AllWinClosed(Exception): pass
 class XtermSpawn(object):
   __metaclass__ = ABCMeta
 
-  def __init__(self,journal,name):
+  def __init__(self,xterm,executable,journal,name,*args,**kwargs):
+    self.xterm=xterm #executable
     self.journal = journal
     self.name = name
+    self.executable=executable
     gen_recv = self._recv()
     self.recv = gen_recv.next
     gen_recv_json = self._recv_json()
@@ -50,8 +52,8 @@ class XtermSpawn(object):
   @abstractmethod
   def _feed(self): pass
 
-  @abstractmethod
-  def get_executable(self): pass
+  def get_executable(self):
+    return self.executable
 
 
   def _recv(self):
@@ -105,7 +107,7 @@ class XtermSpawn(object):
     exec_args = self.get_exec_args()
     environ = self.get_environ()
     cmd='''{XTERM} -e "sh -c \\"{PYTHON} {IOSTUB} --executable={EXECUTABLE} {EXEC_ARGS} {ENVIRON} --xport={XPORT} --pport={PPORT}\\""'''.format(
-      XTERM=XTERM,
+      XTERM=self.xterm,
       PYTHON=PYTHON,
       IOSTUB=IOSTUB,
       EXECUTABLE=self.get_executable(),
@@ -136,13 +138,10 @@ class XtermSpawn(object):
 
 
 class XtermMcgdbWin(XtermSpawn):
-  def __init__(self,executable,exec_args,journal,name):
-    self.executable = executable
+  def __init__(self,xterm,executable,exec_args,journal,name):
     self.exec_args = exec_args
-    super(XtermMcgdbWin,self).__init__(journal,name)
+    super(XtermMcgdbWin,self).__init__(xterm,executable,journal,name)
 
-  def get_executable(self):
-    return self.executable
   def get_exec_args(self):
     return self.exec_args
 
@@ -209,16 +208,14 @@ class XtermMcgdbWin(XtermSpawn):
 
 
 class XtermGdb(XtermSpawn,Gdb):
-  def __init__(self,journal,name):
+  def __init__(self,*args,**kwargs):
     self.saved=''
-    super(XtermGdb,self).__init__(journal,name)
+    super(XtermGdb,self).__init__(*args,**kwargs)
 
   def spawn(self):
     super(XtermGdb,self).spawn()
     self.program = pexpect.fdpexpect.fdspawn(self.pconn.fileno())
 
-  def get_executable(self):
-    return GDB
   def get_environ(self):
     env = super(XtermGdb,self).get_environ()
     env['WIN_LIST']=''
@@ -242,9 +239,9 @@ class XtermGdb(XtermSpawn,Gdb):
           break
         current+=char
 
-def open_window(gdb,journal,name):
+def open_window(xterm,gdb,journal,name):
   executable,args = split_first(gdb.open_window_cmd(name),' ')
-  return XtermMcgdbWin(executable,args,journal,name)
+  return XtermMcgdbWin(xterm,executable,args,journal,name)
 
 class Journal(object):
   def __init__(self,journal=[]):
@@ -252,7 +249,6 @@ class Journal(object):
     self.mouse_down = re.compile('\x1b\[<\d+;\d+;\d+M')
     self.mouse_up = re.compile('\x1b\[<\d+;\d+;\d+m')
   def append(self,x):
-    #print repr(x)
     self.data.append(x)
   def save(self,fname=None):
     self.concat()
@@ -316,7 +312,13 @@ def main():
   parser.add_argument('--addwin',action='append',choices=['aux','src','asm'],help='if no specified all win will be open')
   parser.add_argument('--play',help='this parameter represents filename. From given file script will read and play actions. After execution of all actions recording will start.')
   parser.add_argument('--delay',help='only affects with --play', type=float, default=1)
+  parser.add_argument('--mcgdb',help='path to mcgdb',
+    default=os.path.join(os.path.dirname(os.getcwd()),'mcgdb'),
+    type=lambda x: is_valid_file(parser, x),
+  )
+  parser.add_argument('--xterm',choices=['xterm','gnome-terminal'],default='gnome-terminal')
   args = parser.parse_args()
+  xterm = distutils.spawn.find_executable(args.xterm)
   print 'start recording to {}'.format(args.output)
   win_names = args.addwin if args.addwin else ['aux','src','asm']
   win_names = list(set(win_names))
@@ -331,8 +333,8 @@ def main():
       journal=Journal()
   else:
     journal=Journal()
-  gdb=XtermGdb(journal,'gdb')
-  wins = dict(gdb=gdb,**{name:open_window(gdb,journal,name) for name in win_names})
+  gdb=XtermGdb(xterm=xterm,journal=journal,name='gdb',executable=args.mcgdb)
+  wins = dict(gdb=gdb,**{name:open_window(xterm,gdb,journal,name) for name in win_names})
   entities=dict(map(lambda x:(x.get_feed_fd(),x), wins.values()))
   rlist=list(entities.keys())
   if args.play:

@@ -389,7 +389,7 @@ clean :
 	  make -C $$testdir clean ; \
 	done
 
-test :
+test : all
 	python runtest.py
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.

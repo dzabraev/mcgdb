@@ -6,7 +6,6 @@ import atexit
 import pyte
 
 FNULL = open(os.devnull, 'w')
-MCGDB = '/'.join(os.getcwd().split('/')[:-3] + ['mcgdb'])
 
 def cleanup__init__(func):
   def decorated(self,*args,**kwargs):
@@ -75,18 +74,23 @@ class McgdbWin(object):
 
 class Gdb(object):
   @cleanup__init__
-  def __init__(self,args='',env={}):
+  def __init__(self,executable,args='',env={}):
     self.ENV={
       'WIN_LIST':'',
     }
+    self.executable = executable
     self.ENV.update(env)
     self.exec_args=args
     self.spawn()
     atexit.register(self.close)
     self.closed=False
 
+  def get_executable(self):
+    return self.executable
+
   def spawn(self):
-    self.program = pexpect.spawn('{MCGDB} {args}'.format(args=self.exec_args,MCGDB=MCGDB),env=self.ENV)
+    cmd='{MCGDB} {args}'.format(args=self.exec_args,MCGDB=self.get_executable())
+    self.program = pexpect.spawn(cmd,env=self.ENV)
 
   def open_window_cmd(self,win_name):
     self.program.sendline('mcgdb open {win_name} --manually'.format(win_name=win_name))

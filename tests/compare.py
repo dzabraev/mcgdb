@@ -1,16 +1,18 @@
 #!/usr/bin/env python
 #coding=utf8
 
-import argparse,sys,termcolor,os
+import argparse,sys,termcolor,os,itertools
 
-from screenshot import read_journal, linearize, filter_regexes, get_matched_coord, get_splitbuf, read_regexes
+from screenshot import  read_journal, linearize, filter_regexes, matched_coords, \
+                        get_splitbuf, read_regexes, get_prev, get_diff_coord
 
 status_code={
   'PASS':0,
   'FAIL':1,
 }
 
-def equals(r1,r2,regexes=[],tostring=None):
+
+def equals(r1,r2,r1prev,r2prev,regexes=[],tostring=None,overlay_regexes=[]):
   s1=r1['screenshot']
   s2=r2['screenshot']
   if s1['cols']!=s2['cols'] or s1['rows']!=s2['rows']:
@@ -19,8 +21,11 @@ def equals(r1,r2,regexes=[],tostring=None):
   rows=s1['rows']
   b1=s1['buffer']
   b2=s2['buffer']
-  regex_matched1 = get_matched_coord(b1,tostring,regexes)
-  regex_matched2 = get_matched_coord(b2,tostring,regexes)
+  s1prev = r1prev['screenshot'] if r1prev is not None else None
+  s2prev = r2prev['screenshot'] if r2prev is not None else None
+  regex_matched2 = matched_coords(s2,s2prev,tostring,regexes,overlay_regexes)
+  regex_matched1 = matched_coords(s1,s1prev,tostring,regexes,overlay_regexes)
+
   for col in range(cols):
     for row in range(rows):
       if b1[row][col]!=b2[row][col] and (row,col) not in regex_matched1 and (row,col) not in regex_matched2:
@@ -55,9 +60,11 @@ def compare(journal1,journal2,output,colorize=True,winname=None,regexes=None):
   journal2 = linearize(read_journal(journal2))
 
   if regexes is not None:
-    regexes=read_regexes(regexes)
+    regexes=read_regexes(fname_regexes)
+    overlay_regexes=read_regexes(fname_regexes,name='overlay_regexes',default=[])
   else:
     regexes=[]
+    overlay_regexes=[]
 
   if winname is not None:
     f=lambda x:x['name']==winname
@@ -75,7 +82,12 @@ def compare(journal1,journal2,output,colorize=True,winname=None,regexes=None):
   stat={'PASS':0,'FAIL':0}
   PASS=termcolor.colored('PASS','green') if colorize else 'PASS'
   FAIL=termcolor.colored('FAIL','red')   if colorize else 'FAIL'
-  for idx,(r1,r2) in enumerate(zip(journal1,journal2)):
+  #for idx,(r1,r2,r2pev) in enumerate(zip(journal1,journal2,[None]+journal2[1:])):
+  for idx in range(len(journal1)):
+    r1 = journal1[idx]
+    r2 = journal2[idx]
+    r1prev = get_prev(journal1,idx)
+    r2prev = get_prev(journal2,idx)
     if r1 is None or r2 is None:
       msg=FAIL
       stat['FAIL']+=1
@@ -83,8 +95,9 @@ def compare(journal1,journal2,output,colorize=True,winname=None,regexes=None):
     else:
       name=r1['name']
       cur_regexes=filter_regexes(regexes,name,idx)
+      cur_overlay_regexes=filter_regexes(overlay_regexes,name,idx)
       tostring=get_splitbuf(name)
-      if equals(r1,r2,regexes=cur_regexes,tostring=tostring):
+      if equals(r1,r2,r1prev,r2prev,regexes=cur_regexes,tostring=tostring,overlay_regexes=cur_overlay_regexes):
         msg=PASS
         stat['PASS']+=1
       else:

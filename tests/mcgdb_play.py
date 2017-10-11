@@ -4,6 +4,8 @@
 import argparse,pickle,signal,time,select,collections,copy,json,sys,os,imp,pprint
 
 from common import Gdb,McgdbWin, file_to_modname
+from runtest import is_valid_file
+
 
 def play():
   parser = argparse.ArgumentParser()
@@ -11,7 +13,12 @@ def play():
   parser.add_argument('--output', help='this file will be contain screenshots', default='record.play')
   parser.add_argument('--delay',type=float,default=1,help='amount of seconds')
   parser.add_argument('--regexes',help='read regexes from given file and store them into output')
+  parser.add_argument('--mcgdb',help='path to mcgdb',
+    default=os.path.join(os.path.dirname(os.getcwd()),'mcgdb'),
+    type=lambda x: is_valid_file(parser, x),
+  )
   args = parser.parse_args()
+  mcgdb=args.mcgdb
   if args.record_file==args.output:
     print 'record_file must be not equal output'
     sys.exit(0)
@@ -28,7 +35,7 @@ def play():
     regexes=getattr(__import__(file_to_modname(args.regexes)),'regexes',[])
   else:
     regexes=[]
-  gdb=Gdb()
+  gdb=Gdb(executable=mcgdb)
   wins_with_name = collections.OrderedDict([(name,gdb.open_win(name)) for name in module_records.windows])
   entities=dict(wins_with_name, gdb=gdb)
   fd_to_win=dict(map(lambda x: (x.master_fd,x), wins_with_name.values()))

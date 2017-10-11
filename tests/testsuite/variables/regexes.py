@@ -22,3 +22,8 @@ regexes=[
   ('aux',subarray_ptr('int ** ')),
   ('src','mcgdb-tm.*\d\d\d\d.txt(?=\s+\[----\])'),
 ]
+
+
+overlay_regexes=[
+  ('aux',re.escape('enter new slice N or N:M'))
+]
