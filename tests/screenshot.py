@@ -266,12 +266,14 @@ def show(stdscr,journal,journal2=None,start=0,regexes=[],overlay_regexes=[]):
         stdscr.addstr(y,0,'different sizes, cant do diff')
         line=y+1
     else:
-      sshot=journal[idx]['screenshot']
+      s1=journal[idx]['screenshot']
       print_screenshot(stdscr,s1,0,0)
-      line = sshot['rows'] #last line
+      line = s1['rows'] #last line
     stdscr.addstr(line,0,'')
     stdscr.addstr('action_num={}\n\r'.format(journal[idx]['action_num']))
     stdscr.addstr('{}/{}\n\r'.format(idx+1,total))
+    if 'stream' in journal[idx]:
+      stdscr.addstr('stream={}\n\r'.format(repr(journal[idx]['stream'])))
     for warn in warnings:
       stdscr.addstr('WARNING: %s\n\r' % warn)
     ch = stdscr.getch()

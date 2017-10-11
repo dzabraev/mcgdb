@@ -244,11 +244,14 @@ def open_window(xterm,gdb,journal,name):
   return XtermMcgdbWin(xterm,executable,args,journal,name)
 
 class Journal(object):
-  def __init__(self,journal=[]):
+  def __init__(self,journal=[],print_records=False):
     self.data=journal
+    self.print_records=print_records
     self.mouse_down = re.compile('\x1b\[<\d+;\d+;\d+M')
     self.mouse_up = re.compile('\x1b\[<\d+;\d+;\d+m')
   def append(self,x):
+    if self.print_records:
+      print repr(x)
     self.data.append(x)
   def save(self,fname=None):
     self.concat()
@@ -307,15 +310,18 @@ def save_variables(fname,variables):
       f.write('%s=%s\n\n' % (name,value))
 
 def main():
+  os.environ['LANG']='C'
   parser=argparse.ArgumentParser()
   parser.add_argument('output',default='record.py',nargs='?')
   parser.add_argument('--addwin',action='append',choices=['aux','src','asm'],help='if no specified all win will be open')
   parser.add_argument('--play',help='this parameter represents filename. From given file script will read and play actions. After execution of all actions recording will start.')
   parser.add_argument('--delay',help='only affects with --play', type=float, default=1)
+  parser.add_argument('--print_actions',action='store_true')
   parser.add_argument('--mcgdb',help='path to mcgdb',
     default=os.path.join(os.path.dirname(os.getcwd()),'mcgdb'),
     type=lambda x: is_valid_file(parser, x),
   )
+  parser.add_argument('--print_records',help='print input from windows', action='store_true')
   parser.add_argument('--xterm',choices=['xterm','gnome-terminal'],default='gnome-terminal')
   args = parser.parse_args()
   xterm = distutils.spawn.find_executable(args.xterm)
@@ -323,16 +329,17 @@ def main():
   win_names = args.addwin if args.addwin else ['aux','src','asm']
   win_names = list(set(win_names))
   print 'type Ctrl+C for stop recording'
+  journal_kwargs={'print_records':args.print_records}
   if args.play:
     with open(args.play) as f:
       globs={}
       exec(f.read(),{},globs)
     if 'journal' in globs:
-      journal=Journal(globs['journal'])
+      journal=Journal(globs['journal'],**journal_kwargs)
     else:
-      journal=Journal()
+      journal=Journal(**journal_kwargs)
   else:
-    journal=Journal()
+    journal=Journal(**journal_kwargs)
   gdb=XtermGdb(xterm=xterm,journal=journal,name='gdb',executable=args.mcgdb)
   wins = dict(gdb=gdb,**{name:open_window(xterm,gdb,journal,name) for name in win_names})
   entities=dict(map(lambda x:(x.get_feed_fd(),x), wins.values()))
@@ -349,7 +356,10 @@ def main():
     record_total = len(journal.data)
     for record in journal.data:
       record_cnt+=1
-      print '\r{: 5d}/{: 5d}'.format(record_cnt,record_total),
+      if args.print_actions:
+        print '{: 5d}/{: 5d} {}'.format(record_cnt,record_total,repr(record))
+      else:
+        print '\r{: 5d}/{: 5d}'.format(record_cnt,record_total),
       sys.stdout.flush()
       name=record['name']
       action_num = record['action_num']
