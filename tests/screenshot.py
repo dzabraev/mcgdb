@@ -61,7 +61,7 @@ def get_matched_coord(buf,tostring,regexes):
           regex_matched.add(linear_to_yx(l,sbuf))
   return regex_matched
 
-def diff(s1,s2,tostring=split_dummy,regexes=[]):
+def diff(s1,s2,s1prev,s2prev,tostring=split_dummy,regexes=[],overlay_regexes=[]):
   assert s1['cols']==s2['cols']
   assert s1['rows']==s2['rows']
   cols=s1['cols']
@@ -69,7 +69,12 @@ def diff(s1,s2,tostring=split_dummy,regexes=[]):
   b1=s1['buffer']
   b2=s2['buffer']
   buffer=[]
-  regex_matched = get_matched_coord(b1,tostring,regexes)
+  if s1prev is not None and overlay_regexes:
+    if any():
+      b1prev=s1prev['buffer']
+      regex_matched = get_matched_coord(b1prev,tostring,regexes) - 
+  else:
+    regex_matched = get_matched_coord(b1,tostring,regexes)
   for row in range(rows):
     line=[]
     for col in range(cols):
@@ -207,14 +212,16 @@ def show(stdscr,journal,journal2=None,start=0,regexes=[]):
       #do diff
       name=journal[idx]['name']
       sshot=journal[idx]['screenshot']
+      sshot_prev = journal[idx-1]['screenshot'] if idx>0 else None
       sshot2=journal2[idx]['screenshot']
+      sshot2_prev = journal2[idx-1]['screenshot'] if idx>0 else None
       print_screenshot(stdscr,sshot,0,0)
       print_screenshot(stdscr,sshot2,0,sshot['cols']+1)
       y=max(sshot['rows'],sshot2['rows'])+1
       if sshot['cols']==sshot2['cols'] and sshot['rows']==sshot2['rows']:
         cur_regexes=filter_regexes(regexes,name,idx)
         tostring=SPLITBUF.get(name,split_dummy)
-        print_screenshot(stdscr,diff(sshot,sshot2,tostring=tostring,regexes=cur_regexes),y,0)
+        print_screenshot(stdscr,diff(sshot,sshot2,sshot_prev,sshot2_prev,tostring=tostring,regexes=cur_regexes),y,0)
         sdiff=diff(sshot2,sshot,tostring=tostring,regexes=cur_regexes)
         print_screenshot(stdscr,sdiff,y,sshot['cols']+1)
         line=y+sdiff['rows']+1
@@ -243,7 +250,7 @@ def main():
   parser.add_argument('play_journal2',help='if specified then evaluate diff between play_journal and play_journal2',nargs='?')
   parser.add_argument('--action_num',help='show screenshots starts with given action_num',type=int)
   parser.add_argument('--num',help='show screenshots starts with given screenshot number',type=int)
-  parser.add_argument('--name',help='print screenshots only for window with name ')
+  parser.add_argument('--name',help='print screenshots only for window with name ',default='aux')
   parser.add_argument('--regexes',help='python file contains regexes variable')
   args = parser.parse_args()
 

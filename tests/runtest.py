@@ -53,7 +53,7 @@ def main():
     status,msg = imp.load_source(testname,'runtest.py').runtest(**kwargs[testname])
     os.chdir(cwd)
     print '%s %s' % (stat_color(status),msg)
-    output.write('%s %s' % (status,msg))
+    output.write('%s %s\n' % (status,msg))
     stat[status]+=1
 
   print '\n\nSUMMARY:'
