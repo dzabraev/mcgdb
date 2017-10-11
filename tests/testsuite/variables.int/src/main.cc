@@ -12,6 +12,7 @@ void end_of_init(void) {}
 
 int main(void) {
   void *ptr1=NULL, *ptr2=NULL;
+  int i=0,j=0,k=0;
 
   int var004_int=5;
   int var005_arr_int[3];
@@ -21,36 +22,36 @@ int main(void) {
   int ** var008_pptr_int;
   int *** var009_ppptr_int;
 
-  for (int i=0;i<3;i++)
+  for (i=0;i<3;i++)
     var005_arr_int[i]=i+1;
 
-  for (int i=0;i<3;i++)
-    for (int j=0;j<3;j++)
+  for (i=0;i<3;i++)
+    for (j=0;j<3;j++)
       var006_aarr_int[i][j] = i+10*j;
 
-  for (int i=0;i<3;i++)
-    for (int j=0;j<3;j++)
-      for (int k=0;k<3; k++)
+  for (i=0;i<3;i++)
+    for (j=0;j<3;j++)
+      for (k=0;k<3; k++)
         var007_aaarr_int[i][j][k] = i+10*j+100*k;
 
   var008_ptr_int=(int *)malloc(SZ*sizeof(int));
-  for (int i=0;i<SZ;i++)
+  for (i=0;i<SZ;i++)
     var008_ptr_int[i]=i*i;
 
   var008_pptr_int=(int **)malloc(SZ*sizeof(int *));
-  for (int i=0;i<SZ;i++) {
+  for (i=0;i<SZ;i++) {
     var008_pptr_int[i] = (int *)malloc(SZ*sizeof(int));
-    for (int j=0;j<SZ;j++) {
+    for (j=0;j<SZ;j++) {
       var008_pptr_int[i][j]=10*i+j;
     }
   }
 
   var009_ppptr_int=(int ***)malloc(SZ*sizeof(int **));
-  for (int i=0;i<SZ;i++) {
+  for (i=0;i<SZ;i++) {
     var009_ppptr_int[i] = (int **)malloc(SZ*sizeof(int *));
-    for (int j=0;j<SZ;j++) {
+    for (j=0;j<SZ;j++) {
       var009_ppptr_int[i][j] = (int *)malloc(SZ*sizeof(int));
-      for (int k=0;k<SZ;k++) {
+      for (k=0;k<SZ;k++) {
         var009_ppptr_int[i][j][k] = i*100+j*10+k;
       }
     }
@@ -59,38 +60,38 @@ int main(void) {
   end_of_init();
 
 
-  for (int i=0;i<3;i++)
+  for (i=0;i<3;i++)
     var005_arr_int[i]=i+2;
 
-  for (int i=0;i<3;i++)
-    for (int j=0;j<3;j++)
+  for (i=0;i<3;i++)
+    for (j=0;j<3;j++)
       var006_aarr_int[i][j] = i+10*j+1;
 
-  for (int i=0;i<3;i++)
-    for (int j=0;j<3;j++)
-      for (int k=0;k<3; k++)
+  for (i=0;i<3;i++)
+    for (j=0;j<3;j++)
+      for (k=0;k<3; k++)
         var007_aaarr_int[i][j][k] = i+10*j+100*k+1;
 
-  for (int i=0;i<SZ;i++)
+  for (i=0;i<SZ;i++)
     var008_ptr_int[i]=i*i+1;
 
-  for (int i=0;i<SZ;i++)
-    for (int j=0;j<SZ;j++)
+  for (i=0;i<SZ;i++)
+    for (j=0;j<SZ;j++)
       var008_pptr_int[i][j]=10*i+j+1;
 
-  for (int i=0;i<SZ;i++)
-    for (int j=0;j<SZ;j++)
-      for (int k=0;k<SZ;k++)
+  for (i=0;i<SZ;i++)
+    for (j=0;j<SZ;j++)
+      for (k=0;k<SZ;k++)
         var009_ppptr_int[i][j][k] = i*100+j*10+k+1;
 
   ptr1 = (void *)var009_ppptr_int;
   var009_ppptr_int=(int ***)malloc(SZ*sizeof(int **));
-  for (int i=0;i<SZ;i++)
+  for (i=0;i<SZ;i++)
     var009_ppptr_int[i]=NULL;
 
-  for (int i=0;i<SZ;i++) {
+  for (i=0;i<SZ;i++) {
     var009_ppptr_int[i] = (int **)malloc(SZ*sizeof(int *));
-    for (int j=0;j<SZ;j++) {
+    for (j=0;j<SZ;j++) {
       var009_ppptr_int[i][j]=NULL;
     }
   }
@@ -99,10 +100,10 @@ int main(void) {
   var009_ppptr_int=(int ***)ptr1;
   var009_ppptr_int=(int ***)ptr2;
 
-  for (int i=0;i<SZ;i++) {
-    for (int j=0;j<SZ;j++) {
+  for (i=0;i<SZ;i++) {
+    for (j=0;j<SZ;j++) {
       var009_ppptr_int[i][j]=(int *)malloc(SZ*sizeof(int));
-      for (int k=0;k<SZ;k++) {
+      for (k=0;k<SZ;k++) {
         var009_ppptr_int[i][j][k]=i+j+k;
       }
     }

@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 #coding=utf8
 
-import argparse,imp,termcolor,collections,os,sys
+import argparse,imp,termcolor,collections,os,sys,subprocess
+
+import compare
 
 TESTDIR='testsuite'
 
@@ -14,8 +16,33 @@ def stat_color(status):
 
 ALLTESTS=[
   'variables.wait_change_bug_1',
-  'variables',
+  'variables.int',
 ]
+
+
+
+def run_std_test(mcgdb,delay,logfile='logfile.log'):
+  cmd='make'
+  print cmd
+  subprocess.check_call(cmd, shell=True)
+  cmd="unxz --keep --force record.orig.play.xz"
+  print cmd
+  subprocess.check_call(cmd, shell=True)
+  cmd="mcgdb_play.py record.orig.py --delay={delay} --output=record.new.play --mcgdb={mcgdb}".format(delay=delay,mcgdb=mcgdb)
+  print cmd
+  subprocess.check_call(cmd, shell=True)
+  flog=open(logfile,'wb')
+  kwargs={
+      'journal1': 'record.orig.play',
+      'journal2': 'record.new.play',
+      'colorize': False,
+      'output':   flog,
+  }
+  if os.path.exists('regexes'):
+    kwargs['regexes']='regexes'
+  res=compare.compare(**kwargs)
+  flog.close()
+  return res,'See %s' % os.path.join(os.getcwd(),logfile)
 
 def is_valid_file(parser, arg):
   if not os.path.exists(arg):
@@ -32,8 +59,6 @@ def main():
     type=lambda x: is_valid_file(parser, x),
   )
   args=parser.parse_args()
-
-  mcgdb=args.mcgdb
 
   os.environ['PATH'] = ':'.join([os.environ['PATH'],os.getcwd(),os.path.dirname(os.getcwd())])
   sys.path+=[
@@ -52,12 +77,6 @@ def main():
   stat=collections.defaultdict(int)
 
   kwargs=collections.defaultdict(dict,{
-#    'variables':{
-#      'delay':0.2,
-#    },
-#    'variables.wait_change_bug_1':{
-#      'delay':0.5,
-#    },
   })
 
   for testname in testnames:
@@ -65,7 +84,10 @@ def main():
     print 'TESTING %s' % testname
     cwd=os.getcwd()
     os.chdir(testdir)
-    status,msg = imp.load_source(testname,'runtest.py').runtest(mcgdb=mcgdb,delay=args.delay,**kwargs[testname])
+    if os.path.exists('runtest.py'):
+      status,msg = imp.load_source(testname,'runtest.py').runtest(mcgdb=args.mcgdb,delay=args.delay,**kwargs[testname])
+    else:
+      status,msg=run_std_test(mcgdb=args.mcgdb,delay=args.delay,**kwargs[testname])
     os.chdir(cwd)
     print '%s %s' % (stat_color(status),msg)
     output.write('%s %s\n' % (status,msg))

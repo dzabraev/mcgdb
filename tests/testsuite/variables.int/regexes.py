@@ -1,12 +1,6 @@
 import re
-
-def ptr(before,after=''):
-  return '(?<={before})(0x)?[0-9a-fA-F]+(?={after})'.format(before=re.escape(before),after=re.escape(after))
-
-def subarray_ptr(before,after=''):
-  return '(?<={before}\*\()(0x)?[0-9a-fA-F]+(?=\)\[\d(:\d)?\])'.format(
-    before=re.escape(before),
-  )
+from regexes_common import ptr,subarray_ptr
+import regexes_common
 
 regexes=[
   ('aux',ptr('void * ptr1 = ')),
@@ -25,5 +19,4 @@ regexes=[
 
 
 overlay_regexes=[
-  ('aux',re.escape('enter new slice N or N:M'))
-]
+] + regexes_common.overlay_regexes

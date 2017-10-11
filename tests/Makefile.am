@@ -1,4 +1,4 @@
-testdirs = testsuite/variables testsuite/variables.wait_change_bug_1
+testdirs = testsuite/variables.int testsuite/variables.wait_change_bug_1
 
 all :
 	for testdir in $(testdirs); do \
