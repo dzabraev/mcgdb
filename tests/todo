@@ -1,0 +1,36 @@
+1.  структура с безымянными полями
+class MyDeriv : MyBase, MyBase2 {
+  //double x;
+  public:
+    MyDeriv(int x) : MyBase(x) {};
+    int value2(void) {return this->value();};
+    union {
+      int uni1;
+      double uni2;
+    };
+    struct {
+      int uni3;
+      double uni4;
+    };
+};
+
+2. Как в 1., только вложенность безымянных полей 2 и 3
+
+3. Указатель на структуру. Если slice==[N], то сразуже разыменовывать указатель и печатать структуру
+
+4. char *ptr="abc";
+   char ptr2[]="cde";
+   char ptr[2][]={"mama","papa"};
+   char **ptr; #initialize: ptr[0]="test"; ptr[1]="mytest" and expand it
+
+
+
+5. указатели на функции
+
+
+6. Раскрытие наследований
+
+7. Появление переменных при заходе в блок, и удаление переменных при выходе из блока.
+
+8. Массив incomplete structures
+

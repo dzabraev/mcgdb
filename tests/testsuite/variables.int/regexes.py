@@ -12,8 +12,8 @@ regexes=[
   ('aux',ptr('int * var008_ptr_int = ')),
   ('aux',ptr('int *** var009_ppptr_int = ')),
   ('aux',ptr('int * *(','')),
-  ('aux',subarray_ptr('int * ')),
-  ('aux',subarray_ptr('int ** ')),
+  ('aux',subarray_ptr('int *')),
+  ('aux',subarray_ptr('int **')),
   ('src','mcgdb-tm.*\d\d\d\d.txt(?=\s+\[----\])'),
 ]
 
