@@ -800,8 +800,8 @@ class GEThread(object):
       for fd in ready_rfds:
         if fd in self.wait_connection.keys():
           entity=self.wait_connection.pop(fd)
-          callback=lambda *args,**kwargs: self._process_connection(entity)
-          if_gdbstopped_else(stopped=callback,running=lambda *args,**kwargs: exec_on_gdb_stops(callback))
+          onstop,onrun=(lambda entity:(lambda callback: (callback,lambda *args,**kwargs: exec_on_gdb_stops(callback)) )(lambda *args,**kwargs: self._process_connection(entity)))(entity)
+          if_gdbstopped_else(stopped=onstop,running=onrun)
           continue
         else:
           entity_key,pkg=None,None

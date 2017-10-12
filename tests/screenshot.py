@@ -56,7 +56,7 @@ def get_matched_coord(buf,tostring,regexes):
   for sbuf in strbufs:
     strbuf=''.join(sbuf['str'])
     for regex in regexes:
-      for l1,l2 in map(lambda x:x.span(),regex.finditer(strbuf)):
+      for l1,l2 in regex(strbuf):
         for l in range(l1,l2):
           regex_matched.add(linear_to_yx(l,sbuf))
   return regex_matched
@@ -67,7 +67,7 @@ def matched_coords(r,rprev,tostring,regexes,overlay_regexes):
   b=r['buffer']
   if rprev is not None:
     prev_str = split_dummy(b)[0]['str']
-    if any(itertools.imap(lambda x:x.search(prev_str), overlay_regexes)):
+    if any(itertools.imap(lambda x:x(prev_str), overlay_regexes)):
       bprev=rprev['buffer']
       return get_matched_coord(bprev,tostring,regexes) - get_diff_coord(rprev,r)
   return get_matched_coord(b,tostring,regexes)
@@ -180,15 +180,27 @@ def filter_by_winname(journal,name):
     x['screenshots'] = filter(lambda y:y['name']==name,x['screenshots'])
   return journal
 
+def regex_span(regex,s):
+  regex.finditer(s)
+
 def normalize_regexes(regexes):
   normalized=[]
   for regextr in regexes:
     name=regextr[0]
-    regex=regextr[1]
-    rng=None
+    matcher=regextr[1]
     if len(regextr)==3:
       rng=list(regextr[2])
-    normalized.append((name,re.compile(regex,re.MULTILINE),rng))
+    else:
+      rng=None
+    if type(matcher) in (str,unicode):
+      regex=matcher
+      normalized.append((
+        name,
+        (lambda regex:lambda x:map(lambda y:y.span(),re.compile(regex,re.MULTILINE).finditer(x)))(regex),
+        rng,regex))
+    else:
+      #callable object
+      normalized.append((name,matcher,rng))
   return normalized
 
 def read_regexes(fname,name='regexes',default=[]):
@@ -276,11 +288,15 @@ def show(stdscr,journal,journal2=None,start=0,regexes=[],overlay_regexes=[]):
       stdscr.addstr('stream={}\n\r'.format(repr(journal[idx]['stream'])))
     for warn in warnings:
       stdscr.addstr('WARNING: %s\n\r' % warn)
-    ch = stdscr.getch()
-    if ch==curses.KEY_LEFT:
-      idx = max(idx-1,0)
-    elif ch==curses.KEY_RIGHT:
-      idx = min(idx+1,total-1)
+    idx0=idx
+    while True:
+      ch = stdscr.getch()
+      if ch==curses.KEY_LEFT:
+        idx = max(idx-1,0)
+      elif ch==curses.KEY_RIGHT:
+        idx = min(idx+1,total-1)
+      if idx!=idx0:
+        break
 
 
 def main():

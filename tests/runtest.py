@@ -17,6 +17,7 @@ def stat_color(status):
 ALLTESTS=[
   'variables.wait_change_bug_1',
   'variables.expand_change_null_step',
+  'variables.incompl_struct',
 #  'variables.int',
 ]
 
@@ -39,8 +40,8 @@ def run_std_test(mcgdb,delay,logfile='logfile.log'):
       'colorize': False,
       'output':   flog,
   }
-  if os.path.exists('regexes'):
-    kwargs['regexes']='regexes'
+  if os.path.exists('regexes.py'):
+    kwargs['regexes']='regexes.py'
   res=compare.compare(**kwargs)
   flog.close()
   return res,'See %s' % os.path.join(os.getcwd(),logfile)
