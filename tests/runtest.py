@@ -16,7 +16,8 @@ def stat_color(status):
 
 ALLTESTS=[
   'variables.wait_change_bug_1',
-  'variables.int',
+  'variables.expand_change_null_step',
+#  'variables.int',
 ]
 
 

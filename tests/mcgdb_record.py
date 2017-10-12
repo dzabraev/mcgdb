@@ -40,7 +40,8 @@ class AllWinClosed(Exception): pass
 class XtermSpawn(object):
   __metaclass__ = ABCMeta
 
-  def __init__(self,xterm,executable,journal,name,*args,**kwargs):
+  def __init__(self,xterm,executable,journal,name,print_tokens=False,*args,**kwargs):
+    self.print_tokens = print_tokens
     self.xterm=xterm #executable
     self.journal = journal
     self.name = name
@@ -86,7 +87,8 @@ class XtermSpawn(object):
           break
         data+=b
       token = json.loads(data)
-      print repr(token)
+      if self.print_tokens:
+        print repr(token)
       yield token
 
 
@@ -144,9 +146,9 @@ class XtermSpawn(object):
 
 
 class XtermMcgdbWin(XtermSpawn):
-  def __init__(self,xterm,executable,exec_args,journal,name):
+  def __init__(self,xterm,executable,exec_args,journal,name,*args,**kwargs):
     self.exec_args = exec_args
-    super(XtermMcgdbWin,self).__init__(xterm,executable,journal,name)
+    super(XtermMcgdbWin,self).__init__(xterm,executable,journal,name,*args,**kwargs)
 
   def get_exec_args(self):
     return self.exec_args
@@ -261,9 +263,9 @@ class XtermGdb(XtermSpawn,Gdb):
           break
         current+=char
 
-def open_window(xterm,gdb,journal,name):
+def open_window(xterm,gdb,journal,name,print_tokens=False):
   executable,args = split_first(gdb.open_window_cmd(name),' ')
-  return XtermMcgdbWin(xterm,executable,args,journal,name)
+  return XtermMcgdbWin(xterm,executable,args,journal,name,print_tokens=print_tokens)
 
 class Journal(object):
   def __init__(self,journal=[],print_records=False):
@@ -345,11 +347,14 @@ def main():
     type=lambda x: is_valid_file(parser, x),
   )
   parser.add_argument('--print_records',help='print input from windows', action='store_true')
+  parser.add_argument('--print_tokens',help='print not cookied records', action='store_true')
   parser.add_argument('--xterm',choices=['xterm','gnome-terminal'],default='gnome-terminal')
   args = parser.parse_args()
   xterm = distutils.spawn.find_executable(args.xterm)
   print 'start recording to {}'.format(args.output)
-  journal_kwargs={'print_records':args.print_records}
+  journal_kwargs={
+    'print_records':args.print_records,
+  }
   if args.play:
     records_py = imp.load_source('records_py',args.play)
     if hasattr(records_py,'journal'):
@@ -371,7 +376,7 @@ def main():
   win_names = list(set(win_names))
   print 'type Ctrl+C for stop recording'
   gdb=XtermGdb(xterm=xterm,journal=journal,name='gdb',executable=args.mcgdb)
-  wins = dict(gdb=gdb,**{name:open_window(xterm,gdb,journal,name) for name in win_names})
+  wins = dict(gdb=gdb,**{name:open_window(xterm,gdb,journal,name,print_tokens=args.print_tokens) for name in win_names})
   entities=dict(map(lambda x:(x.get_feed_fd(),x), wins.values()))
   rlist=list(entities.keys())
   program_fds=list(map(lambda x:x.get_program_fd(), wins.values()))
