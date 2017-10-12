@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 #coding=utf8
-import pexpect,os,socket,subprocess,json,signal,select,argparse,re,sys,pickle,time,pprint
+import  pexpect,os,socket,subprocess,json,signal,select,\
+        argparse,re,sys,pickle,time,pprint,imp,pysigset,\
+        signal,termcolor
+
 import pexpect.fdpexpect
 
 import distutils.spawn
@@ -256,9 +259,10 @@ class Journal(object):
   def save(self,fname=None):
     self.concat()
     self.enumerate()
-    logfile = open(fname,'wb') if fname else sys.stdout
-    logfile.write('journal='+str(self))
-    logfile.close()
+    with pysigset.suspended_signals(signal.SIGCHLD):
+      logfile = open(fname,'wb') if fname else sys.stdout
+      logfile.write('journal='+str(self))
+      logfile.close()
   def __concat_click(self,x,y):
     last=x[-1]
     ys = y.get('stream')
@@ -326,24 +330,32 @@ def main():
   args = parser.parse_args()
   xterm = distutils.spawn.find_executable(args.xterm)
   print 'start recording to {}'.format(args.output)
-  win_names = args.addwin if args.addwin else ['aux','src','asm']
-  win_names = list(set(win_names))
-  print 'type Ctrl+C for stop recording'
   journal_kwargs={'print_records':args.print_records}
   if args.play:
-    with open(args.play) as f:
-      globs={}
-      exec(f.read(),{},globs)
-    if 'journal' in globs:
-      journal=Journal(globs['journal'],**journal_kwargs)
+    records_py = imp.load_source('records_py',args.play)
+    if hasattr(records_py,'journal'):
+      journal=Journal(records_py.journal,**journal_kwargs)
     else:
       journal=Journal(**journal_kwargs)
   else:
+    records_py=None
     journal=Journal(**journal_kwargs)
+
+
+  if args.addwin:
+    win_names = args.addwin
+  else:
+    if records_py:
+      win_names=records_py.windows
+    else:
+      win_names = ['aux','src','asm']
+  win_names = list(set(win_names))
+  print 'type Ctrl+C for stop recording'
   gdb=XtermGdb(xterm=xterm,journal=journal,name='gdb',executable=args.mcgdb)
   wins = dict(gdb=gdb,**{name:open_window(xterm,gdb,journal,name) for name in win_names})
   entities=dict(map(lambda x:(x.get_feed_fd(),x), wins.values()))
   rlist=list(entities.keys())
+  program_fds=list(map(lambda x:x.get_program_fd(), wins.values()))
   if args.play:
     for record in journal.data:
       name=record['name']
@@ -351,7 +363,6 @@ def main():
         print '{} contains name {} but only {} can be open'.format(args.play,record['name'],win_names)
         sys.exit(0)
     print 'Dont touch windows until replay do not end'
-    program_fds=list(map(lambda x:x.get_program_fd(), wins.values()))
     record_cnt=0
     record_total = len(journal.data)
     for record in journal.data:
@@ -377,23 +388,27 @@ def main():
         d = t0 - time.time() + args.delay
         if d<=0:
           break
-        ready,[],[] = select.select(rlist,[],[],d)
+        ready,[],[] = select.select(rlist+program_fds,[],[],d)
         for fd in ready:
+          if fd in rlist:
+            print termcolor.colored('WARNING: interaction with program detected while reproduce actions','red')
           os.read(fd,1024) #clear buffer
           #entities[fd].read(1024) #clear buffer
     print 'replay end. you can tocuh widnows.'
-  else:
-    journal=Journal()
+
   try:
     while True:
       if len(rlist)==0:
         raise AllWinClosed
-      ready,[],[] = select.select(rlist,[],[])
+      ready,[],[] = select.select(rlist+program_fds,[],[])
       for fd in ready:
-        try:
-          entities[fd].recvfeed()
-        except WindowDead:
-          rlist.remove(fd)
+        if fd in program_fds:
+          os.read(fd,1024) #clear buffer
+        else:
+          try:
+            entities[fd].recvfeed()
+          except WindowDead:
+            rlist.remove(fd)
   except (KeyboardInterrupt,AllWinClosed):
     variables={
       'windows':win_names,
