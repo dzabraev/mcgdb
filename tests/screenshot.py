@@ -84,7 +84,7 @@ def get_diff_coord(r1,r2):
         diff.add((row,col))
   return diff
 
-def diff(s1,s2,s1prev,tostring=split_dummy,regexes=[],overlay_regexes=[]):
+def diff(s1,s2,s1prev,tostring=split_dummy,regexes=[],overlay_regexes=[],special_color=None):
   assert s1['cols']==s2['cols']
   assert s1['rows']==s2['rows']
   cols=s1['cols']
@@ -93,17 +93,21 @@ def diff(s1,s2,s1prev,tostring=split_dummy,regexes=[],overlay_regexes=[]):
   b2=s2['buffer']
   buffer=[]
   regex_matched = matched_coords(s1,s1prev,tostring,regexes,overlay_regexes)
+  ((sp_bg,sp_fg),sp_coords) = special_color if special_color is not None else ((None,None),[])
   for row in range(rows):
     line=[]
     for col in range(cols):
       c1=b1[row][col]
       c2=b2[row][col]
-      if (row,col) in regex_matched:
-        line.append(pyte.screens.Char(c1.data,bg='green', fg='white'))
+      if (row,col) in sp_coords:
+        bg,fg=sp_bg,sp_fg
+      elif (row,col) in regex_matched:
+        bg,fg='green','white'
       elif not c1==c2:
-        line.append(pyte.screens.Char(c1.data,bg='red', fg='white'))
+        bg,fg='red','white'
       else:
-        line.append(pyte.screens.Char(c1.data, bg='black', fg='white'))
+        bg,fg='black','white'
+      line.append(pyte.screens.Char(c1.data, bg=bg,fg=fg))
     buffer.append(line)
   return {
     'cols':cols,
@@ -112,7 +116,7 @@ def diff(s1,s2,s1prev,tostring=split_dummy,regexes=[],overlay_regexes=[]):
   }
 
 
-def print_screenshot(stdscr,sshot,y,x):
+def print_screenshot(stdscr,sshot,y,x,redmark=(-1,-1)):
   cols=sshot['cols']
   rows=sshot['rows']
   buffer=sshot['buffer']
@@ -126,10 +130,29 @@ def print_screenshot(stdscr,sshot,y,x):
     u'\u251c' : 'X',
     u'\u2524' : 'X',
   }
+  ry,rx = redmark
+  redpair = get_color('red','black')
+  for row in range(rows):
+    if (row+1)%5==0:
+      s=str(row+1)
+      for i in range(len(s)):
+        attr = redpair if ry==row+i+1 else 0
+        stdscr.addch(y+row+i+1,x,s[i],attr)
+    elif ry==row+1:
+      stdscr.addch(y+row+1,x,' ',redpair)
+  for col in range(cols):
+    if (col+1)%5==0:
+      s=str(col+1)
+      for i in range(len(s)):
+        attr = redpair if rx==col+i+1 else 0
+        stdscr.addch(y,x+col+1+i,s[i],attr)
+    elif rx==col+1:
+      stdscr.addch(y,x+col+1,' ',redpair)
+
   for row in range(rows):
     for col in range(cols):
       char = buffer[row][col]
-      stdscr.addch(y+row,col+x,charmap.get(char.data,char.data.encode('utf8')),make_attr(char))
+      stdscr.addch(y+row+1,col+x+1,charmap.get(char.data,char.data.encode('utf8')),make_attr(char))
 
 
 def make_attr(char):
@@ -226,17 +249,23 @@ def linearize(journal):
       })
   return screenshots
 
-def get_prev(journal,idx):
-  idx_prev=idx-1
+def get_neigh(journal,idx,op):
+  idx0=idx+op(1)
   r=journal[idx]
   if r is None:
     return None
   name=r['name']
-  while idx_prev>=0:
-    prev=journal[idx_prev]
-    if prev['name']==name:
-      return journal[idx_prev]
-    idx_prev-=1
+  L=len(journal)
+  while idx0>=0 and idx0<=L-1:
+    neigh=journal[idx0]
+    if neigh['name']==name:
+      return journal[idx0]
+    idx0+=op(1)
+
+def get_prev(journal,idx): return get_neigh(journal,idx, lambda x:-x)
+def get_next(journal,idx): return get_neigh(journal,idx, lambda x:x)
+
+
 
 def match_regex_range(rng,idx):
   if rng is None:
@@ -246,6 +275,20 @@ def match_regex_range(rng,idx):
 
 def filter_regexes(regexes,name,idx):
   return map(lambda x:x[1],filter( lambda x: x[0]==name and match_regex_range(x[2],idx),regexes))
+
+def get_plus(y,x):
+  return (('yellow','black'),[(y,x-1),(y,x+1),(y,x),(y-1,x),(y+1,x)])
+
+def get_click_coord(stream):
+  if stream is None:
+    return
+  match=re.match('\x1b\[<0;(\d+);(\d+)M\x1b\[<0;(\d+);(\d+)m',stream)
+  if match:
+    c1,r1,c2,r2=match.groups()
+    if r1==r2 and c1==c2:
+      return (int(r1)-1,int(c1)-1)
+  return None
+
 
 def show(stdscr,journal,journal2=None,start=0,regexes=[],overlay_regexes=[]):
   idx=start
@@ -261,18 +304,26 @@ def show(stdscr,journal,journal2=None,start=0,regexes=[],overlay_regexes=[]):
       s2=r2['screenshot']
       r1prev=get_prev(journal,idx)
       r2prev=get_prev(journal2,idx)
+      r1next=get_next(journal,idx)
       s1prev = r1prev['screenshot'] if r1prev else None
       s2prev = r2prev['screenshot'] if r2prev else None
       print_screenshot(stdscr,s1,0,0)
-      print_screenshot(stdscr,s2,0,s1['cols']+1)
-      y=max(s1['rows'],s2['rows'])+1
+      print_screenshot(stdscr,s2,0,s1['cols']+2)
+      y=max(s1['rows'],s2['rows'])+2
       if s1['cols']==s2['cols'] and s1['rows']==s2['rows']:
+        click=get_click_coord(r1next.get('stream')) if r1next is not None else None
+        if click is not None:
+          special_color=get_plus(click[0],click[1])
+        else:
+          special_color=None
         cur_regexes=filter_regexes(regexes,name,idx)
         cur_overlay_regexes=filter_regexes(overlay_regexes,name,idx)
         tostring=SPLITBUF.get(name,split_dummy)
-        print_screenshot(stdscr,diff(s1,s2,s1prev,tostring=tostring,regexes=cur_regexes,overlay_regexes=cur_overlay_regexes),y,0)
-        sdiff=diff(s2,s1,s2prev,tostring=tostring,regexes=cur_regexes,overlay_regexes=cur_overlay_regexes)
-        print_screenshot(stdscr,sdiff,y,s1['cols']+1)
+        print_screenshot(stdscr,
+          diff(s1,s2,s1prev,tostring=tostring,regexes=cur_regexes,overlay_regexes=cur_overlay_regexes,special_color=special_color),
+          y,0)
+        sdiff=diff(s2,s1,s2prev,tostring=tostring,regexes=cur_regexes,overlay_regexes=cur_overlay_regexes,special_color=special_color)
+        print_screenshot(stdscr,sdiff,y,s1['cols']+2)
         line=y+sdiff['rows']+1
       else:
         stdscr.addstr(y,0,'different sizes, cant do diff')
@@ -280,7 +331,7 @@ def show(stdscr,journal,journal2=None,start=0,regexes=[],overlay_regexes=[]):
     else:
       s1=journal[idx]['screenshot']
       print_screenshot(stdscr,s1,0,0)
-      line = s1['rows'] #last line
+      line = s1['rows']+2 #last line
     stdscr.addstr(line,0,'')
     stdscr.addstr('action_num={}\n\r'.format(journal[idx]['action_num']))
     stdscr.addstr('{}/{}\n\r'.format(idx+1,total))
