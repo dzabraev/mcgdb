@@ -100,7 +100,10 @@ def diff(s1,s2,s1prev,tostring=split_dummy,regexes=[],overlay_regexes=[],special
       c1=b1[row][col]
       c2=b2[row][col]
       if (row,col) in sp_coords:
-        bg,fg=sp_bg,sp_fg
+        if not c1==c2:
+          bg,fg='red','white'
+        else:
+          bg,fg=sp_bg,sp_fg
       elif (row,col) in regex_matched:
         bg,fg='green','white'
       elif not c1==c2:
@@ -295,6 +298,7 @@ def show(stdscr,journal,journal2=None,start=0,regexes=[],overlay_regexes=[]):
   total=len(journal)
   while True:
     stdscr.clear()
+    r1next=get_next(journal,idx)
     if journal2:
       #do diff
       name=journal[idx]['name']
@@ -304,7 +308,6 @@ def show(stdscr,journal,journal2=None,start=0,regexes=[],overlay_regexes=[]):
       s2=r2['screenshot']
       r1prev=get_prev(journal,idx)
       r2prev=get_prev(journal2,idx)
-      r1next=get_next(journal,idx)
       s1prev = r1prev['screenshot'] if r1prev else None
       s2prev = r2prev['screenshot'] if r2prev else None
       print_screenshot(stdscr,s1,0,0)
@@ -337,6 +340,8 @@ def show(stdscr,journal,journal2=None,start=0,regexes=[],overlay_regexes=[]):
     stdscr.addstr('{}/{}\n\r'.format(idx+1,total))
     if 'stream' in journal[idx]:
       stdscr.addstr('stream={}\n\r'.format(repr(journal[idx]['stream'])))
+      if r1next is not None and 'stream' in r1next:
+        stdscr.addstr('stream_next={}\n\r'.format(repr(r1next['stream'])))
     for warn in warnings:
       stdscr.addstr('WARNING: %s\n\r' % warn)
     idx0=idx
