@@ -206,7 +206,8 @@ class Node(object):
         try:
           value = value[name]
         except gdb.error:
-          gdb_print(str(self))
+          return None
+          #gdb_print('cant access path=%s id=%s\n' % (str(self),self.id))
     return valcache(value)
 
   def assign(self,new_value):
@@ -344,10 +345,15 @@ class ValueToChunks(BasePath):
         func=node.tochunks
       else:
         func=self.value_to_chunks_1
-      chunks=func(value=node.value(), name=str(node.name), path=node)
-      assert len(chunks)==1
-      chunk = chunks[0]
-      if 'id' not in chunk:
+      value=node.value()
+      if value is not None:
+        chunks=func(value=value, name=str(node.name), path=node)
+        assert len(chunks)==1
+        chunk = chunks[0]
+        if 'id' not in chunk:
+          chunk['id'] = node.id
+      else:
+        chunk=UNAVAILABLE_CHUNK
         chunk['id'] = node.id
       mapped.append(chunk)
     return mapped
@@ -405,6 +411,7 @@ class ValueToChunks(BasePath):
     user_input = pkg['user_input']
     path = self.Path(path_id=path_id)
     value=path.value()
+    assert value is not None
     if 'converter' in pkg:
       try:
         new_value = self.converters.get(pkg['converter'])(user_input)
