@@ -14,6 +14,8 @@ from abc import abstractmethod, ABCMeta
 from common import Gdb,FNULL
 from runtest import is_valid_file
 
+class UnknownControlSequence(Exception): pass
+
 def open_sock():
   sock = socket.socket()
   sock.bind(('localhost',0))
@@ -84,6 +86,7 @@ class XtermSpawn(object):
           break
         data+=b
       token = json.loads(data)
+      print repr(token)
       yield token
 
 
@@ -155,6 +158,7 @@ class XtermMcgdbWin(XtermSpawn):
     self.xconn.send(msg)
 
   def _feed(self):
+    # https://www.xfree86.org/4.8.0/ctlseqs.html
     while True:
       char = yield
       if char == ESC:
@@ -178,24 +182,39 @@ class XtermMcgdbWin(XtermSpawn):
             current+=char
             char = yield
           if char != ';':
-            continue #ERROR
+            raise UnknownControlSequence
           current+=char
           char = yield
           while char.isdigit(): #column
             current+=char
             char = yield
           if char != ';':
-            continue #ERROR
+            raise UnknownControlSequence
           current+=char
           char = yield
           while char.isdigit(): #row
             current+=char
             char = yield
           if char not in  'mM':
-            continue #ERROR
+            raise UnknownControlSequence
           current+=char
           self.journal_add_stream(current)
           continue
+        elif char.isdigit():
+          current=CSI
+          while char.isdigit():
+            current+=char
+            char = yield
+          if char=='~':
+            #PageUp, PageDown
+            current+=char
+            self.journal_add_stream(current)
+            continue
+          else:
+            raise UnknownControlSequence
+          raise UnknownControlSequence
+        else:
+          raise UnknownControlSequence
       else:
         #wait whole unicode character
         current=char
