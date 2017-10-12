@@ -79,6 +79,11 @@ def if_gdbstopped_else(stopped=None,running=None):
   res = cb() if cb else None
   return flag,res
 
+def exec_on_gdb_stops(callback):
+  def unregister(*args,**kwargs):
+    callback(*args,**kwargs)
+    gdb.events.stop.disconnect(unregister)
+  gdb.events.stop.connect(unregister)
 
 import mcgdb.gdb2 as gdb2
 
@@ -762,6 +767,14 @@ class GEThread(object):
       for fd in died_entity:
         del self.fte[fd]
 
+  def _process_connection(self,entity):
+    try:
+      ok=entity.process_connection()
+    except OSError as e:
+      gdb_print('Error while opening window: {}\n'.format(str(e)))
+      ok=False
+    if ok:
+      self.fte[entity.fd]=entity
 
   def __call__(self):
     assert not self.WasCalled
@@ -786,15 +799,10 @@ class GEThread(object):
       has_new_pkg=False
       for fd in ready_rfds:
         if fd in self.wait_connection.keys():
-          entity=self.wait_connection[fd]
-          try:
-            ok=entity.process_connection()
-            del self.wait_connection[fd]
-          except OSError as e:
-            gdb_print('Error while opening window: {}\n'.format(str(e)))
-            ok=False
-          if ok:
-            self.fte[entity.fd]=entity
+          entity=self.wait_connection.pop(fd)
+          callback=lambda *args,**kwargs: self._process_connection(entity)
+          if_gdbstopped_else(stopped=callback,running=lambda *args,**kwargs: exec_on_gdb_stops(callback))
+          continue
         else:
           entity_key,pkg=None,None
           if fd==self.gdb_rfd:

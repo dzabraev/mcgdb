@@ -115,7 +115,16 @@ def do_parent(child_fd,child_pid,pport,xport,pfname,xfname):
     stream_from_term.add_cb(xfile.write)
   SigHandler(signal.SIGWINCH,lambda signo,frame : stream_from_term.retranslate_sigwinch())
   SigHandler(signal.SIGWINCH,lambda signo,frame : copy_termsize(from_fd=stdin_fd,to_fd=child_fd))
-  select.select([child_fd],[],[]) #wait first child output and then change terminal settings
+  while True:
+    try:
+      select.select([child_fd],[],[]) #wait first child output and then change terminal settings
+      break
+    except select.error as (eno,msg):
+      if eno==errno.EINTR:
+        continue
+      else:
+        exc_info = sys.exc_info()
+        raise exc_info[0], exc_info[1], exc_info[2]
   #termios.tcsetattr(stdout_fd, termios.TCSANOW, termios.tcgetattr(child_fd))
   rawmode(stdout_fd)
   copy_termsize(from_fd=stdin_fd,to_fd=child_fd)
@@ -138,6 +147,12 @@ def do_parent(child_fd,child_pid,pport,xport,pfname,xfname):
         elif e.errno==errno.EIO:
           termios.tcsetattr(stdout_fd, termios.TCSANOW, termios.tcgetattr(child_fd))
           sys.exit(0)
+        else:
+          exc_info = sys.exc_info()
+          raise exc_info[0], exc_info[1], exc_info[2]
+      except select.error:
+        if eno==errno.EINTR:
+          continue
         else:
           exc_info = sys.exc_info()
           raise exc_info[0], exc_info[1], exc_info[2]
