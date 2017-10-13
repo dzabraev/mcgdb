@@ -7,6 +7,17 @@ from common import file_to_modname
 
 warnings=[]
 
+def is_buffers_equals(b1,b2,b1prev,b2prev,columns,lines,tostring,regexes,overlay_regexes):
+  mcoords = matched_coords(b1,b1prev,lines,columns,tostring,regexes,overlay_regexes) & \
+            matched_coords(b2,b2prev,lines,columns,tostring,regexes,overlay_regexes)
+  for col in range(columns):
+    for row in range(lines):
+      if not b1[row][col]==b2[row][col] and (row,col) not in mcoords:
+        print '\n{} {}\n{}\n{}\n'.format(row,col,b1[row][col],b2[row][col])
+        return False
+  return True
+
+
 def buffer_stringify_lines(buf):
   return map(lambda line : ''.join(map(lambda ch:ch.data,line)), buf)
 
@@ -40,7 +51,7 @@ def split_dummy(buffer):
   ]
 
 
-def get_splitbuf(name):
+def get_tostring(name):
   return SPLITBUF.get(name,split_dummy)
 
 def linear_to_yx(l,buf):
@@ -61,28 +72,22 @@ def get_matched_coord(buf,tostring,regexes):
           regex_matched.add(linear_to_yx(l,sbuf))
   return regex_matched
 
-
-def matched_coords(r,rprev,tostring,regexes,overlay_regexes):
-  ''' Учитывает перекрытия'''
-  b=r['buffer']
-  if rprev is not None:
-    prev_str = split_dummy(b)[0]['str']
-    if any(itertools.imap(lambda x:x(prev_str), overlay_regexes)):
-      bprev=rprev['buffer']
-      return get_matched_coord(bprev,tostring,regexes) - get_diff_coord(rprev,r)
-  return get_matched_coord(b,tostring,regexes)
-
-def get_diff_coord(r1,r2):
-  cols=r1['cols']
-  rows=r1['rows']
-  b1=r1['buffer']
-  b2=r2['buffer']
+def get_diff_coord(b1,b2,lines,columns):
   diff=set()
-  for col in range(cols):
-    for row in range(rows):
+  for col in range(columns):
+    for row in range(lines):
       if b1[row][col]!=b2[row][col]:
         diff.add((row,col))
   return diff
+
+
+def matched_coords(b,bprev,lines,columns,tostring,regexes,overlay_regexes):
+  if bprev is not None:
+    sprev=split_dummy(b)[0]['str']
+    if any(itertools.imap(lambda x:x(sprev), overlay_regexes)):
+      return get_matched_coord(bprev,tostring,regexes) - get_diff_coord(bprev,b,lines,columns)
+  return get_matched_coord(b,tostring,regexes)
+
 
 def diff(s1,s2,s1prev,tostring=split_dummy,regexes=[],overlay_regexes=[],special_color=None):
   assert s1['cols']==s2['cols']
@@ -92,7 +97,9 @@ def diff(s1,s2,s1prev,tostring=split_dummy,regexes=[],overlay_regexes=[],special
   b1=s1['buffer']
   b2=s2['buffer']
   buffer=[]
-  regex_matched = matched_coords(s1,s1prev,tostring,regexes,overlay_regexes)
+  regex_matched = matched_coords(s1['buffer'],
+    s1prev.get('buffer') if s1prev is not None else None,
+    rows,cols,tostring,regexes,overlay_regexes)
   ((sp_bg,sp_fg),sp_coords) = special_color if special_color is not None else ((None,None),[])
   for row in range(rows):
     line=[]
@@ -322,7 +329,7 @@ def show(stdscr,journal,journal2=None,start=0,regexes=[],overlay_regexes=[]):
           special_color=None
         cur_regexes=filter_regexes(regexes,name,idx)
         cur_overlay_regexes=filter_regexes(overlay_regexes,name,idx)
-        tostring=SPLITBUF.get(name,split_dummy)
+        tostring=get_tostring(name)
         print_screenshot(stdscr,
           diff(s1,s2,s1prev,tostring=tostring,regexes=cur_regexes,overlay_regexes=cur_overlay_regexes,special_color=special_color),
           y,0)

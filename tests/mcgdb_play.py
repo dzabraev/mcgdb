@@ -1,10 +1,20 @@
 #!/usr/bin/env python
 #coding=utf8
 
-import argparse,pickle,signal,time,select,collections,copy,json,sys,os,imp,pprint
+import argparse,pickle,signal,time,select,collections,copy,json,sys,os,imp,pprint,\
+        itertools,pyte
 
 from common import Gdb,McgdbWin, file_to_modname
 from runtest import is_valid_file
+from screenshot import read_journal, matched_coords, get_tostring, normalize_regexes, filter_regexes, is_buffers_equals
+
+def get_databuffer_by_name(wait_record,name):
+  for wr in wait_record['screenshots']:
+    if wr['name']==name:
+      return wr
+
+def iter_buffer(buffer,columns,lines):
+  return map(lambda line: map(lambda column:buffer[line][column],range(columns)),range(lines))
 
 
 def play():
@@ -13,6 +23,7 @@ def play():
   parser.add_argument('--output', help='this file will be contain screenshots', default='record.play')
   parser.add_argument('--delay',type=float,default=1,help='amount of seconds')
   parser.add_argument('--regexes',help='read regexes from given file and store them into output')
+  parser.add_argument('--wait',help='specify .play file',type=lambda x: is_valid_file(parser, x))
   parser.add_argument('--mcgdb',help='path to mcgdb',
     default=os.path.join(os.path.dirname(os.getcwd()),'mcgdb'),
     type=lambda x: is_valid_file(parser, x),
@@ -27,22 +38,32 @@ def play():
   journal=[]
   journal_play=[]
   delay = args.delay
-  output = open(args.output,'wb')
   module_records = imp.load_source(file_to_modname(args.record_file),os.path.abspath(args.record_file))
   journal = module_records.journal
 
-  if args.regexes:
-    regexes=getattr(__import__(file_to_modname(args.regexes)),'regexes',[])
+  if args.regexes is not None:
+    module_regexes = imp.load_source(file_to_modname(args.regexes),os.path.abspath(args.regexes))
+    regexes=normalize_regexes(module_regexes.regexes)
+    overlay_regexes=normalize_regexes(getattr(module_regexes,'overlay_regexes',[]))
   else:
     regexes=[]
+    overlay_regexes=[]
+
   gdb=Gdb(executable=mcgdb)
   wins_with_name = collections.OrderedDict([(name,gdb.open_win(name)) for name in module_records.windows])
+  if args.wait:
+    wait_journal = read_journal(args.wait)
+    wait_status={}
+  else:
+    wait_journal = [None]*len(journal)
   entities=dict(wins_with_name, gdb=gdb)
   fd_to_win=dict(map(lambda x: (x.master_fd,x), wins_with_name.values()))
+  fd_to_name=dict(map(lambda x: (x[1].master_fd,x[0]), wins_with_name.items()))
   rlist = list(fd_to_win.keys())
   record_cnt=0
   record_total = len(journal)
-  for record in journal:
+  output = open(args.output,'wb')
+  for record_idx,(record,wait_record) in enumerate(zip(journal,wait_journal)):
     record_cnt+=1
     print '{: 5d}/{: 5d}\r'.format(record_cnt,record_total),
     sys.stdout.flush()
@@ -54,15 +75,45 @@ def play():
       sig=record['sig']
       if sig==signal.SIGWINCH:
         wins_with_name[name].resize(cols=record['col'],rows=record['row'])
+    if args.wait:
+      done={}
+      for name in wins_with_name.keys():
+        done[name]=False
     #collect window output
     t0 = time.time()
     while True:
+      if args.wait and all(done.values()):
+        break
       d = t0 - time.time() + delay
       if d<=0:
         break
       ready,[],[] = select.select(rlist,[],[],d)
       for fd in ready:
-        fd_to_win[fd].recvfeed()
+        print '\n%s\n' % done
+        name=fd_to_name[fd]
+        win=fd_to_win[fd]
+        win.recvfeed()
+        if args.wait:
+          tostring=get_tostring(name)
+          lines=win.screen.lines
+          columns=win.screen.columns
+          b1=copy_buffer(win.screen.buffer,columns,lines)
+          etalon=get_databuffer_by_name(wait_record,name)
+          b2=etalon['buffer']
+          print win.screen.lines, win.screen.columns
+          print etalon['rows'], etalon['cols']
+          if record_idx>=1:
+            b1prev=get_databuffer_by_name(journal_play[-1],name)['buffer']
+            b2prev=get_databuffer_by_name(wait_journal[record_idx-1],name)['buffer']
+          else:
+            b1prev=None
+            b2prev=None
+          done[name] =  lines==etalon['rows'] and \
+                        columns==etalon['cols'] and \
+                        is_buffers_equals(b1,b2,b1prev,b2prev,columns,lines,tostring,
+                          regexes=filter_regexes(regexes,name,record_idx),
+                          overlay_regexes=filter_regexes(overlay_regexes,name,record_idx)
+                        )
     #take screenshots
     screenshots=[]
     for name,win in wins_with_name.iteritems():
@@ -80,7 +131,7 @@ def play():
       'record':record,
     })
   print ''
-  output.write(pickle.dumps({'journal_play':journal_play,'regexes':regexes}))
+  output.write(pickle.dumps({'journal_play':journal_play}))
 
 def copy_buffer(buf,cols,rows):
   sbuf=[]

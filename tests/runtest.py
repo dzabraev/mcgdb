@@ -23,7 +23,8 @@ ALLTESTS=[
 
 
 
-def run_std_test(mcgdb,delay,logfile='logfile.log'):
+def run_std_test(mcgdb,delay,logfile='logfile.log',wait=False,regexes='regexes.py'):
+  has_regexes=os.path.exists(regexes)
   cmd='make'
   print cmd
   subprocess.check_call(cmd, shell=True)
@@ -31,6 +32,10 @@ def run_std_test(mcgdb,delay,logfile='logfile.log'):
   print cmd
   subprocess.check_call(cmd, shell=True)
   cmd="mcgdb_play.py record.orig.py --delay={delay} --output=record.new.play --mcgdb={mcgdb}".format(delay=delay,mcgdb=mcgdb)
+  if wait:
+    cmd+=' --wait=record.orig.play'
+    if has_regexes:
+      cmd+=' --regexes=%s' % regexes
   print cmd
   subprocess.check_call(cmd, shell=True)
   flog=open(logfile,'wb')
@@ -40,8 +45,8 @@ def run_std_test(mcgdb,delay,logfile='logfile.log'):
       'colorize': False,
       'output':   flog,
   }
-  if os.path.exists('regexes.py'):
-    kwargs['regexes']='regexes.py'
+  if has_regexes:
+    kwargs['regexes']=regexes
   res=compare.compare(**kwargs)
   flog.close()
   return res,'See %s' % os.path.join(os.getcwd(),logfile)
@@ -56,6 +61,7 @@ def main():
   parser.add_argument('--test',action='append',choices=ALLTESTS)
   parser.add_argument('--output',default='mcgdb.sum')
   parser.add_argument('--delay',type=float,default=2)
+  parser.add_argument('--wait',action='store_true')
   parser.add_argument('--mcgdb',help='path to mcgdb',
     default=os.path.join(os.path.dirname(os.getcwd()),'mcgdb'),
     type=lambda x: is_valid_file(parser, x),
@@ -89,7 +95,7 @@ def main():
     if os.path.exists('runtest.py'):
       status,msg = imp.load_source(testname,'runtest.py').runtest(mcgdb=args.mcgdb,delay=args.delay,**kwargs[testname])
     else:
-      status,msg=run_std_test(mcgdb=args.mcgdb,delay=args.delay,**kwargs[testname])
+      status,msg=run_std_test(mcgdb=args.mcgdb,delay=args.delay,wait=args.wait,**kwargs[testname])
     os.chdir(cwd)
     print '%s %s' % (stat_color(status),msg)
     output.write('%s %s\n' % (status,msg))

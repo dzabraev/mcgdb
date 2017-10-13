@@ -4,7 +4,7 @@
 import argparse,sys,termcolor,os,itertools
 
 from screenshot import  read_journal, linearize, filter_regexes, matched_coords, \
-                        get_splitbuf, read_regexes, get_prev, get_diff_coord
+                        read_regexes, get_prev, get_diff_coord, get_tostring, is_buffers_equals
 
 status_code={
   'PASS':0,
@@ -96,8 +96,20 @@ def compare(journal1,journal2,output,colorize=True,winname=None,regexes=None):
       name=r1['name']
       cur_regexes=filter_regexes(regexes,name,idx)
       cur_overlay_regexes=filter_regexes(overlay_regexes,name,idx)
-      tostring=get_splitbuf(name)
-      if equals(r1,r2,r1prev,r2prev,regexes=cur_regexes,tostring=tostring,overlay_regexes=cur_overlay_regexes):
+      tostring=get_tostring(name)
+      #if equals(r1,r2,r1prev,r2prev,regexes=cur_regexes,tostring=tostring,overlay_regexes=cur_overlay_regexes):
+      b1=r1['screenshot']['buffer']
+      b2=r2['screenshot']['buffer']
+      b1prev=r1prev['screenshot']['buffer'] if r1prev else None
+      b2prev=r2prev['screenshot']['buffer'] if r2prev else None
+      columns=r1['screenshot']['cols']
+      lines=r1['screenshot']['rows']
+      if  r1['screenshot']['cols']==r2['screenshot']['cols'] and \
+          r1['screenshot']['rows']==r2['screenshot']['rows'] and \
+          is_buffers_equals(b1,b2,b1prev,b2prev,columns,lines,tostring,
+            regexes=cur_regexes,
+            overlay_regexes=cur_overlay_regexes
+          ):
         msg=PASS
         stat['PASS']+=1
       else:
