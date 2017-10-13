@@ -249,6 +249,7 @@ def linearize(journal):
         'action_num':record['action_num'],
         'name':screenshot['name'],
         'stream':record['record'].get('stream',''),
+        'streamto':record['record']['name']
       })
   return screenshots
 
@@ -315,7 +316,7 @@ def show(stdscr,journal,journal2=None,start=0,regexes=[],overlay_regexes=[]):
       y=max(s1['rows'],s2['rows'])+2
       if s1['cols']==s2['cols'] and s1['rows']==s2['rows']:
         click=get_click_coord(r1next.get('stream')) if r1next is not None else None
-        if click is not None:
+        if click is not None and r1next['streamto']==r1['name']:
           special_color=get_plus(click[0],click[1])
         else:
           special_color=None
@@ -339,9 +340,15 @@ def show(stdscr,journal,journal2=None,start=0,regexes=[],overlay_regexes=[]):
     stdscr.addstr('action_num={}\n\r'.format(journal[idx]['action_num']))
     stdscr.addstr('{}/{}\n\r'.format(idx+1,total))
     if 'stream' in journal[idx]:
-      stdscr.addstr('stream={}\n\r'.format(repr(journal[idx]['stream'])))
+      stdscr.addstr('stream({to})={stream}\n\r'.format(
+        stream=repr(journal[idx]['stream']),
+        to=journal[idx]['streamto'],
+      ))
       if r1next is not None and 'stream' in r1next:
-        stdscr.addstr('stream_next={}\n\r'.format(repr(r1next['stream'])))
+        stdscr.addstr('stream_next({to})={stream}\n\r'.format(
+          stream=repr(r1next['stream']),
+          to=r1next['streamto']
+        ))
     for warn in warnings:
       stdscr.addstr('WARNING: %s\n\r' % warn)
     idx0=idx
@@ -351,6 +358,30 @@ def show(stdscr,journal,journal2=None,start=0,regexes=[],overlay_regexes=[]):
         idx = max(idx-1,0)
       elif ch==curses.KEY_RIGHT:
         idx = min(idx+1,total-1)
+      elif ch==ord('/'):
+        snum=''
+        stdscr.addstr(line+4,0,'goto %s' % snum)
+        clear_goto = lambda : stdscr.addstr(line+4,0,'            ')
+        while True:
+          ch=stdscr.getch()
+          if ch==ord('\x1b'):
+            break
+          elif 0x30<=ch<=0x39:
+            snum+=chr(ch)
+            stdscr.addstr(line+4,0,'goto %s' % snum)
+          elif ch==ord('\n'):
+            if snum:
+              idx=int(snum)-1
+              idx=max(min(total-1,idx),0)
+            clear_goto()
+            break
+          elif ch==curses.KEY_BACKSPACE:
+            snum=snum[:-1]
+            clear_goto()
+            stdscr.addstr(line+4,0,'goto %s' % snum)
+          else:
+            clear_goto()
+            break
       if idx!=idx0:
         break
 
