@@ -89,7 +89,7 @@ def play():
         break
       ready,[],[] = select.select(rlist,[],[],d)
       for fd in ready:
-        print '\n%s\n' % done
+        #print '\n%s\n' % done
         name=fd_to_name[fd]
         win=fd_to_win[fd]
         win.recvfeed()

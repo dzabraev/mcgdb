@@ -16,6 +16,6 @@ regexes=[
   ('aux',subarray_ptr('incompl_union **')),
 
   ('aux',subarray_ptr_elem(type='incompl_struct',name='is',nstars=6)),
-  ('aux',subarray_ptr_elem(type='incompl_union',name='is',nstars=6)),
+  ('aux',subarray_ptr_elem(type='incompl_union',name='iu',nstars=6)),
 ]
 
