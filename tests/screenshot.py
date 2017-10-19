@@ -13,7 +13,6 @@ def is_buffers_equals(b1,b2,b1prev,b2prev,columns,lines,tostring,regexes,overlay
   for col in range(columns):
     for row in range(lines):
       if not b1[row][col]==b2[row][col] and (row,col) not in mcoords:
-        print '\n{} {}\n{}\n{}\n'.format(row,col,b1[row][col],b2[row][col])
         return False
   return True
 

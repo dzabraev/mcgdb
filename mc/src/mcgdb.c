@@ -300,6 +300,7 @@ get_command_num(json_t *pkg) {
     else if (compare_cmd("drop_nodes"))      {return MCGDB_DROP_NODES;}
     else if (compare_cmd("insert_rows"))     {return MCGDB_INSERT_ROWS;}
     else if (compare_cmd("call_cb"))         {return MCGDB_CALL_CB;}
+    else if (compare_cmd("insert_str"))      {return MCGDB_INSERT_STR;}
     else {
       cmd = MCGDB_UNKNOWN;
       message_assert (cmd!=MCGDB_UNKNOWN);
@@ -405,7 +406,9 @@ pkg_fopen (json_t *pkg, WEdit * edit) {
   if(mcgdb_curline>0)
     book_mark_clear (edit, mcgdb_curline, mcgdb_current_line_color);
   mcgdb_curline=line;
-  edit_file(vfs_path_build_filename(filename, (char *) NULL),line); /*тут исполнение проваливается в эту функцию
+  edit_file(
+    filename ? vfs_path_build_filename(filename, (char *) NULL) : NULL,
+    line); /*тут исполнение проваливается в эту функцию
   и не перейдет на след. строчку, пока edit-файла не закроется. Поэтому мы не может открыть файл, и сразу же подкрасить
   текущую строку. Это надо делать следующим пакетом.*/
   //TODO нужно ли очищать vfs_path ?
@@ -483,6 +486,10 @@ process_action_from_gdb_edit(WEdit * edit, struct gdb_action * act) {
       break;
     case MCGDB_SET_CURLINE:
       pkg_set_curline(pkg,edit);
+      break;
+    case MCGDB_INSERT_STR:
+      edit_print_string (edit, json_string_value (json_object_get (pkg,"msg")));
+      edit->modified=FALSE; /*prevent asking about saving*/
       break;
     default:
       break;
@@ -813,3 +820,4 @@ __message_assert (const char *EX, const char *filename, int line) {
   edit_error_dialog("ASSERT FAILED",str);
   abort();
 }
+

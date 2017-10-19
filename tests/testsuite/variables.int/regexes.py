@@ -14,7 +14,6 @@ regexes=[
   ('aux',ptr('int * *(','')),
   ('aux',subarray_ptr('int *')),
   ('aux',subarray_ptr('int **')),
-  ('src','mcgdb-tm.*\d\d\d\d.txt(?=\s+\[----\])'),
 ]
 
 

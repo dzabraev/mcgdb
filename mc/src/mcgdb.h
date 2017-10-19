@@ -53,6 +53,7 @@ typedef enum gdb_cmd {
   MCGDB_COLOR,
   MCGDB_SET_CURLINE,
   MCGDB_EXIT,
+  MCGDB_INSERT_STR,
 
   /*common*/
   MCGDB_UPDATE_NODES,
@@ -177,6 +178,8 @@ typedef struct cbPair {
 } cbPair;
 
 int data_ptr_register (void *data);
+
+
 
 #endif /*__mcgdb_h_*/
 

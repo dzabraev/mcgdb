@@ -17,6 +17,34 @@ def iter_buffer(buffer,columns,lines):
   return map(lambda line: map(lambda column:buffer[line][column],range(columns)),range(lines))
 
 
+def compare(win,name,journal_play,wait_journal,record_idx,regexes,overlay_regexes):
+  tostring=get_tostring(name)
+  lines=win.screen.lines
+  columns=win.screen.columns
+  b1=copy_buffer(win.screen.buffer,columns,lines)
+  etalon=get_databuffer_by_name(wait_journal[record_idx],name)
+  b2=etalon['buffer']
+  if record_idx>=1:
+    b1prev=get_databuffer_by_name(journal_play[-1],name)['buffer']
+    b2prev=get_databuffer_by_name(wait_journal[record_idx-1],name)['buffer']
+  else:
+    b1prev=None
+    b2prev=None
+  ok =  lines==etalon['rows'] and columns==etalon['cols'] and \
+        is_buffers_equals(
+          b1=b1,
+          b2=b2,
+          b1prev=b1prev,
+          b2prev=b2prev,
+          columns=columns,
+          lines=lines,
+          tostring=tostring,
+          regexes=filter_regexes(regexes,name,record_idx),
+          overlay_regexes=filter_regexes(overlay_regexes,name,record_idx)
+        )
+  return ok
+
+
 def play():
   parser = argparse.ArgumentParser()
   parser.add_argument('record_file', help='sequence of actions for gdb and windows', default='record.py',nargs='?')
@@ -78,7 +106,8 @@ def play():
     if args.wait:
       done={}
       for name in wins_with_name.keys():
-        done[name]=False
+        win=entities[name]
+        done[name] = compare(win,name,journal_play,wait_journal,record_idx,regexes,overlay_regexes)
     #collect window output
     t0 = time.time()
     while True:
@@ -89,32 +118,11 @@ def play():
         break
       ready,[],[] = select.select(rlist,[],[],d)
       for fd in ready:
-        #print '\n%s\n' % done
         name=fd_to_name[fd]
         win=fd_to_win[fd]
         win.recvfeed()
         if args.wait:
-          tostring=get_tostring(name)
-          lines=win.screen.lines
-          columns=win.screen.columns
-          b1=copy_buffer(win.screen.buffer,columns,lines)
-          etalon=get_databuffer_by_name(wait_record,name)
-          b2=etalon['buffer']
-          print win.screen.lines, win.screen.columns
-          print etalon['rows'], etalon['cols']
-          if record_idx>=1:
-            b1prev=get_databuffer_by_name(journal_play[-1],name)['buffer']
-            b2prev=get_databuffer_by_name(wait_journal[record_idx-1],name)['buffer']
-          else:
-            b1prev=None
-            b2prev=None
-          done[name] =  lines==etalon['rows'] and \
-                        columns==etalon['cols'] and \
-                        is_buffers_equals(b1,b2,b1prev,b2prev,columns,lines,tostring,
-                          regexes=filter_regexes(regexes,name,record_idx),
-                          overlay_regexes=filter_regexes(overlay_regexes,name,record_idx)
-                        )
-    #take screenshots
+          done[name] = compare(win,name,journal_play,wait_journal,record_idx,regexes,overlay_regexes)
     screenshots=[]
     for name,win in wins_with_name.iteritems():
       cols=win.screen.columns

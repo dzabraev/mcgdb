@@ -103,7 +103,7 @@ def main():
 
   print '\n\nSUMMARY:'
   for key,value in stat.iteritems():
-    print '%s %s' % (stat_color(status),value)
+    print '%s %s' % (stat_color(key),value)
 
   print '\n\n'
   print 'see %s' % args.output

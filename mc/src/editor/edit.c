@@ -1675,7 +1675,7 @@ edit_move_block_to_left (WEdit * edit)
  * @return number of chars printed
  */
 
-static size_t
+size_t
 edit_print_string (WEdit * e, const char *s)
 {
     size_t i = 0;
