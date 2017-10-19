@@ -46,6 +46,19 @@ else:
   debug_messages = False
   logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
 
+MCGDB_COVERAGE=bool(os.environ.get('COVERAGE'))   # pragma: no cover
+if MCGDB_COVERAGE:              # pragma: no cover
+  import coverage               # pragma: no cover
+  cov = coverage.Coverage()     # pragma: no cover
+  cov.start()                   # pragma: no cover
+  import atexit
+  def stop_coverage(cov): # pragma: no cover
+    cov.stop()          # pragma: no cover
+    cov.save()          # pragma: no cover
+    cov.html_report()   # pragma: no cover
+  atexit.register(lambda :stop_coverage(cov)) # pragma: no cover
+
+
 class mcgdbBaseException(Exception):
   def __init__(self, value=None):
     self.value = value
