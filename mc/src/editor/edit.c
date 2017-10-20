@@ -2116,6 +2116,9 @@ edit_init (WEdit * edit, int y, int x, int lines, int cols, const vfs_path_t * f
         edit_save_size (edit);
     }
 
+    edit->previous_click_x=-1;
+    edit->previous_click_y=-1;
+
     edit->drag_state = MCEDIT_DRAG_NONE;
 
     edit->stat1.st_mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;

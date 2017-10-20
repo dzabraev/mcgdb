@@ -1056,15 +1056,23 @@ edit_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event)
         else if (event->count == GPM_DOUBLE)
         {
             /* double click */
-            edit_mark_current_word_cmd (edit);
-            edit_total_update (edit);
+            if (event->x==edit->previous_click_x && event->y==edit->previous_click_y) {
+              /*This check added because if test system did two clicks at different places, and
+               *if last click clicked at word, then  last word will select.*/
+              edit_mark_current_word_cmd (edit);
+              edit_total_update (edit);
+            }
         }
         else if (event->count == GPM_TRIPLE)
         {
             /* triple click: works in GPM only, not in xterm */
-            edit_mark_current_line_cmd (edit);
-            edit_total_update (edit);
+            if (event->x==edit->previous_click_x && event->y==edit->previous_click_y) {
+              edit_mark_current_line_cmd (edit);
+              edit_total_update (edit);
+            }
         }
+        edit->previous_click_x = event->x;
+        edit->previous_click_y = event->y;
         break;
 
     case MSG_MOUSE_DRAG:

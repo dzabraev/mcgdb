@@ -19,6 +19,7 @@ ALLTESTS=[
   'variables.expand_change_null_step',
   'variables.incompl_struct',
   'variables.int',
+  'srcwin.common',
 ]
 
 
@@ -61,7 +62,7 @@ def main():
   parser.add_argument('--test',action='append',choices=ALLTESTS)
   parser.add_argument('--output',default='mcgdb.sum')
   parser.add_argument('--delay',type=float,default=2)
-  parser.add_argument('--wait',action='store_true')
+  parser.add_argument('--wait',action='store_false')
   parser.add_argument('--mcgdb',help='path to mcgdb',
     default=os.path.join(os.path.dirname(os.getcwd()),'mcgdb'),
     type=lambda x: is_valid_file(parser, x),

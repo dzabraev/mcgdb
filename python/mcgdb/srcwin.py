@@ -93,7 +93,6 @@ class SrcWin(BaseWin):
     filename,line = self.get_current_position()
     can_open = filename and self.can_open_file(filename)
     if not can_open:
-      self.exec_filename=filename
       if not self.notexistsmsg_showing:
         self.close_in_window()
         self.send({'cmd':'fopen'})
@@ -102,18 +101,21 @@ class SrcWin(BaseWin):
     else:
       if filename!=self.exec_filename or not self.exec_filename_opened:
         #execution file changed. New file can be opening.
-        self.exec_filename=filename
         self.close_in_window()
         self.send({
           'cmd'       :   'fopen',
           'filename'  :   filename,
           'line'      :   line if line!=None else 0,
         })
+        self.send({'cmd':'set_curline',  'line':line})
         self.exec_filename_opened=True
       elif filename==self.exec_filename and line!=self.exec_line and line!=None:
         assert self.exec_filename_opened==True
         self.send({'cmd':'set_curline',  'line':line})
         self.exec_line=line
+    self.exec_filename=filename
+    self.exec_line=line
+
 
 
   def update_breakpoints(self):
@@ -136,8 +138,6 @@ class SrcWin(BaseWin):
 
   #commands from editor
   def onclick_breakpoint(self,pkg):
-    if not self.exec_filename_opened:
-      return
     line=pkg['line']
     breakpoint_queue.insert_or_delete(self.exec_filename,line)
     breakpoint_queue.process()

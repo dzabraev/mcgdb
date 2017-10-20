@@ -163,6 +163,8 @@ struct WEdit
     /* line break */
     LineBreaks lb;
     gboolean extmod;
+    long previous_click_x;
+    long previous_click_y;
 };
 
 /*** global variables defined in .c file *********************************************************/

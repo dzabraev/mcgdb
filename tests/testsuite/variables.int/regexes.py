@@ -1,4 +1,3 @@
-import re
 from regexes_common import ptr,subarray_ptr
 import regexes_common
 

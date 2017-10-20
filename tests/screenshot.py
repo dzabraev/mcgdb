@@ -125,7 +125,8 @@ def diff(s1,s2,s1prev,tostring=split_dummy,regexes=[],overlay_regexes=[],special
   }
 
 
-def print_screenshot(stdscr,sshot,y,x,redmark=(-1,-1)):
+def print_screenshot(stdscr,sshot,y,x,redmark=(-1,-1), special_color=None):
+  ((sp_bg,sp_fg),sp_coords) = special_color if special_color is not None else ((None,None),[])
   cols=sshot['cols']
   rows=sshot['rows']
   buffer=sshot['buffer']
@@ -161,7 +162,11 @@ def print_screenshot(stdscr,sshot,y,x,redmark=(-1,-1)):
   for row in range(rows):
     for col in range(cols):
       char = buffer[row][col]
-      stdscr.addch(y+row+1,col+x+1,charmap.get(char.data,char.data.encode('utf8')),make_attr(char))
+      if (row,col) in sp_coords:
+        attr=get_color(sp_bg,sp_fg)
+      else:
+        attr=make_attr(char)
+      stdscr.addch(y+row+1,col+x+1,charmap.get(char.data,char.data.encode('utf8')),attr)
 
 
 def make_attr(char):
@@ -306,10 +311,10 @@ def show(stdscr,journal,journal2=None,start=0,regexes=[],overlay_regexes=[]):
   while True:
     stdscr.clear()
     r1next=get_next(journal,idx)
+    name=journal[idx]['name']
+    r1=journal[idx]
     if journal2:
       #do diff
-      name=journal[idx]['name']
-      r1=journal[idx]
       r2=journal2[idx]
       s1=r1['screenshot']
       s2=r2['screenshot']
@@ -340,7 +345,12 @@ def show(stdscr,journal,journal2=None,start=0,regexes=[],overlay_regexes=[]):
         line=y+1
     else:
       s1=journal[idx]['screenshot']
-      print_screenshot(stdscr,s1,0,0)
+      click=get_click_coord(r1next.get('stream')) if r1next is not None else None
+      if click is not None and r1next['streamto']==r1['name']:
+        special_color=get_plus(click[0],click[1])
+      else:
+        special_color=None
+      print_screenshot(stdscr,s1,0,0,special_color=special_color)
       line = s1['rows']+2 #last line
     stdscr.addstr(line,0,'')
     stdscr.addstr('action_num={}\n\r'.format(journal[idx]['action_num']))

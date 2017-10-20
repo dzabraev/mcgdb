@@ -29,34 +29,50 @@ TABID_TMP=1 #Временный экземпляр таблицы. Исполь�
 main_thread_ident=threading.current_thread().ident
 mcgdb_main=None
 
-LOG_FILENAME='/tmp/mcgdb.log'
+DEBUG       = os.environ.get('DEBUG')
+VALGRIND    = os.environ.get('VALGRIND') #run gui window under valgrind
+WIN_LIST    = os.environ.get('WIN_LIST',"aux src").split()
+COVERAGE    = os.environ.get('COVERAGE')
+COREDUMP    = os.environ.get('COREDUMP')
 
-DEBUG = os.environ.get('DEBUG')
-WITH_VALGRIND = os.environ.get('VALGRIND') #run gui window under valgrind
-WIN_LIST = os.environ.get('WIN_LIST',"aux src").split()
+def setup_logging(DEBUG):       # pragma: no cover
+  global debug_messages         # pragma: no cover
+  global debug_level            # pragma: no cover
+  if DEBUG is not None:         # pragma: no cover
+    debug_level = logging.INFO  # pragma: no cover
+    debug_messages=True         # pragma: no cover
+    if os.path.exists(DEBUG):   # pragma: no cover
+      os.remove(DEBUG)          # pragma: no cover
+    logging.basicConfig(        # pragma: no cover
+      filename=DEBUG,           # pragma: no cover
+      format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', # pragma: no cover
+      level = debug_level)      # pragma: no cover
+  else:                         # pragma: no cover
+    debug_level = logging.CRITICAL    # pragma: no cover
+    debug_messages = False      # pragma: no cover
+    logging.basicConfig(        # pragma: no cover
+      format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', # pragma: no cover
+      level = debug_level)      # pragma: no cover
 
-if 'debug' in os.environ or 'DEBUG' in os.environ:
-  level = logging.INFO
-  debug_messages=True
-  if os.path.exists(LOG_FILENAME):
-    os.remove(LOG_FILENAME)
-  logging.basicConfig(filename=LOG_FILENAME,format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
-else:
-  level = logging.CRITICAL
-  debug_messages = False
-  logging.basicConfig(format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', level = level)
-
-MCGDB_COVERAGE=bool(os.environ.get('COVERAGE'))   # pragma: no cover
-if MCGDB_COVERAGE:              # pragma: no cover
-  import coverage               # pragma: no cover
-  cov = coverage.Coverage()     # pragma: no cover
-  cov.start()                   # pragma: no cover
-  import atexit
-  def stop_coverage(cov): # pragma: no cover
-    cov.stop()          # pragma: no cover
-    cov.save()          # pragma: no cover
-    cov.html_report()   # pragma: no cover
+def setup_coverage(fname):              # pragma: no cover
+  import coverage                       # pragma: no cover
+  kwargs={}                             # pragma: no cover
+  if fname:                             # pragma: no cover
+    kwargs['config_file']=fname         # pragma: no cover
+  cov = coverage.Coverage(**kwargs)     # pragma: no cover
+  cov.start()                           # pragma: no cover
+  import atexit                         # pragma: no cover
+  def stop_coverage(cov):               # pragma: no cover
+    cov.stop()                          # pragma: no cover
+    cov.save()                          # pragma: no cover
+    cov.html_report()                   # pragma: no cover
   atexit.register(lambda :stop_coverage(cov)) # pragma: no cover
+
+
+
+if COVERAGE is not None:              # pragma: no cover
+  setup_coverage(COVERAGE)            # pragma: no cover
+setup_logging(DEBUG)
 
 
 class mcgdbBaseException(Exception):
@@ -403,7 +419,8 @@ def is_main_thread():
 class IOFailure(Exception): pass
 
 def debug(msg):
-  if level==logging.DEBUG:
+  global debug_level
+  if debug_level==logging.DEBUG:
     #эта блокировка нужна, поскольку exec_in_main_pythread
     #делает блокировки. И лучше их избегать.
     exec_in_main_pythread (logging.debug,(msg,))
@@ -551,7 +568,7 @@ class BreakpointQueue(GdbBreakpoints):
       return
     bp=self.find_bp_in_gdb(filename,line)
     if bp==None:
-      #this bp not exists
+      #this bp does not exists
       self.queue.append( ('insert',{
         'filename':filename,
         'line':line,

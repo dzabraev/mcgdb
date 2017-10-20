@@ -40,7 +40,11 @@ class AllWinClosed(Exception): pass
 class XtermSpawn(object):
   __metaclass__ = ABCMeta
 
-  def __init__(self,xterm,executable,journal,name,print_tokens=False,*args,**kwargs):
+  def __init__(self,xterm,executable,journal,name,print_tokens=False,env=None,*args,**kwargs):
+    if env is not None:
+      self.env=env
+    else:
+      self.env={}
     self.print_tokens = print_tokens
     self.xterm=xterm #executable
     self.journal = journal
@@ -138,7 +142,9 @@ class XtermSpawn(object):
     return None
 
   def get_environ(self):
-    return {'TERM':'xterm'}
+    env = {'TERM':'xterm'}
+    env.update(self.env)
+    return env
 
   def journal_add_stream(self,data):
     self.journal.append({'stream':data, 'name':self.name})
@@ -349,7 +355,17 @@ def main():
   parser.add_argument('--print_records',help='print input from windows', action='store_true')
   parser.add_argument('--print_tokens',help='print not cookied records', action='store_true')
   parser.add_argument('--xterm',choices=['xterm','gnome-terminal'],default='gnome-terminal')
+  parser.add_argument('--coverage',nargs='?',const=os.path.abspath(os.path.join(os.path.dirname(__file__),'.coveragerc')))
+  parser.add_argument('--valgrind',nargs='?',const=os.path.abspath(os.path.join(os.path.dirname(__file__),'valgrind-')))
+  parser.add_argument('--coredump',nargs='?',const=os.path.abspath(os.path.dirname(__file__)))
   args = parser.parse_args()
+  ENV={}
+  if args.coverage:
+    ENV['COVERAGE']=args.coverage
+  if args.valgrind:
+    ENV['VALGRIND']=args.valgrind
+  if args.coredump:
+    ENV['COREDUMP']=args.coredump
   xterm = distutils.spawn.find_executable(args.xterm)
   print 'start recording to {}'.format(args.output)
   journal_kwargs={
@@ -375,7 +391,7 @@ def main():
       win_names = ['aux','src','asm']
   win_names = list(set(win_names))
   print 'type Ctrl+C for stop recording'
-  gdb=XtermGdb(xterm=xterm,journal=journal,name='gdb',executable=args.mcgdb)
+  gdb=XtermGdb(xterm=xterm,journal=journal,name='gdb',executable=args.mcgdb,env=ENV)
   wins = dict(gdb=gdb,**{name:open_window(xterm,gdb,journal,name,print_tokens=args.print_tokens) for name in win_names})
   entities=dict(map(lambda x:(x.get_feed_fd(),x), wins.values()))
   rlist=list(entities.keys())
