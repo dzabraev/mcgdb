@@ -1765,7 +1765,7 @@ do_nc (void)
           setup_dummy_mc ();
           switch(mcgdb_wtype) {
             case MCGDB_SRCWIN:
-              ret = mc_maybe_editor_or_viewer ();
+              ret = mcgdb_src_dlg ();
               break;
             case MCGDB_AUXWIN:
               ret = mcgdb_aux_dlg ();

@@ -1679,11 +1679,16 @@ edit_save_mode_cmd (void)
 void
 edit_set_filename (WEdit * edit, const vfs_path_t * name_vpath)
 {
+    vfs_path_t *tmp;
     vfs_path_free (edit->filename_vpath);
     edit->filename_vpath = vfs_path_clone (name_vpath);
 
     if (edit->dir_vpath == NULL)
         edit->dir_vpath = vfs_path_clone (vfs_get_raw_current_dir ());
+
+    tmp = vfs_path_to_absolute (name_vpath);
+    edit->filename = vfs_path_to_str_flags (tmp,0,0);
+    vfs_path_free (tmp);
 }
 
 /* --------------------------------------------------------------------------------------------- */

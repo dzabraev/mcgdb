@@ -35,6 +35,7 @@ int mcgdb_listen_port;
 int gdb_input_fd;
 
 gboolean read_gdb_events;
+gboolean mcgdb_exit_from_loop;
 
 int mcgdb_current_line_color;
 long mcgdb_curline; /*current execution line number*/
@@ -249,58 +250,33 @@ get_command_num(json_t *pkg) {
   else {
     command = json_string_value(val);
 #   define compare_cmd(CMD) (!strncmp(command,(CMD),strlen( (CMD) )))
-    if(      compare_cmd("mark") ) {
-      return MCGDB_MARK;
-    }
-    else if( compare_cmd("unmark_all") ) {
-      return MCGDB_UNMARK_ALL;
-    }
-    else if( compare_cmd("unmark") ) {
-      return MCGDB_UNMARK;
-    }
-    else if( compare_cmd("goto") ) {
-      return MCGDB_GOTO;
-    }
-    else if( compare_cmd("fopen") ) {
-      return MCGDB_FOPEN;
-    }
-    else if( compare_cmd("fclose") ) {
-      return MCGDB_FCLOSE;
-    }
-    else if( compare_cmd("set_window_type") ) {
-      return MCGDB_SET_WINDOW_TYPE;
-    }
-    else if( compare_cmd("breakpoints") ) {
-      return MCGDB_BREAKPOINTS;
-    }
-    else if( compare_cmd("color")) {
-      return MCGDB_COLOR;
-    }
-    else if (compare_cmd("set_curline")) {
-      return MCGDB_SET_CURLINE;
-    }
-    else if (compare_cmd("exit")) {
-      return MCGDB_EXIT;
-    }
-    else if (compare_cmd("error_message")) {
-      return MCGDB_ERROR_MESSAGE;
-    }
-    else if (compare_cmd("update_nodes")) {
-      return MCGDB_UPDATE_NODES;
-    }
-    else if (compare_cmd("do_row_visible")) {
-      return MCGDB_DO_ROW_VISIBLE;
-    }
-    else if (compare_cmd("exemplar_create")) {return MCGDB_EXEMPLAR_CREATE;}
-    else if (compare_cmd("exemplar_drop"))   {return MCGDB_EXEMPLAR_DROP;}
-    else if (compare_cmd("exemplar_set"))    {return MCGDB_EXEMPLAR_SET;}
-    else if (compare_cmd("exemplar_copy"))   {return MCGDB_EXEMPLAR_COPY;}
-    else if (compare_cmd("transaction"))     {return MCGDB_TRANSACTION;}
-    else if (compare_cmd("drop_rows"))       {return MCGDB_DROP_ROWS;}
-    else if (compare_cmd("drop_nodes"))      {return MCGDB_DROP_NODES;}
-    else if (compare_cmd("insert_rows"))     {return MCGDB_INSERT_ROWS;}
-    else if (compare_cmd("call_cb"))         {return MCGDB_CALL_CB;}
-    else if (compare_cmd("insert_str"))      {return MCGDB_INSERT_STR;}
+    /*editor commands*/
+    if(      compare_cmd("mark"))               {return MCGDB_MARK;}
+    else if (compare_cmd("unmark_all"))         {return MCGDB_UNMARK_ALL;}
+    else if (compare_cmd("unmark"))             {return MCGDB_UNMARK;}
+    else if (compare_cmd("goto"))               {return MCGDB_GOTO;}
+    else if (compare_cmd("fopen") )             {return MCGDB_FOPEN;}
+    else if (compare_cmd("fclose") )            {return MCGDB_FCLOSE;}
+    else if (compare_cmd("insert_str"))         {return MCGDB_INSERT_STR;}
+    else if (compare_cmd("bpmark"))             {return MCGDB_BPMARK;}
+
+    else if (compare_cmd("set_window_type"))    {return MCGDB_SET_WINDOW_TYPE;}
+    else if (compare_cmd("breakpoints") )       {return MCGDB_BREAKPOINTS;}
+    else if (compare_cmd("color"))              {return MCGDB_COLOR;}
+    else if (compare_cmd("set_curline"))        {return MCGDB_SET_CURLINE;}
+    else if (compare_cmd("exit"))               {return MCGDB_EXIT;}
+    else if (compare_cmd("error_message"))      {return MCGDB_ERROR_MESSAGE;}
+    else if (compare_cmd("update_nodes"))       {return MCGDB_UPDATE_NODES;}
+    else if (compare_cmd("do_row_visible"))     {return MCGDB_DO_ROW_VISIBLE;}
+    else if (compare_cmd("exemplar_create"))    {return MCGDB_EXEMPLAR_CREATE;}
+    else if (compare_cmd("exemplar_drop"))      {return MCGDB_EXEMPLAR_DROP;}
+    else if (compare_cmd("exemplar_set"))       {return MCGDB_EXEMPLAR_SET;}
+    else if (compare_cmd("exemplar_copy"))      {return MCGDB_EXEMPLAR_COPY;}
+    else if (compare_cmd("transaction"))        {return MCGDB_TRANSACTION;}
+    else if (compare_cmd("drop_rows"))          {return MCGDB_DROP_ROWS;}
+    else if (compare_cmd("drop_nodes"))         {return MCGDB_DROP_NODES;}
+    else if (compare_cmd("insert_rows"))        {return MCGDB_INSERT_ROWS;}
+    else if (compare_cmd("call_cb"))            {return MCGDB_CALL_CB;}
     else {
       cmd = MCGDB_UNKNOWN;
       message_assert (cmd!=MCGDB_UNKNOWN);
@@ -397,6 +373,7 @@ pkg_breakpoints(json_t *pkg) {
   process_lines_array (json_object_get (pkg,"disabled"),    mcgdb_bp_insert_disabled);
 }
 
+#if 0
 static void
 pkg_fopen (json_t *pkg, WEdit * edit) {
   const char *filename;
@@ -413,6 +390,7 @@ pkg_fopen (json_t *pkg, WEdit * edit) {
   текущую строку. Это надо делать следующим пакетом.*/
   //TODO нужно ли очищать vfs_path ?
 }
+#endif
 
 static void
 pkg_goto (json_t *pkg, WEdit * edit) {
@@ -458,11 +436,8 @@ pkg_set_curline (json_t *pkg, WEdit * edit) {
 int
 process_action_from_gdb_edit(WEdit * edit, struct gdb_action * act) {
   json_t *pkg=act->pkg;
-  assert(act->command!=MCGDB_FCLOSE);
+  assert(act->command!=MCGDB_FCLOSE && act->command!=MCGDB_EXIT);
   switch(act->command) {
-    case MCGDB_EXIT:
-      mcgdb_exit ();
-      break;
     case MCGDB_MARK:
       pkg_mark (pkg,edit);
       break;
@@ -474,9 +449,6 @@ process_action_from_gdb_edit(WEdit * edit, struct gdb_action * act) {
       break;
     case MCGDB_BREAKPOINTS:
       pkg_breakpoints (pkg);
-      break;
-    case MCGDB_FOPEN:
-      pkg_fopen (pkg,edit);
       break;
     case MCGDB_GOTO:
       pkg_goto (pkg,edit);
@@ -491,6 +463,8 @@ process_action_from_gdb_edit(WEdit * edit, struct gdb_action * act) {
       edit_print_string (edit, json_string_value (json_object_get (pkg,"msg")));
       edit->modified=FALSE; /*prevent asking about saving*/
       break;
+    case MCGDB_BPMARK:
+      edit->bpmark = myjson_bool(pkg,"bpmark");
     default:
       break;
   }
@@ -545,6 +519,10 @@ mcgdb_gdbevt_covert_to_key (void) {
   switch( event_from_gdb->command ) {
     case MCGDB_FCLOSE:
       d_key=KEY_F(19); /*this button will be translate into CK_Quit*/
+      break;
+    case MCGDB_EXIT:
+      d_key=KEY_F(19);
+      mcgdb_exit_from_loop = TRUE;
       break;
     default:
       abort ();
@@ -753,8 +731,8 @@ mcgdb_set_color (json_t * pkg, WEdit * edit) {
   edit->force |= REDRAW_COMPLETELY;
 }
 
-void
-mcgdb_init(void) {
+static void
+mcgdb_module_init(void) {
   mcgdb_curline=-1;
   mcgdb_current_line_color   = tty_try_alloc_color_pair2 ("red", "black",   "bold", FALSE);
   mcgdb_bp_color_normal      = tty_try_alloc_color_pair2 ("red", "black",   NULL, FALSE);
@@ -766,22 +744,16 @@ mcgdb_init(void) {
 
 
 void
-mcgdb_cmd_breakpoint (WEdit * e) {
-  char *pkg;
-  long curline = e->buffer.curs_line+1;
-  asprintf (&pkg,"{\"cmd\":\"onclick\",\"onclick\":\"breakpoint\",\"line\": %ld}",curline);
-  send_pkg_to_gdb (pkg);
-  free (pkg);
+mcgdb_cmd_breakpoint (WEdit * edit) {
+  mcgdb_bp_process_click (
+    edit->filename,
+    edit->buffer.curs_line+1,
+    FALSE);
 }
 
-void
-mcgdb_cmd_disableenable_bp (WEdit * e) {
-  char *pkg;
-  long curline = e->buffer.curs_line+1;
-  asprintf (&pkg,"{\"cmd\":\"onclick\",\"onclick\":\"breakpoint_de\",\"line\": %ld}",curline);
-  send_pkg_to_gdb (pkg);
-  free (pkg);
+mcgdb_cmd_disableenable_bp (WEdit * edit) {
 }
+
 
 void
 mcgdb_cmd_goto_eline (void) {
@@ -820,4 +792,24 @@ __message_assert (const char *EX, const char *filename, int line) {
   edit_error_dialog("ASSERT FAILED",str);
   abort();
 }
+
+
+gboolean
+mcgdb_src_dlg(void) {
+  mcgdb_exit_from_loop=FALSE;
+  mcgdb_module_init();
+  mcgdb_bp_module_init();
+  while (!mcgdb_exit_from_loop) {
+    json_t * pkg = read_pkg_from_gdb();
+    gdb_cmd cmd = get_command_num(pkg);
+    const char *filename = json_string_value (json_object_get (pkg, "filename"));
+    long line = json_integer_value (json_object_get (pkg, "line"));
+    message_assert (cmd==MCGDB_FOPEN);
+    vfs_path_t *vfs_filename = filename ? vfs_path_build_filename(filename, (char *) NULL) : NULL;
+    edit_file (vfs_filename,line);
+    vfs_path_free (vfs_filename);
+  }
+  mcgdb_bp_module_free();
+}
+
 

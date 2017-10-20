@@ -6,29 +6,38 @@ extern int mcgdb_bp_color_wait_insert;
 extern int mcgdb_bp_color_normal;
 extern int mcgdb_bp_color_disabled;
 
-typedef enum bptype {
-  BP_NORMAL,
-  BP_DISABLED,
-  BP_WAIT_REMOVE,
-  BP_WAIT_INSERT
-} bptype;
+
+typedef enum bpwait {
+  BP_NOWAIT,
+  BP_WAIT_DELETE,
+  BP_WAIT_INSERT,
+  BP_WAIT_UPDATE,
+} bpwait
 
 typedef struct mcgdb_bp{
   long line;
-  bptype type;
-} mcgdb_bp;
+  char *filename;
+  bpwait wait;
+  char *condition;
+  gboolean disabled;
+} mcgdb_bp
 
 
-mcgdb_bp*       mcgdb_bp_get(long line); /*return mcgdb_bp if at line `line` exists breakpoint, else NULL*/
-void            mcgdb_bp_remove(long line);
+void            mcgdb_bp_module_init(void);
+void            mcgdb_bp_module_free(void);
 void            mcgdb_bp_remove_all(void);
-void            mcgdb_bp_init(void);
-void            mcgdb_bp_free(void);
-int             mcgdb_bp_color(mcgdb_bp * bp);
 
-void mcgdb_bp_insert_normal      (long line);
-void mcgdb_bp_insert_wait_remove (long line);
-void mcgdb_bp_insert_wait_insert (long line);
-void mcgdb_bp_insert_disabled    (long line);
+
+mcgdb_bp*       mcgdb_bp_get    (const char *filename, long line); /*return mcgdb_bp if at line `line` exists breakpoint, else NULL*/
+void            mcgdb_bp_remove (const char *filename, long line);
+
+int     mcgdb_bp_color  (mcgdb_bp * bp); /*return color for drawing*/
+void    mcgdb_set_status(mcgdb_bp * bp);
+
+void
+mcgdb_bp_process_click(const char *filename, long line, gboolean ask_cond);
+
+void mcgdb_bp_insert (const char * filename, long line, bpwait wait, char * condition, gboolean disabled);
+void mcgdb_bp_toggle_disable (const char * filename, long line);
 
 #endif

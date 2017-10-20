@@ -141,8 +141,6 @@ int mcgdb_permissible_key(WEdit * e, int c);
 void
 mcgdb_set_color (struct json_t * pkg, WEdit * edit);
 
-void mcgdb_init(void);
-
 gboolean mcgdb_available_key(int c);
 
 void mcgdb_cmd_print(void);
@@ -179,7 +177,7 @@ typedef struct cbPair {
 
 int data_ptr_register (void *data);
 
-
+gboolean mcgdb_src_dlg(void);
 
 #endif /*__mcgdb_h_*/
 

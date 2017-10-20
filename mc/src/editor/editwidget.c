@@ -987,7 +987,6 @@ edit_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event)
     /* location of 'Close' and 'Toggle fullscreen' pictograms */
     int close_x, toggle_fullscreen_x;
 
-    mcgdb_send_mouse_event_to_gdb(edit, event);
     if ( mcgdb_ignore_mouse_event(edit, event) ) {
       event->result.abort=TRUE;
       return;
@@ -1030,7 +1029,7 @@ edit_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event)
             if (event->y == w->lines - 1 && event->x == w->cols - 1)
             {
                 /* bottom-right corner -- start window resize */
-                edit_execute_cmd (edit, CK_WindowResize, -1);
+                edit_execute_cmd (edit->filename, CK_WindowResize, -1);
                 break;
             }
         }
@@ -1043,6 +1042,10 @@ edit_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event)
         break;
 
     case MSG_MOUSE_CLICK:
+        if (edit->bpset && event->x < LINE_STATE_WIDTH) {
+          gboolean ask_cond = event->x < LINE_STATE_WIDTH/2;
+          mcgdb_bp_process_click(edit->filename, event->y, ask_cond);
+        }
         if (event->y == 0)
         {
             if (event->x == close_x)

@@ -96,6 +96,7 @@ class SrcWin(BaseWin):
       if not self.notexistsmsg_showing:
         self.close_in_window()
         self.send({'cmd':'fopen'})
+        self.send({'cmd':'bpmark','bpmark':False})
         self.send({'cmd':'insert_str','msg':"Current execution position or source file is unknown.\nOr file can't be open."})
         self.notexistsmsg_showing=True
     else:
@@ -107,6 +108,7 @@ class SrcWin(BaseWin):
           'filename'  :   filename,
           'line'      :   line if line!=None else 0,
         })
+        self.send({'cmd':'bpmark','bpmark':True})
         self.send({'cmd':'set_curline',  'line':line})
         self.exec_filename_opened=True
       elif filename==self.exec_filename and line!=self.exec_line and line!=None:
@@ -138,10 +140,76 @@ class SrcWin(BaseWin):
 
   #commands from editor
   def onclick_breakpoint(self,pkg):
+    action = pkg['action']
+    if action in ('insert','update'):
+      self.breakpoint_insert(
+        filename  =   pkg['filename'],
+        line      =   pkg['line'],
+        condition =   pkg.get('condition','')
+        disabled  =   pkg['disabled']
+      )
+    elif action=="delete":
+      self.breakpoint_delete(
+        filename  =   pkg['filename'],
+        line      =   pkg['line'],
+      )
+
     line=pkg['line']
     breakpoint_queue.insert_or_delete(self.exec_filename,line)
     breakpoint_queue.process()
     return [{'cmd':'check_breakpoint'}]
+
+
+  def __bp_delete_pending(self,filename,line):
+    key=(filename,line)
+    if key in self.__bps_insert:
+      def self.__bps_insert[key]
+    else:
+      self.__bps_delete.add(key)
+
+  def __bp_delete(self,filename,line):
+    bp=self.find_bp_in_gdb(filename,line)
+    bp.delete()
+    self.notify_bp_deleted(filename,line)
+    return [{'cmd':'check_breakpoint'}]
+
+  def __bp_insert_pending(self,filename,line,condition,disabled):
+    key=(filename,line)
+    if key in self.__bps_delete:
+      self.__bps_delete.remove(key)
+    self.__bps_insert[key]={
+      'filename':filename,
+      'line':line,
+      'condition':condition,
+      'disabled':disabled,
+    }
+
+  def __bp_insert(self,filename,line,condition,disabled):
+    bp=gdb.Breakpoint('{}:{}'.format(filename,line))
+    if condition:
+      bp.condition=condition
+    bp.disabled=disabled
+    self.notify_bp_inserted(filename,line)
+    return [{'cmd':'check_breakpoint'}]
+
+  def __process_brekpoints(self):
+    for filename,line in self.__bps_delete:
+      bp=self.find_bp_in_gdb(filename,line)
+      bp.delete()
+      self.notify_bp_deleted(filename,line)
+
+
+  def breakpoint_insert(self,filename,line,condition,disabled):
+    return if_gdbstopped_else(
+      stopped=lambda : self.__bp_insert(filename,line,condition,disabled),
+      running=lambda : self.__bp_insert_pending(filename,line,condition,disabled),
+    )
+
+  def breakpoint_delete(self,filename,line):
+    return if_gdbstopped_else(
+      stopped=lambda : self.__bp_delete(filename,line),
+      running=lambda : self.__bp_delete_pending(filename,line),
+    )
 
   def onclick_breakpoint_de(self,pkg):
     ''' Disable/enable breakpoint'''
