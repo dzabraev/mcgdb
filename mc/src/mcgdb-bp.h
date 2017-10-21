@@ -10,16 +10,21 @@ extern int mcgdb_bp_color_disabled;
 typedef enum bpwait {
   BP_NOWAIT,
   BP_WAIT_DELETE,
-  BP_WAIT_INSERT,
   BP_WAIT_UPDATE,
 } bpwait
 
 typedef struct mcgdb_bp{
+  gboolean enabled;
+  gboolean silent;
+  int ignore_count;
+  gboolean temporary;
+  int thread;
+  char *condition;
+  char *commands;
   long line;
   char *filename;
-  bpwait wait;
-  char *condition;
-  gboolean disabled;
+  int id;
+  bpwait wait_status;
 } mcgdb_bp
 
 

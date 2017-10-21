@@ -25,6 +25,7 @@ class SrcWin(BaseWin):
   def process_connection(self):
     rc=super(SrcWin,self).process_connection()
     if rc:
+      self.update_thread()
       self.update_current_frame()
       self.update_breakpoints()
     return rc
@@ -73,7 +74,12 @@ class SrcWin(BaseWin):
 
   def mcgdbevt_thread(self,pkg):
     self.update_current_frame()
-    self.update_breakpoints()
+    self.update_thread()
+
+  def update_thread(self):
+    thnum=gdb.selected_thread().num
+    self.send({'cmd':'setthread','id':thnum})
+
 
   def pkg_delete_bps(self,bps):
     ids=[]
@@ -82,7 +88,7 @@ class SrcWin(BaseWin):
       if external_id is not None:
         ids.append(external_id)
     return {
-      'cmd':'bps_del',
+      'cmd':'bpsdel',
       'ids':ids,
     }
 
@@ -101,7 +107,7 @@ class SrcWin(BaseWin):
         bp_data['external_id']=external_id
       bps_data.append(bp_data)
     return {
-      'cmd':'bps_create',
+      'cmd':'bpsupd',
       'bps_data':bps_data,
     }
 

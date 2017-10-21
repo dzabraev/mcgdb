@@ -34,6 +34,8 @@
 int mcgdb_listen_port;
 int gdb_input_fd;
 
+int mcgdb_current_thread_id=-1;
+
 gboolean read_gdb_events;
 gboolean mcgdb_exit_from_loop;
 
@@ -258,7 +260,9 @@ get_command_num(json_t *pkg) {
     else if (compare_cmd("fopen") )             {return MCGDB_FOPEN;}
     else if (compare_cmd("fclose") )            {return MCGDB_FCLOSE;}
     else if (compare_cmd("insert_str"))         {return MCGDB_INSERT_STR;}
-    else if (compare_cmd("bpmark"))             {return MCGDB_BPMARK;}
+    else if (compare_cmd("setthread"))          {return MCGDB_SETTHREAD;}
+    else if (compare_cmd("bpsdel"))             {return MCGDB_BPSUPD;}
+    else if (compare_cmd("bpsupd"))             {return MCGDB_BPSDEL;}
 
     else if (compare_cmd("set_window_type"))    {return MCGDB_SET_WINDOW_TYPE;}
     else if (compare_cmd("breakpoints") )       {return MCGDB_BREAKPOINTS;}
@@ -447,8 +451,13 @@ process_action_from_gdb_edit(WEdit * edit, struct gdb_action * act) {
     case MCGDB_UNMARK_ALL:
       pkg_unmark_all (edit);
       break;
-    case MCGDB_BREAKPOINTS:
-      pkg_breakpoints (pkg);
+    case MCGDB_SETTHREAD:
+      mcgdb_current_thread_id = myjson_int (pkg,"id");
+    case MCGDB_BPSDEL:
+      pkg_bps_del (pkg);
+      break;
+    case MCGDB_BPSUPD:
+      pkg_bps_update (pkg);
       break;
     case MCGDB_GOTO:
       pkg_goto (pkg,edit);

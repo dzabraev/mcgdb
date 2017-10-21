@@ -7,6 +7,7 @@
 #include "src/mcgdb-bp.h"
 
 static GList * mcgdb_bps = NULL;
+static int id_counter=1;
 
 #define MCGDB_BP(l) ((mcgdb_bp *)(l->data))
 
@@ -72,26 +73,6 @@ mcgdb_bp_remove_all (void) {
   mcgdb_bps = NULL;
 }
 
-int
-mcgdb_bp_color(mcgdb_bp * bp) {
-  if (bp->disabled) {
-    return mcgdb_bp_color_disabled;
-  }
-  else {
-    switch(bp->type) {
-      case BP_WAIT_DELETE:
-        return mcgdb_bp_color_wait_remove;
-      case BP_WAIT_INSERT:
-      case BP_WAIT_UPDATE:
-        return mcgdb_bp_color_wait_insert;
-      default:
-        return mcgdb_bp_color_normal;
-    }
-  }
-}
-
-void
-mcgdb_bp_disable(const char *filename, long line)
 
 void
 mcgdb_bp_insert (const char * filename, long line, bpwait wait, char * condition, gboolean disabled) {
@@ -255,3 +236,217 @@ mcgdb_bp_process_click(const char *filename, long line, gboolean ask_cond) {
   free (sresp);
   json_decref (resp);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+int
+mcgdb_bp_color(const char * filename, int line) {
+  gboolean  exists_enable_no_cond=FALSE,
+            exists_enable=FALSE,
+            exists_disable=FALSE,
+            exists_wait_del=FALSE,
+            exists_wait_upd=FALSE;
+  message_assert (mcgdb_current_thread_id!=-1);
+
+  for(l=mcgdb_bps;l!=NULL;l=l->next) {
+    bp = MCGDB_BP(l);
+    if (bp->thread!=-1 && bp->thread!=mcgdb_current_thread_id)
+      continue;
+    if (bp->line!=line || strcmp(bp->filename,filename))
+      continue;
+    if (bp->wait_status==BP_NOWAIT) {
+      if (bp->enable) {
+        exists_enable=TRUE;
+        if (!bp->condition) {
+          exists_enable_no_cond=TRUE;
+        }
+      }
+      else {
+        exists_disable=TRUE;
+      }
+    }
+    else {
+      switch (bp->type) {
+        case BP_WAIT_UPDATE:
+          exists_wait_upd=TRUE;
+          break;
+        case BP_WAIT_DELETE:
+          exists_wait_del=TRUE;
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  if (exists_wait_upd)
+    return mcgdb_bp_color_wait_insert;
+  else if (exists_wait_del)
+    return mcgdb_bp_color_wait_remove;
+  else if (exists_enable_no_cond)
+    return mcgdb_bp_color_normal;
+  else if (exists_enable)
+    return mcgdb_bp_color_normal;
+  else if (exists_disable)
+    return mcgdb_bp_color_disabled;
+  else
+    return -1;
+}
+
+static void
+mcgdb_bp_free (mcgdb_bp * bp) {
+  message_assert (bp->filename!=NULL);
+  g_free (bp->filename);
+  if (bp->condition)
+    g_free (bp->condition);
+  if (bp->commands)
+    g_free (bp->commands);
+  g_free (bp);
+}
+
+
+static mcgdb_bp *
+mcgdb_bp_new (const char *filename, int line) {
+  mcgdb_bp * bp = g_new(mcgdb_bp,1);
+  bp->enabled=TRUE;
+  bp->silent=FALSE;
+  bp->ignore_count=0;
+  bp->temporary=FALSE;
+  bp->thread=-1;
+  bp->condition=NULL;
+  bp->commands=NULL;
+  bp->filename=strdup(filename);
+  bp->line=line;
+  bp->id = bp_counter++;
+  bp->wait_status = BP_WAIT_UPDATE;
+  return bp;
+}
+
+
+
+static void
+delete_by_id (int id) {
+  for(l=mcgdb_bps;l!=NULL;l=l->next) {
+    bp = MCGDB_BP(l);
+    if (bp->id==id) {
+      mcgdb_bps = g_list_remove_link (mcgdb_bps, l);
+      free_bp (bp);
+      g_list_free (l);
+      return;
+    }
+  }
+}
+
+static mcgdb_bp *
+get_by_id (int id) {
+  for(l=mcgdb_bps;l!=NULL;l=l->next) {
+    bp = MCGDB_BP(l);
+    if (bp->id==id) {
+      return bp
+    }
+  }
+  return NULL;
+}
+
+static void
+insert_bp_to_list (mcgdb *bp) {
+  mcgdb_bps = g_list_append (mcgdb_bp, bp);
+}
+
+void pkg_bps_del(json_t *pkg) {
+  json_t *ids = myjson_array (pkg,"ids");
+  mcgdb_bp * bp;
+  int len = json_array_size (ids);
+  for (int i=0;i<len;i++) {
+    int id = json_integer_value (json_array_get (ids,i));
+    bp = get_by_id (id);
+    if (bp->wait_status==BP_WAIT_UPDATE) {
+      /* deletion canceled. waiting update package */
+      continue
+    }
+    delete_by_id (id);
+  }
+}
+
+void pkg_bps_update(json_t *pkg) {
+  json_t *bps_data = myjson_array (pkg,"bps_data");
+  int len = json_array_size (bps_data);
+  for (int i=0;i<len;i++) {
+    json_t *bp_data = json_array_get (bps_data,i);
+    json_t *tmp;
+    mcgdb_bp *bp
+    tmp = json_object_get (bp_data,"external_id");
+    if (tmp) {
+      int id = json_integer_value (tmp)
+      bp = get_by_id (id);
+      if (bp->wait_status==BP_WAIT_DELETE) {
+        /*this bp was created and quickly deleted. wait next that delete this breakpoint*/
+        continue;
+      }
+      message_asstert (bp!=NULL);
+    }
+    else {
+      const char * filename = myjson_str (bp_data,"filename");
+      int line = myjson_int (bp_data,"line");
+      bp = mcgdb_bp_new (filename,line);
+      insert_bp_to_list (bp);
+    }
+
+    tmp = json_object_get (bp_data,"enabled");
+    if (tmp)
+      bp->enabled=json_boolean_value (tmp);
+
+    tmp = json_object_get (bp_data,"silent");
+    if (tmp)
+      bp->silent=json_boolean_value (tmp);
+
+    tmp = json_object_get (bp_data,"ignore_count");
+    if (tmp)
+      bp->ignore_count = json_integer_value (tmp);
+
+    tmp = json_object_get (bp_data,"temporary");
+    if (tmp)
+      bp->temporary = json_boolean_value (tmp);
+
+    tmp = json_object_get (bp_data,"thread");
+    if (tmp)
+      bp->thread = json_integer_value (tmp);
+
+    tmp = json_object_get (bp_data,"condition");
+    if (tmp) {
+      if (bp->condition)
+        g_free (bp->condition);
+      bp->condition = strdup (json_integer_value (tmp));
+    }
+
+    tmp = json_object_get (bp_data,"commands");
+    if (tmp) {
+      if (bp->commands)
+        g_free (bp->commands);
+      bp->commands = strdup (json_integer_value (tmp));
+    }
+  }
+}
+
+
+
+
+
