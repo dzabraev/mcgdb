@@ -4,7 +4,7 @@ import gdb
 import os,stat
 
 from mcgdb.basewin import BaseWin
-from mcgdb.common import breakpoint_queue
+from mcgdb.common import bpModif
 from mcgdb.common import gdb_print, exec_main, gdbprint
 
 class SrcWin(BaseWin):
@@ -20,6 +20,7 @@ class SrcWin(BaseWin):
     self.exec_line=None     #номер строки текущей позиции исполнения программы
     self.exec_filename_opened=False
     self.notexistsmsg_showing=False
+    self.bp_gdb_mc={} #map breakpoint id. gdb_bp_id --> mcedit_bp_id
 
   def process_connection(self):
     rc=super(SrcWin,self).process_connection()
@@ -33,7 +34,7 @@ class SrcWin(BaseWin):
 
   def gdbevt_stop(self,pkg):
     self.update_current_frame()
-    self.update_breakpoints()
+    #self.update_breakpoints()
 
   def gdbevt_new_objfile(self,pkg):
     self.update_current_frame()
@@ -42,13 +43,16 @@ class SrcWin(BaseWin):
     self.update_current_frame()
 
   def gdbevt_breakpoint_created(self,pkg):
-    self.update_breakpoints()
+    bp, = pkg['evt']
+    self.send(self.pkg_update_bps([bp]))
 
   def gdbevt_breakpoint_modified(self,pkg):
-    self.update_breakpoints()
+    bp, = pkg['evt']
+    self.send(self.pkg_update_bps([bp]))
 
   def gdbevt_breakpoint_deleted(self,pkg):
-    self.update_breakpoints()
+    bp, = pkg['evt']
+    self.send(self.pkg_delete_bps([bp]))
 
 
   def shellcmd_up(self,pkg):
@@ -70,6 +74,63 @@ class SrcWin(BaseWin):
   def mcgdbevt_thread(self,pkg):
     self.update_current_frame()
     self.update_breakpoints()
+
+  def pkg_delete_bps(self,bps):
+    ids=[]
+    for bp in bps:
+      external_id = self.bp_gdb_mc.get(bp.number)
+      if external_id is not None:
+        ids.append(external_id)
+    return {
+      'cmd':'bps_del',
+      'ids':ids,
+    }
+
+  def pkg_update_bps(self,bps):
+    bps_data=[]
+    for bp in bps:
+      if not bp.is_valid() or not bp.visible or bp.type!=gdb.BP_BREAKPOINT:
+        continue
+      bp_data={}
+      for name in ['silent','thread','ignore_count','number','temporary','hit_count','condition','commands']:
+        value = getattr(bp,name)
+        if value is not None:
+          bp_data[name]=value
+      external_id = self.bp_gdb_mc.get(bp.number)
+      if external_id is not None:
+        bp_data['external_id']=external_id
+      bps_data.append(bp_data)
+    return {
+      'cmd':'bps_create',
+      'bps_data':bps_data,
+    }
+
+  def update_breakpoints(self):
+    self.send(self.pkg_update_bps(gdb.breakpoints()))
+
+  #commands from editor
+  def onclick_breakpoint(self,pkg):
+    for bpid in pkg.get('delete_mc_bpids',[]):
+      bpModif.delete(win_id=id(self),external_id=bpid)
+    for bp_data in pkg.get('update',[]):
+      #cration or modification
+      kwargs={name:pkg.get(name) for name in [
+        'enabled','silent','ignore_count','temporary','thread',
+        'condition','commands','external_id'
+      ]}
+      external_id  = bp_data['external_id']
+      number = bp_data.get('number')
+      if number is not None and external_id not in self.bp_gdb_mc:
+        self.bp_gdb_mc[external_id] = number
+      if number is not None:
+        kwargs['number']=number
+      else:
+        kwargs['filename']=bp_data['filename']
+        kwargs['line']=bp_data['line']
+        kwargs['after_create']= (lambda external_id : lambda bp: self.bp_gdb_mc.update({bp.number:external_id}))(external_id)
+      bpModif.update(win_id=id(self),**kwargs)
+
+
 
   def can_open_file(self,filename):
     return os.path.exists(filename) and \
@@ -118,103 +179,6 @@ class SrcWin(BaseWin):
     self.exec_filename=filename
     self.exec_line=line
 
-
-
-  def update_breakpoints(self):
-    if not self.exec_filename_opened:
-      return
-    normal=breakpoint_queue.get_bps_locs_normal(self.exec_filename)
-    disabled=breakpoint_queue.get_bps_locs_disabled(self.exec_filename)
-    wait_remove=breakpoint_queue.get_bps_locs_wait_remove(self.exec_filename)
-    wait_insert=breakpoint_queue.get_bps_locs_wait_insert(self.exec_filename)
-    pkg={
-      'cmd':'breakpoints',
-      'normal'          :   normal,
-      'wait_insert'     :   wait_insert,
-      'wait_remove'     :   wait_remove,
-      'disabled'        :   disabled,
-      'remove'          :   [],
-      'clear':True,
-    }
-    self.send(pkg)
-
-  #commands from editor
-  def onclick_breakpoint(self,pkg):
-    action = pkg['action']
-    if action in ('insert','update'):
-      self.breakpoint_insert(
-        filename  =   pkg['filename'],
-        line      =   pkg['line'],
-        condition =   pkg.get('condition','')
-        disabled  =   pkg['disabled']
-      )
-    elif action=="delete":
-      self.breakpoint_delete(
-        filename  =   pkg['filename'],
-        line      =   pkg['line'],
-      )
-
-    line=pkg['line']
-    breakpoint_queue.insert_or_delete(self.exec_filename,line)
-    breakpoint_queue.process()
-    return [{'cmd':'check_breakpoint'}]
-
-
-  def __bp_delete_pending(self,filename,line):
-    key=(filename,line)
-    if key in self.__bps_insert:
-      def self.__bps_insert[key]
-    else:
-      self.__bps_delete.add(key)
-
-  def __bp_delete(self,filename,line):
-    bp=self.find_bp_in_gdb(filename,line)
-    bp.delete()
-    self.notify_bp_deleted(filename,line)
-    return [{'cmd':'check_breakpoint'}]
-
-  def __bp_insert_pending(self,filename,line,condition,disabled):
-    key=(filename,line)
-    if key in self.__bps_delete:
-      self.__bps_delete.remove(key)
-    self.__bps_insert[key]={
-      'filename':filename,
-      'line':line,
-      'condition':condition,
-      'disabled':disabled,
-    }
-
-  def __bp_insert(self,filename,line,condition,disabled):
-    bp=gdb.Breakpoint('{}:{}'.format(filename,line))
-    if condition:
-      bp.condition=condition
-    bp.disabled=disabled
-    self.notify_bp_inserted(filename,line)
-    return [{'cmd':'check_breakpoint'}]
-
-  def __process_brekpoints(self):
-    for filename,line in self.__bps_delete:
-      bp=self.find_bp_in_gdb(filename,line)
-      bp.delete()
-      self.notify_bp_deleted(filename,line)
-
-
-  def breakpoint_insert(self,filename,line,condition,disabled):
-    return if_gdbstopped_else(
-      stopped=lambda : self.__bp_insert(filename,line,condition,disabled),
-      running=lambda : self.__bp_insert_pending(filename,line,condition,disabled),
-    )
-
-  def breakpoint_delete(self,filename,line):
-    return if_gdbstopped_else(
-      stopped=lambda : self.__bp_delete(filename,line),
-      running=lambda : self.__bp_delete_pending(filename,line),
-    )
-
-  def onclick_breakpoint_de(self,pkg):
-    ''' Disable/enable breakpoint'''
-    raise NotImplementedError
-    breakpoint_queue.process()
 
   def set_color(self,pkg):
     self.send(pkg)

@@ -468,190 +468,79 @@ class ThQueue(object):
 
 gdbevt_queue = ThQueue()
 
-
-class GdbBreakpoints(object):
+class BpModif(object):
   def __init__(self):
-    pass
+    self.need_delete=[]
+    self.need_update={}
+    self.key_to_bpid={}
+    self.bpid_to_bp={}
+    gdb.events.breakpoint_created.connect(self.__add_bp)
+    gdb.events.breakpoint_deleted.connect(self.__del_bp)
 
-  @exec_main
-  def get_all_bps(self):
-    ''' Возвращает все точки останова, которые есть в gdb'''
-    return gdb.breakpoints()
+  def __add_bp(self,bp):
+    self.bpid_to_bp[bp.number]=bp
 
-  def find_bp_in_gdb(self,filename,line):
-    if not self.location_belongs_file(filename,line):
-      return
-    gdb_bps=self.get_all_bps()
-    if gdb_bps!=None:
-      try:
-        return self.__find_bp_in_gdb_1(gdb_bps,filename,line)
-      except gdb.error:
-        return None
-    else:
-      return None
+  def __del_bp(self,bp):
+    if bp.number in self.bpid_to_bp:
+      del self.bpid_to_bp[bp.number]
 
-  def __find_bp_in_gdb_1(self,gdb_bps,filename,line):
-    for bp in gdb_bps:
-      if (filename,line) in self.get_bp_locations(bp):
-        return bp
-    return None
+  def delete(self,win_id,external_id,number=None):
+    key=(win_id,external_id)
+    if key in self.need_update:
+      del self.need_update[key]
+    gdb_bpid = self.key_to_bpid.get(key) if number is None else number
+    if gdb_bpid is not None:
+      self.need_delete.append(gdb_bpid)
 
-  @exec_main
-  def location_belongs_file(self,filename,line):
-    if not filename or line==None:
-      return False
-    try:
-      #check whether line belongs to file
-      gdb.decode_line('{}:{}'.format(filename,line),)
-    except:
-      #not belonging
-      return False
-    return True
+  def update(self,win_id,external_id,enabled=None,silent=None,
+                  ignore_count=None,temporary=None,thread=None,
+                  condition=None,commands=None,filename=None,line=None,number=None):
+    key=(win_id,external_id)
+    self.need_delete.remove(key)
+    self.need_update[key] = (enabled,silent,ignore_count,temporary,thread,condition,commands,filename,line,number)
+    if number is not None:
+      self.key_to_bpid[key]=number
 
-  @exec_main
-  def get_bp_locations(self,bp):
-    if bp.type!=gdb.BP_BREAKPOINT:
-      return []
-    location=bp.location
-    try:
-      locs=exec_in_main_pythread(gdb.decode_line, (location,))[1]
-    except gdb.error:
-      #current file have not location `location` then produce this error
-      return []
-    if locs==None:
-      return []
-    locations=[]
-    if locs:
-      for loc in locs:
-        line=loc.line
-        if not loc.symtab:
-          #maybe breakpoint have not location. For ex. `break exit`, `break abort`
-          continue
-        filename=loc.symtab.fullname()
-        locations.append( (filename,line) )
-    return locations
-
-
-
-class BreakpointQueue(GdbBreakpoints):
-  ''' Очередь для уаления и создания точек останова .
-
-      Если в отладчике inferior запущен, то в gdb нельзя
-      вставлять и удалять точки сотанова. Нужно вставлять/удалять
-      breakpoint через данный класс. Когда точки останова можно
-      будет модифицировать, точки останова, добавленные в объект
-      данного класса автоматически будут вставлены в gdb.
-  '''
-
-  def __init__(self):
-    self.queue=[]
-
-  def __find_bp_in_queue(self,filename,line):
-    for idx in range(len(self.queue)):
-      action,param = self.queue[idx]
-      if   action=='insert':
-        if param['filename']==filename and param['line']==line:
-          return idx
-      elif action=='delete':
-        if (filename,line) in param['locations']:
-          return idx
-    return None
-
-  @exec_main
-  def insert_or_delete(self,filename,line):
-    ''' Если bp существует, то данная bp удаляется. Если не существует, то дабавл.'''
-    idx = self.__find_bp_in_queue(filename,line)
-    if idx!=None:
-      #Пока inferior работал пользователь нажал четное число
-      #раз по точке останова. Просто удаляем ее.
-      self.queue.pop(idx)
-      return
-    bp=self.find_bp_in_gdb(filename,line)
-    if bp==None:
-      #this bp does not exists
-      self.queue.append( ('insert',{
-        'filename':filename,
-        'line':line,
-      }))
-    else:
-      self.queue.append( ('delete',{
-        'bp':bp,
-        'locations':self.get_bp_locations(bp),
-      }))
-
-  @exec_main
-  def get_inserted_bps_locs(self,filename=None):
-    ''' Данная функция возвращает список пар (fname,line) для каждой bp, которая либо уже
-        вставлена в gdb и не находится в очереди на удаление, либо находится в
-        очереди на вставку.
-
-        Если задан необьязательный аргумент filename, то возвращаются только те пары,
-        для которых fname==filename
-    '''
-    bps=self.get_all_bps()
-    rmqueue=[ param['bp'] for act,param in self.queue if act=='delete' ]
-    ok_bps=[bp for bp in bps if bp not in rmqueue]
-    locs=[]
-    wait_ins_locs=[ (param['filename'],param['line']) for act,param in self.queue if act=='insert' ]
-    locs+=wait_ins_locs
-    if filename:
-      locs=[ (fname,line) for fname,line in locs if fname==filename]
-    return locs
-
-  def __bps_to_locs(self,bps,filename=None):
-    locs=[]
-    for bp in bps:
-      locs += self.get_bp_locations(bp)
-    if filename:
-      locs=[ line for fname,line in locs if fname==filename ]
-    return locs
-
-  @exec_main
-  def get_bps_locs_normal(self,filename=None):
-    normal_bps=[bp for bp in self.get_all_bps() if bp.enabled]
-    return self.__bps_to_locs(normal_bps,filename)
-
-  @exec_main
-  def get_bps_locs_disabled(self,filename=None):
-    disabled_bps=[bp for bp in self.get_all_bps() if not bp.enabled]
-    return self.__bps_to_locs(disabled_bps,filename)
-
-  @exec_main
-  def get_bps_locs_wait_remove(self,filename=None):
-    wait_remove_locs=[ param['bp'] for act,param in self.queue if act=='delete' ]
-    return self.__bps_to_locs(wait_remove_locs, filename)
-
-  @exec_main
-  def get_bps_locs_wait_insert(self,filename=None):
-    wait_insert_locs=[ (param['filename'],param['line']) for act,param in self.queue if act=='insert' ]
-    if filename!=None:
-      return [ line for (fname,line) in wait_insert_locs ]
-    else:
-      return wait_insert_locs
-
-  @exec_main
   def process(self):
-    ''' Данный метод пытается вставить/удалить точки останова 
-        Если inferior запущен, то ничего сделано не будет
-    '''
-    assert is_main_thread()
-    if gdb.selected_thread()==None:
-      #maybe inferior not running
-      return
-    if not gdb_stopped():
-      #поток inferior'а исполняется. Точки ставить нельзя.
-      return
-    while len(self.queue)>0:
-      action,param=self.queue.pop(0)
-      if action=='insert':
-        gdb.Breakpoint('{}:{}'.format(param['filename'],param['line']))
-      elif action=='delete':
-        param['bp'].delete()
+    for bpid in self.need_delete:
+      bp=self.bpid_to_bp.get(bpid)
+      if bp is not None:
+        bp.delete()
+        del self.bpid_to_bp[bpid]
+    self.need_delete=[]
+    for key,values in self.need_update.values():
+      enabled,silent,ignore_count,temporary,thread,condition,commands,filename,line,number = values
+      bpid = number if number is not None else self.key_to_bpid.get(key)
+      if bpid is not None:
+        #bp exists
+        bp=self.bpid_to_bp[bpid]
       else:
-        debug('unknown action: {}'.format(action))
+        #not exists, create
+        assert filename is not None
+        assert line is not None
+        kw={
+          'spec':'%s:%s' % (filename,line),
+          'type':gdb.BP_BREAKPOINT,
+        }
+        if temporary is not None:
+          kw['temporary']=temporary
+        bp=gdb.Breakpoint(**kw)
+      if enabled is not None:
+        bp.enabled=enabled
+      if silent is not None:
+        bp.silent=silent
+      if ignore_count is not None:
+        bp.ignore_count=ignore_count
+      bp.thread=thread
+      if condition is not None:
+        bp.condition=condition
+      if commands is not None:
+        gdb.write('WARNING: parameter commands not supported by front-end.\nYou can set him manually:\ncommands {number}\n{commands}\n'.format(
+          number=bp.number,commands=commands))
+    self.need_update={}
 
 
-breakpoint_queue=BreakpointQueue()
+bpModif=BpModif()
 
 
 
@@ -774,8 +663,6 @@ class GEThread(object):
     cmd=pkg['cmd']
     if debug_messages:
       logging.info('time={time} sendToEntities cmd={cmd}'.format(cmd=(pkg[cmd] if cmd in pkg else cmd),time=time.time()))
-    if cmd=='check_breakpoint':
-      breakpoint_queue.process()
     else:
       died_entity=[]
       entity_keys = [entity_key] if entity_key is not None else self.fte.keys()
@@ -814,6 +701,7 @@ class GEThread(object):
     #gdb.parse_and_eval() выбросит exception. Поэтому будем сохранять события от gdb пока не получим
     # 'exited' или 'stop'
     while True:
+      if_gdbstopped_else(stopped=bpModif.process)
       rfds=self.fte.keys()
       rfds+=self.wait_connection.keys()
       rfds.append(self.gdb_rfd)
@@ -968,40 +856,40 @@ class McgdbMain(object):
     gdbevt_queue.append((name,evt))
     pkgsend(self.gdb_wfd,{'cmd':'gdbevt','gdbevt':name})
 
-  def notify_gdb_cont (self, evt):
+  def notify_gdb_cont (self, *evt):
     self.notify_gdbevt(evt,'cont')
 
-  def notify_gdb_exited (self, evt):
+  def notify_gdb_exited (self, *evt):
     self.notify_gdbevt(evt,'exited')
 
-  def notify_gdb_stop (self, evt):
+  def notify_gdb_stop (self, *evt):
     self.notify_gdbevt(evt,'stop')
 
-  def notify_gdb_new_objfile (self, evt):
+  def notify_gdb_new_objfile (self, *evt):
     self.notify_gdbevt(evt,'new_objfile')
 
-  def notify_gdb_clear_objfiles (self, evt):
+  def notify_gdb_clear_objfiles (self, *evt):
     self.notify_gdbevt(evt,'clear_objfiles')
 
-  def notify_gdb_inferior_call_pre (self, evt):
+  def notify_gdb_inferior_call_pre (self, *evt):
     self.notify_gdbevt(evt,'inferior_call_pre')
 
-  def notify_gdb_inferior_call_post (self, evt):
+  def notify_gdb_inferior_call_post (self, *evt):
     self.notify_gdbevt(evt,'inferior_call_post')
 
-  def notify_gdb_memory_changed (self, evt):
+  def notify_gdb_memory_changed (self, *evt):
     self.notify_gdbevt(evt,'memory_changed')
 
-  def notify_gdb_register_changed (self, evt):
+  def notify_gdb_register_changed (self, *evt):
     self.notify_gdbevt(evt,'register_changed')
 
-  def notify_gdb_breakpoint_created (self, evt):
+  def notify_gdb_breakpoint_created (self, *evt):
     self.notify_gdbevt(evt,'breakpoint_created')
 
-  def notify_gdb_breakpoint_deleted (self, evt):
+  def notify_gdb_breakpoint_deleted (self, *evt):
     self.notify_gdbevt(evt,'breakpoint_deleted')
 
-  def notify_gdb_breakpoint_modified (self, evt):
+  def notify_gdb_breakpoint_modified (self, *evt):
     self.notify_gdbevt(evt,'breakpoint_modified')
 
   def open_window(self,type, **kwargs):
