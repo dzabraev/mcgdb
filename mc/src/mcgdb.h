@@ -17,10 +17,10 @@ void __message_assert (const char *EX, const char *FILE, int LINE);
 
 #define __json_extract(obj,field,extractor,checker) \
 ({\
-  json_t *tmp = json_object_get(obj,field);\
-  message_assert(tmp!=NULL);\
-  message_assert(checker(tmp));\
-  extractor(tmp);\
+  json_t *__tmp__ = json_object_get(obj,field);\
+  message_assert(__tmp__!=NULL);\
+  message_assert(checker(__tmp__));\
+  extractor(__tmp__);\
 })
 
 #define __MCGDB_IDENTITY(x) x
@@ -90,6 +90,7 @@ struct mouse_event_t;
 struct json_t;
 extern enum window_type mcgdb_wtype;
 extern struct gdb_action * event_from_gdb;
+extern int mcgdb_current_thread_id;
 
 typedef
 struct gdb_action {
@@ -131,9 +132,6 @@ void mcgdb_send_mouse_event_to_gdb(WEdit * edit, mouse_event_t * event);
 
 extern int      mcgdb_listen_port;
 extern int      gdb_input_fd;
-
-gboolean mcgdb_ignore_mouse_event(WEdit * edit, mouse_event_t * event);
-
 
 void mcgdb_checkset_read_gdb_events(WDialog * h);
 

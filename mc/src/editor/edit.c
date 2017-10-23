@@ -2118,7 +2118,6 @@ edit_init (WEdit * edit, int y, int x, int lines, int cols, const vfs_path_t * f
 
     edit->previous_click_x=-1;
     edit->previous_click_y=-1;
-    edit->bpset=FALSE;
 
     edit->drag_state = MCEDIT_DRAG_NONE;
 

@@ -60,9 +60,6 @@ process_action_from_gdb_edit(WEdit * edit, struct gdb_action * act);
 static enum window_type
 get_window_type(json_t * pkg);
 
-static void
-process_lines_array(json_t * j_lines,  void (*callback)(long) );
-
 static gboolean
 evt_convertable_to_key(struct gdb_action * gdb_evt);
 
@@ -261,11 +258,10 @@ get_command_num(json_t *pkg) {
     else if (compare_cmd("fclose") )            {return MCGDB_FCLOSE;}
     else if (compare_cmd("insert_str"))         {return MCGDB_INSERT_STR;}
     else if (compare_cmd("setthread"))          {return MCGDB_SETTHREAD;}
-    else if (compare_cmd("bpsdel"))             {return MCGDB_BPSUPD;}
-    else if (compare_cmd("bpsupd"))             {return MCGDB_BPSDEL;}
+    else if (compare_cmd("bpsdel"))             {return MCGDB_BPSDEL;}
+    else if (compare_cmd("bpsupd"))             {return MCGDB_BPSUPD;}
 
     else if (compare_cmd("set_window_type"))    {return MCGDB_SET_WINDOW_TYPE;}
-    else if (compare_cmd("breakpoints") )       {return MCGDB_BREAKPOINTS;}
     else if (compare_cmd("color"))              {return MCGDB_COLOR;}
     else if (compare_cmd("set_curline"))        {return MCGDB_SET_CURLINE;}
     else if (compare_cmd("exit"))               {return MCGDB_EXIT;}
@@ -345,56 +341,6 @@ check_action_from_gdb(struct gdb_action * act) {
   }
 }
 
-static void
-process_lines_array(json_t * j_lines,  void (*callback)(long) ) {
-  size_t i;
-  int line;
-  json_t *j_line;
-  if (!j_lines)
-    return;
-  for (i = 0; i < json_array_size (j_lines); i++) {
-    j_line = json_array_get (j_lines, i);
-    line = (long)json_integer_value (j_line);
-    callback (line);
-  }
-}
-
-static void
-pkg_breakpoints(json_t *pkg) {
-  json_t *j_clear;
-  j_clear = json_object_get (pkg,"clear");
-  if (j_clear) {
-    int clear = json_boolean_value (j_clear);
-    if (clear)
-      mcgdb_bp_remove_all ();
-  }
-  else {
-    process_lines_array (json_object_get (pkg,"remove"), mcgdb_bp_remove);
-  }
-  process_lines_array (json_object_get (pkg,"normal"),      mcgdb_bp_insert_normal);
-  process_lines_array (json_object_get (pkg,"wait_insert"), mcgdb_bp_insert_wait_insert);
-  process_lines_array (json_object_get (pkg,"wait_remove"), mcgdb_bp_insert_wait_remove);
-  process_lines_array (json_object_get (pkg,"disabled"),    mcgdb_bp_insert_disabled);
-}
-
-#if 0
-static void
-pkg_fopen (json_t *pkg, WEdit * edit) {
-  const char *filename;
-  long line = (long)json_integer_value(json_object_get(pkg, "line"));
-  filename = json_string_value(json_object_get(pkg, "filename"));
-  mcgdb_bp_remove_all ();
-  if(mcgdb_curline>0)
-    book_mark_clear (edit, mcgdb_curline, mcgdb_current_line_color);
-  mcgdb_curline=line;
-  edit_file(
-    filename ? vfs_path_build_filename(filename, (char *) NULL) : NULL,
-    line); /*тут исполнение проваливается в эту функцию
-  и не перейдет на след. строчку, пока edit-файла не закроется. Поэтому мы не может открыть файл, и сразу же подкрасить
-  текущую строку. Это надо делать следующим пакетом.*/
-  //TODO нужно ли очищать vfs_path ?
-}
-#endif
 
 static void
 pkg_goto (json_t *pkg, WEdit * edit) {
@@ -453,11 +399,12 @@ process_action_from_gdb_edit(WEdit * edit, struct gdb_action * act) {
       break;
     case MCGDB_SETTHREAD:
       mcgdb_current_thread_id = myjson_int (pkg,"id");
+      break;
     case MCGDB_BPSDEL:
       pkg_bps_del (pkg);
       break;
     case MCGDB_BPSUPD:
-      pkg_bps_update (pkg);
+      pkg_bps_upd (pkg);
       break;
     case MCGDB_GOTO:
       pkg_goto (pkg,edit);
@@ -472,8 +419,6 @@ process_action_from_gdb_edit(WEdit * edit, struct gdb_action * act) {
       edit_print_string (edit, json_string_value (json_object_get (pkg,"msg")));
       edit->modified=FALSE; /*prevent asking about saving*/
       break;
-    case MCGDB_BPMARK:
-      edit->bpmark = myjson_bool(pkg,"bpmark");
     default:
       break;
   }
@@ -496,18 +441,6 @@ mcgdb_send_mouse_event_to_gdb (WEdit * edit, mouse_event_t * event) {
     send_pkg_to_gdb (pkg);
     free (pkg);
   return;
-}
-
-gboolean
-mcgdb_ignore_mouse_event(WEdit * edit, mouse_event_t * event) {
-  long cur_col;
-  if(!edit)
-    return FALSE;
-  cur_col=event->x -1 - edit->start_col;
-  if( cur_col <= 7 ) { //TODO семь заменить константой-define шириной нумерного столбца
-    return TRUE;
-  }
-  return FALSE;
 }
 
 void
@@ -760,6 +693,7 @@ mcgdb_cmd_breakpoint (WEdit * edit) {
     FALSE);
 }
 
+void
 mcgdb_cmd_disableenable_bp (WEdit * edit) {
 }
 
@@ -809,16 +743,18 @@ mcgdb_src_dlg(void) {
   mcgdb_module_init();
   mcgdb_bp_module_init();
   while (!mcgdb_exit_from_loop) {
+    vfs_path_t *vfs_filename;
     json_t * pkg = read_pkg_from_gdb();
-    gdb_cmd cmd = get_command_num(pkg);
+    gdb_cmd_t cmd = get_command_num(pkg);
     const char *filename = json_string_value (json_object_get (pkg, "filename"));
     long line = json_integer_value (json_object_get (pkg, "line"));
     message_assert (cmd==MCGDB_FOPEN);
-    vfs_path_t *vfs_filename = filename ? vfs_path_build_filename(filename, (char *) NULL) : NULL;
+    vfs_filename = filename ? vfs_path_build_filename(filename, (char *) NULL) : NULL;
     edit_file (vfs_filename,line);
     vfs_path_free (vfs_filename);
   }
   mcgdb_bp_module_free();
+  return TRUE;
 }
 
 

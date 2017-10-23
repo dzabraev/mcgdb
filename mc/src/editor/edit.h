@@ -72,6 +72,7 @@ gboolean edit_files (const GList * files);
 const char *edit_get_file_name (const WEdit * edit);
 long edit_get_curs_col (const WEdit * edit);
 const char *edit_get_syntax_type (const WEdit * edit);
+size_t  edit_print_string (WEdit * e, const char *s);
 
 /*** inline functions ****************************************************************************/
 #endif /* MC__EDIT_H */

@@ -47,6 +47,8 @@ def setup_logging(DEBUG):       # pragma: no cover
       filename=DEBUG,           # pragma: no cover
       format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', # pragma: no cover
       level = debug_level)      # pragma: no cover
+    cmd='''gnome-terminal -e 'tail -f %s' &''' % DEBUG # pragma: no cover
+    proc=subprocess.Popen(cmd, shell=True) # pragma: no cover
   else:                         # pragma: no cover
     debug_level = logging.CRITICAL    # pragma: no cover
     debug_messages = False      # pragma: no cover
@@ -468,6 +470,29 @@ class ThQueue(object):
 
 gdbevt_queue = ThQueue()
 
+@exec_main
+def get_bp_locations(bp):
+  if bp.type!=gdb.BP_BREAKPOINT:
+    return []
+  location=bp.location
+  try:
+    locs=gdb.decode_line(location)[1]
+  except gdb.error:
+    #current file have not location `location` then produce this error
+    return []
+  if locs==None:
+    return []
+  locations=[]
+  if locs:
+    for loc in locs:
+      line=loc.line
+      if not loc.symtab:
+        #maybe breakpoint have not location. For ex. `break exit`, `break abort`
+        continue
+      filename=loc.symtab.fullname()
+      locations.append( (filename,line) )
+  return locations
+
 class BpModif(object):
   def __init__(self):
     self.need_delete=[]
@@ -494,10 +519,12 @@ class BpModif(object):
 
   def update(self,win_id,external_id,enabled=None,silent=None,
                   ignore_count=None,temporary=None,thread=None,
-                  condition=None,commands=None,filename=None,line=None,number=None):
+                  condition=None,commands=None,filename=None,
+                  line=None,number=None,after_create=None):
     key=(win_id,external_id)
-    self.need_delete.remove(key)
-    self.need_update[key] = (enabled,silent,ignore_count,temporary,thread,condition,commands,filename,line,number)
+    if key in self.need_delete:
+      self.need_delete.remove(key)
+    self.need_update[key] = (enabled,silent,ignore_count,temporary,thread,condition,commands,filename,line,number,after_create)
     if number is not None:
       self.key_to_bpid[key]=number
 
@@ -508,8 +535,8 @@ class BpModif(object):
         bp.delete()
         del self.bpid_to_bp[bpid]
     self.need_delete=[]
-    for key,values in self.need_update.values():
-      enabled,silent,ignore_count,temporary,thread,condition,commands,filename,line,number = values
+    for key,values in self.need_update.items():
+      enabled,silent,ignore_count,temporary,thread,condition,commands,filename,line,number,after_create = values
       bpid = number if number is not None else self.key_to_bpid.get(key)
       if bpid is not None:
         #bp exists
@@ -537,6 +564,8 @@ class BpModif(object):
       if commands is not None:
         gdb.write('WARNING: parameter commands not supported by front-end.\nYou can set him manually:\ncommands {number}\n{commands}\n'.format(
           number=bp.number,commands=commands))
+      if after_create is not None:
+        after_create(bp)
     self.need_update={}
 
 

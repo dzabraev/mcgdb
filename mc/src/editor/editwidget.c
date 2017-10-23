@@ -68,6 +68,7 @@
 #endif
 
 #include "src/mcgdb.h"
+#include "src/mcgdb-bp.h"
 
 /*** global variables ****************************************************************************/
 
@@ -987,8 +988,14 @@ edit_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event)
     /* location of 'Close' and 'Toggle fullscreen' pictograms */
     int close_x, toggle_fullscreen_x;
 
-    if ( mcgdb_ignore_mouse_event(edit, event) ) {
-      event->result.abort=TRUE;
+    if (event->x < LINE_STATE_WIDTH ) {
+      if (msg==MSG_MOUSE_CLICK) {
+        gboolean show_menu = event->x < LINE_STATE_WIDTH/2;
+        gboolean need_redraw = mcgdb_bp_process_click(edit->filename, event->y, show_menu);
+        if (need_redraw)
+          edit->force |= REDRAW_PAGE;
+          edit_update_screen (edit);
+      }
       return;
     }
 
@@ -1029,7 +1036,7 @@ edit_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event)
             if (event->y == w->lines - 1 && event->x == w->cols - 1)
             {
                 /* bottom-right corner -- start window resize */
-                edit_execute_cmd (edit->filename, CK_WindowResize, -1);
+                edit_execute_cmd (edit, CK_WindowResize, -1);
                 break;
             }
         }
@@ -1042,10 +1049,6 @@ edit_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event)
         break;
 
     case MSG_MOUSE_CLICK:
-        if (edit->bpset && event->x < LINE_STATE_WIDTH) {
-          gboolean ask_cond = event->x < LINE_STATE_WIDTH/2;
-          mcgdb_bp_process_click(edit->filename, event->y, ask_cond);
-        }
         if (event->y == 0)
         {
             if (event->x == close_x)

@@ -4,8 +4,7 @@ import gdb
 import os,stat
 
 from mcgdb.basewin import BaseWin
-from mcgdb.common import bpModif
-from mcgdb.common import gdb_print, exec_main, gdbprint
+from mcgdb.common import gdb_print, exec_main, gdbprint, bpModif, get_bp_locations
 
 class SrcWin(BaseWin):
 
@@ -25,8 +24,8 @@ class SrcWin(BaseWin):
   def process_connection(self):
     rc=super(SrcWin,self).process_connection()
     if rc:
-      self.update_thread()
       self.update_current_frame()
+      self.update_thread()
       self.update_breakpoints()
     return rc
 
@@ -49,11 +48,15 @@ class SrcWin(BaseWin):
 
   def gdbevt_breakpoint_modified(self,pkg):
     bp, = pkg['evt']
-    self.send(self.pkg_update_bps([bp]))
+    resp=self.pkg_update_bps([bp])
+    if resp is not None:
+      self.send(resp)
 
   def gdbevt_breakpoint_deleted(self,pkg):
     bp, = pkg['evt']
-    self.send(self.pkg_delete_bps([bp]))
+    resp=self.pkg_delete_bps([bp])
+    if resp is not None:
+      self.send(resp)
 
 
   def shellcmd_up(self,pkg):
@@ -77,16 +80,21 @@ class SrcWin(BaseWin):
     self.update_thread()
 
   def update_thread(self):
-    thnum=gdb.selected_thread().num
-    self.send({'cmd':'setthread','id':thnum})
+    th=gdb.selected_thread()
+    if th is not None:
+      self.send({'cmd':'setthread','id':th.num})
 
 
   def pkg_delete_bps(self,bps):
     ids=[]
     for bp in bps:
+      if not bp.is_valid():
+        continue
       external_id = self.bp_gdb_mc.get(bp.number)
       if external_id is not None:
         ids.append(external_id)
+    if len(ids)==0:
+      return
     return {
       'cmd':'bpsdel',
       'ids':ids,
@@ -105,7 +113,15 @@ class SrcWin(BaseWin):
       external_id = self.bp_gdb_mc.get(bp.number)
       if external_id is not None:
         bp_data['external_id']=external_id
-      bps_data.append(bp_data)
+        bps_data.append(bp_data)
+      else:
+        for filename,line in get_bp_locations(bp):
+          bp_data_1 = dict(bp_data)
+          bp_data_1['filename'] = filename
+          bp_data_1['line'] = line-2
+          bps_data.append(bp_data_1)
+    if len(bps_data)==0:
+      return
     return {
       'cmd':'bpsupd',
       'bps_data':bps_data,
@@ -115,8 +131,9 @@ class SrcWin(BaseWin):
     self.send(self.pkg_update_bps(gdb.breakpoints()))
 
   #commands from editor
-  def onclick_breakpoint(self,pkg):
-    for bpid in pkg.get('delete_mc_bpids',[]):
+  def onclick_breakpoints(self,pkg):
+    print pkg
+    for bpid in pkg.get('delete_external_ids',[]):
       bpModif.delete(win_id=id(self),external_id=bpid)
     for bp_data in pkg.get('update',[]):
       #cration or modification
@@ -132,7 +149,7 @@ class SrcWin(BaseWin):
         kwargs['number']=number
       else:
         kwargs['filename']=bp_data['filename']
-        kwargs['line']=bp_data['line']
+        kwargs['line']=bp_data['line']-2
         kwargs['after_create']= (lambda external_id : lambda bp: self.bp_gdb_mc.update({bp.number:external_id}))(external_id)
       bpModif.update(win_id=id(self),**kwargs)
 
@@ -163,7 +180,6 @@ class SrcWin(BaseWin):
       if not self.notexistsmsg_showing:
         self.close_in_window()
         self.send({'cmd':'fopen'})
-        self.send({'cmd':'bpmark','bpmark':False})
         self.send({'cmd':'insert_str','msg':"Current execution position or source file is unknown.\nOr file can't be open."})
         self.notexistsmsg_showing=True
     else:
@@ -175,7 +191,6 @@ class SrcWin(BaseWin):
           'filename'  :   filename,
           'line'      :   line if line!=None else 0,
         })
-        self.send({'cmd':'bpmark','bpmark':True})
         self.send({'cmd':'set_curline',  'line':line})
         self.exec_filename_opened=True
       elif filename==self.exec_filename and line!=self.exec_line and line!=None:
