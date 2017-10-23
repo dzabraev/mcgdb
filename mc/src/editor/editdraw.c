@@ -445,7 +445,7 @@ print_to_widget (WEdit * edit, long row, int start_col, int start_col_real,
 
     if (option_line_state)
     {
-        int clr = mcgdb_bp_color(edit->filename, edit->start_line + row - 1);
+        int clr = mcgdb_bp_color(edit->filename, edit->start_line + row + 1);
         if (clr!=-1)
           tty_setcolor (clr);
         else

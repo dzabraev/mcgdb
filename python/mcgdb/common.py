@@ -40,7 +40,7 @@ def setup_logging(DEBUG):       # pragma: no cover
   global debug_level            # pragma: no cover
   if DEBUG is not None:         # pragma: no cover
     debug_level = logging.INFO  # pragma: no cover
-    debug_messages=True         # pragma: no cover
+    debug_messages=False         # pragma: no cover
     if os.path.exists(DEBUG):   # pragma: no cover
       os.remove(DEBUG)          # pragma: no cover
     logging.basicConfig(        # pragma: no cover
@@ -48,7 +48,10 @@ def setup_logging(DEBUG):       # pragma: no cover
       format = u'[%(module)s LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s]  %(message)s', # pragma: no cover
       level = debug_level)      # pragma: no cover
     cmd='''gnome-terminal -e 'tail -f %s' &''' % DEBUG # pragma: no cover
-    proc=subprocess.Popen(cmd, shell=True) # pragma: no cover
+    os.system(cmd) # pragma: no cover
+    #proc=subprocess.Popen(cmd, shell=True) # pragma: no cover
+    #proc.wait()
+    #rc=proc.returncode
   else:                         # pragma: no cover
     debug_level = logging.CRITICAL    # pragma: no cover
     debug_messages = False      # pragma: no cover
@@ -506,21 +509,28 @@ class BpModif(object):
     self.bpid_to_bp[bp.number]=bp
 
   def __del_bp(self,bp):
-    if bp.number in self.bpid_to_bp:
-      del self.bpid_to_bp[bp.number]
+    pass
+    #if bp.number in self.bpid_to_bp:
+    #  del self.bpid_to_bp[bp.number]
 
   def delete(self,win_id,external_id,number=None):
+    assert external_id is not None
     key=(win_id,external_id)
     if key in self.need_update:
       del self.need_update[key]
-    gdb_bpid = self.key_to_bpid.get(key) if number is None else number
+    gdb_bpid = self.key_to_bpid.pop(key,number)
+    #if BP added through gdb (not gui) => key does not correspond any gdb_bp_id
     if gdb_bpid is not None:
       self.need_delete.append(gdb_bpid)
+      return True
+    else:
+      return False #bp not exists
 
   def update(self,win_id,external_id,enabled=None,silent=None,
                   ignore_count=None,temporary=None,thread=None,
                   condition=None,commands=None,filename=None,
                   line=None,number=None,after_create=None):
+    assert external_id is not None
     key=(win_id,external_id)
     if key in self.need_delete:
       self.need_delete.remove(key)
@@ -533,13 +543,16 @@ class BpModif(object):
       bp=self.bpid_to_bp.get(bpid)
       if bp is not None:
         bp.delete()
-        del self.bpid_to_bp[bpid]
+        if bpid in self.bpid_to_bp:
+          del self.bpid_to_bp[bpid]
     self.need_delete=[]
     for key,values in self.need_update.items():
+      print key
       enabled,silent,ignore_count,temporary,thread,condition,commands,filename,line,number,after_create = values
       bpid = number if number is not None else self.key_to_bpid.get(key)
-      if bpid is not None:
+      if bpid is not None and bpid in self.bpid_to_bp:
         #bp exists
+        #bpid can be not None, but breakpoint may deleted
         bp=self.bpid_to_bp[bpid]
       else:
         #not exists, create
@@ -552,6 +565,8 @@ class BpModif(object):
         if temporary is not None:
           kw['temporary']=temporary
         bp=gdb.Breakpoint(**kw)
+        self.key_to_bpid[key]=bp.number
+        self.bpid_to_bp[bp.number]=bp
       if enabled is not None:
         bp.enabled=enabled
       if silent is not None:
@@ -811,8 +826,8 @@ class GEThread(object):
           self.drop_pending_pkgs(lambda pkg:'gdbevt' in pkg and pkg['gdbevt'] in ('stop','register_changed','memory_changed'))
         elif cmd in ('exited',):
           self.pending_pkgs[:] = [] #clear pending events
-        else:
-          self.drop_pending_pkgs(lambda pkg:'gdbevt' in pkg and pkg['gdbevt']==cmd)
+        #else:
+        #  self.drop_pending_pkgs(lambda pkg:'gdbevt' in pkg and pkg['gdbevt']==cmd)
       if append:
         self.pending_pkgs.append((pkg,entity_key))
       else: #prepend

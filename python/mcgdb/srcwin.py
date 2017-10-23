@@ -20,6 +20,7 @@ class SrcWin(BaseWin):
     self.exec_filename_opened=False
     self.notexistsmsg_showing=False
     self.bp_gdb_mc={} #map breakpoint id. gdb_bp_id --> mcedit_bp_id
+    self.bpid_without_extid=set()
 
   def process_connection(self):
     rc=super(SrcWin,self).process_connection()
@@ -61,19 +62,15 @@ class SrcWin(BaseWin):
 
   def shellcmd_up(self,pkg):
     self.update_current_frame()
-    self.update_breakpoints()
 
   def shellcmd_down(self,pkg):
     self.update_current_frame()
-    self.update_breakpoints()
 
   def mcgdbevt_frame(self,pkg):
     self.update_current_frame()
-    self.update_breakpoints()
 
   def shellcmd_thread(self,pkg):
     self.update_current_frame()
-    self.update_breakpoints()
 
   def mcgdbevt_thread(self,pkg):
     self.update_current_frame()
@@ -86,13 +83,30 @@ class SrcWin(BaseWin):
 
 
   def pkg_delete_bps(self,bps):
+    valid_numbers=set([bp.number for bp in gdb.breakpoints() if bp.is_valid()])
+    stored_numbers=set(self.bp_gdb_mc.keys())
+    invalid_numbers=stored_numbers - valid_numbers
     ids=[]
+    for number in invalid_numbers:
+      bp_data={}
+      bp_data['number']=number
+      external_id = self.bp_gdb_mc[number]
+      if external_id is not None:
+        bp_data['external_id']=external_id
+      ids.append(bp_data)
+      del self.bp_gdb_mc[number]
     for bp in bps:
       if not bp.is_valid():
         continue
-      external_id = self.bp_gdb_mc.get(bp.number)
-      if external_id is not None:
-        ids.append(external_id)
+      number=bp.number
+      if number in self.bp_gdb_mc:
+        bp_data={}
+        bp_data['number']=number
+        external_id = self.bp_gdb_mc[number]
+        if external_id is not None:
+          bp_data['external_id']=external_id
+        ids.append(bp_data)
+    print ids, invalid_numbers,valid_numbers,stored_numbers
     if len(ids)==0:
       return
     return {
@@ -115,10 +129,11 @@ class SrcWin(BaseWin):
         bp_data['external_id']=external_id
         bps_data.append(bp_data)
       else:
+        self.bp_gdb_mc[bp.number] = None
         for filename,line in get_bp_locations(bp):
           bp_data_1 = dict(bp_data)
           bp_data_1['filename'] = filename
-          bp_data_1['line'] = line-2
+          bp_data_1['line'] = line
           bps_data.append(bp_data_1)
     if len(bps_data)==0:
       return
@@ -132,25 +147,35 @@ class SrcWin(BaseWin):
 
   #commands from editor
   def onclick_breakpoints(self,pkg):
-    print pkg
-    for bpid in pkg.get('delete_external_ids',[]):
-      bpModif.delete(win_id=id(self),external_id=bpid)
+    delete_now=[]
+    for bp_data in pkg.get('delete',[]):
+      external_id=bp_data['external_id']
+      number=bp_data['number']
+      bp_exists = bpModif.delete( win_id=id(self),
+                      external_id=external_id,
+                      number=number)
+      if bp_exists:
+        self.bp_gdb_mc[number] = external_id
+      else:
+        #breakpoint creation request made, but breakpoint didn't create.
+        #i.e. we receive cancelation of bp creation
+        delete_now.append({
+          'number':number,
+          'external_id':external_id,
+        })
+    if len(delete_now)>0:
+      self.send({'cmd':'bpsdel','ids':delete_now})
     for bp_data in pkg.get('update',[]):
       #cration or modification
-      kwargs={name:pkg.get(name) for name in [
+      kwargs={name:bp_data.get(name) for name in [
         'enabled','silent','ignore_count','temporary','thread',
-        'condition','commands','external_id'
+        'condition','commands','external_id','number','filename','line'
       ]}
       external_id  = bp_data['external_id']
       number = bp_data.get('number')
       if number is not None and external_id not in self.bp_gdb_mc:
-        self.bp_gdb_mc[external_id] = number
-      if number is not None:
-        kwargs['number']=number
-      else:
-        kwargs['filename']=bp_data['filename']
-        kwargs['line']=bp_data['line']-2
-        kwargs['after_create']= (lambda external_id : lambda bp: self.bp_gdb_mc.update({bp.number:external_id}))(external_id)
+        self.bp_gdb_mc[number] = external_id
+      kwargs['after_create']= (lambda external_id : lambda bp: self.bp_gdb_mc.update({bp.number:external_id}))(external_id)
       bpModif.update(win_id=id(self),**kwargs)
 
 

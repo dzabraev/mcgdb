@@ -25,7 +25,8 @@ static mcgdb_bp * mcgdb_bp_new (const char *filename, int line);
 static void mcgdb_bp_free (mcgdb_bp * bp);
 static GList * get_next_bp (GList *bpl, const char *filename, long line);
 static int count_bps (const char *filename, long line);
-static void json_append_bp (json_t *jbps, const mcgdb_bp *bp);
+static void json_append_upd_bp (json_t *jbps, const mcgdb_bp *bp);
+static void json_append_del_bp (json_t *jbps, const mcgdb_bp *bp);
 static void send_message_bp_update (const mcgdb_bp *bp);
 static void send_message_bp_delete (const mcgdb_bp *bp);
 static gboolean breakpoints_edit_dialog (const char *filename, long line);
@@ -109,7 +110,7 @@ get_common_breakpoints_pkg(void) {
 }
 
 static void
-json_append_bp (json_t *jbps, const mcgdb_bp *bp) {
+json_append_upd_bp (json_t *jbps, const mcgdb_bp *bp) {
   json_t * jbp = json_object ();
   json_object_set_new (jbp, "external_id", json_integer (bp->id));
   json_object_set_new (jbp, "enabled",      json_boolean (bp->enabled));
@@ -135,18 +136,27 @@ static void
 send_message_bp_update (const mcgdb_bp *bp) {
   json_t *resp = get_common_breakpoints_pkg ();
   json_t *bps = json_array ();
-  json_append_bp (bps,bp);
+  json_append_upd_bp (bps,bp);
   json_object_set_new (resp,"update",bps);
   send_pkg_to_gdb (json_dumps (resp,0));
   json_decref (resp);
 }
 
 static void
+json_append_del_bp (json_t *jbps, const mcgdb_bp *bp) {
+  json_t * jbp = json_object ();
+  json_object_set_new (jbp, "external_id", json_integer (bp->id));
+  if (bp->number!=-1)
+    json_object_set_new (jbp, "number", json_integer (bp->number));
+  json_array_append_new (jbps,jbp);
+}
+
+static void
 send_message_bp_delete (const mcgdb_bp *bp) {
   json_t *resp = get_common_breakpoints_pkg ();
   json_t *ids = json_array ();
-  json_array_append_new (ids, json_integer (bp->id));
-  json_object_set_new (resp,"delete_external_ids",ids);
+  json_append_del_bp (ids,bp);
+  json_object_set_new (resp,"delete",ids);
   send_pkg_to_gdb (json_dumps (resp,0));
   json_decref (resp);
 }
@@ -316,6 +326,20 @@ delete_by_id (int id) {
   }
 }
 
+static void
+delete_by_number (int number) {
+  for(GList *l=mcgdb_bps;l!=NULL;l=l->next) {
+    mcgdb_bp *bp = MCGDB_BP(l);
+    if (bp->number==number) {
+      mcgdb_bps = g_list_remove_link (mcgdb_bps, l);
+      mcgdb_bp_free (bp);
+      g_list_free (l);
+      return;
+    }
+  }
+}
+
+
 static mcgdb_bp *
 get_by_id (int id) {
   for(GList *l=mcgdb_bps;l!=NULL;l=l->next) {
@@ -348,14 +372,31 @@ void pkg_bps_del(json_t *pkg) {
   json_t *ids = myjson_arr (pkg,"ids");
   mcgdb_bp * bp;
   int len = json_array_size (ids);
+  int id=-1,number=-1;
   for (int i=0;i<len;i++) {
-    int id = json_integer_value (json_array_get (ids,i));
-    bp = get_by_id (id);
+    json_t * bp_data = json_array_get (ids,i);
+    json_t * tmp=NULL;
+    tmp = json_object_get (bp_data, "external_id");
+    if (tmp) {
+      id = json_integer_value (tmp);
+      bp = get_by_id (id);
+      message_assert (bp!=NULL);
+    }
+    else {
+      number = myjson_int (bp_data, "number");
+      bp = get_by_number (number);
+      message_assert (bp!=NULL);
+    }
     if (bp->wait_status==BP_WAIT_UPDATE) {
       /* deletion canceled. waiting update package */
       continue;
     }
-    delete_by_id (id);
+    if (id!=-1)
+      delete_by_id (id);
+    else if (number!=-1)
+      delete_by_number (number);
+    else
+      message_assert (FALSE);
   }
 }
 
@@ -365,16 +406,16 @@ void pkg_bps_upd(json_t *pkg) {
   for (int i=0;i<len;i++) {
     json_t *bp_data = json_array_get (bps_data,i);
     json_t *tmp;
-    mcgdb_bp *bp;
+    mcgdb_bp *bp=NULL;
     tmp = json_object_get (bp_data,"external_id");
     if (tmp) {
       int id = json_integer_value (tmp);
       bp = get_by_id (id);
+      message_assert (bp!=NULL);
       if (bp->wait_status==BP_WAIT_DELETE) {
         /*this bp was created and quickly deleted. wait next that delete this breakpoint*/
         continue;
       }
-      message_assert (bp!=NULL);
     }
     else {
       const char * filename = myjson_str (bp_data,"filename");
@@ -386,10 +427,11 @@ void pkg_bps_upd(json_t *pkg) {
       }
       if (!bp) {
         bp = mcgdb_bp_new (filename,line);
-        bp->wait_status = BP_NOWAIT;
         insert_bp_to_list (bp);
       }
     }
+
+    bp->wait_status = BP_NOWAIT;
 
     tmp = json_object_get (bp_data,"number");
     if (tmp)
