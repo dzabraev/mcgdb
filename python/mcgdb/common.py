@@ -522,19 +522,19 @@ class BpModif(object):
     #if BP added through gdb (not gui) => key does not correspond any gdb_bp_id
     if gdb_bpid is not None:
       self.need_delete.append(gdb_bpid)
-      return True
+      return gdb_bpid
     else:
-      return False #bp not exists
+      return None #bp not exists
 
   def update(self,win_id,external_id,enabled=None,silent=None,
                   ignore_count=None,temporary=None,thread=None,
-                  condition=None,commands=None,filename=None,
-                  line=None,number=None,after_create=None):
+                  condition=None,commands=None,create_loc=None,
+                  number=None,after_create=None):
     assert external_id is not None
     key=(win_id,external_id)
     if key in self.need_delete:
       self.need_delete.remove(key)
-    self.need_update[key] = (enabled,silent,ignore_count,temporary,thread,condition,commands,filename,line,number,after_create)
+    self.need_update[key] = (enabled,silent,ignore_count,temporary,thread,condition,commands,create_loc,number,after_create)
     if number is not None:
       self.key_to_bpid[key]=number
 
@@ -547,8 +547,7 @@ class BpModif(object):
           del self.bpid_to_bp[bpid]
     self.need_delete=[]
     for key,values in self.need_update.items():
-      print key
-      enabled,silent,ignore_count,temporary,thread,condition,commands,filename,line,number,after_create = values
+      enabled,silent,ignore_count,temporary,thread,condition,commands,create_loc,number,after_create = values
       bpid = number if number is not None else self.key_to_bpid.get(key)
       if bpid is not None and bpid in self.bpid_to_bp:
         #bp exists
@@ -556,10 +555,9 @@ class BpModif(object):
         bp=self.bpid_to_bp[bpid]
       else:
         #not exists, create
-        assert filename is not None
-        assert line is not None
+        assert create_loc is not None
         kw={
-          'spec':'%s:%s' % (filename,line),
+          'spec':create_loc,
           'type':gdb.BP_BREAKPOINT,
         }
         if temporary is not None:
@@ -567,20 +565,24 @@ class BpModif(object):
         bp=gdb.Breakpoint(**kw)
         self.key_to_bpid[key]=bp.number
         self.bpid_to_bp[bp.number]=bp
-      if enabled is not None:
+        if after_create is not None:
+          after_create(bp)
+
+      if enabled is not None and bp.enabled!=enabled:
         bp.enabled=enabled
-      if silent is not None:
+      if silent is not None and bp.silent!=silent:
         bp.silent=silent
-      if ignore_count is not None:
+      if ignore_count is not None and bp.ignore_count!=ignore_count:
         bp.ignore_count=ignore_count
-      bp.thread=thread
-      if condition is not None:
+      if thread==-1:
+        thread=None
+      if bp.thread != thread:
+        bp.thread=thread
+      if condition is not None and bp.condition!=condition:
         bp.condition=condition
-      if commands is not None:
+      if commands is not None and bp.commands!=commands:
         gdb.write('WARNING: parameter commands not supported by front-end.\nYou can set him manually:\ncommands {number}\n{commands}\n'.format(
           number=bp.number,commands=commands))
-      if after_create is not None:
-        after_create(bp)
     self.need_update={}
 
 

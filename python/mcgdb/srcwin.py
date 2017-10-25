@@ -106,7 +106,6 @@ class SrcWin(BaseWin):
         if external_id is not None:
           bp_data['external_id']=external_id
         ids.append(bp_data)
-    print ids, invalid_numbers,valid_numbers,stored_numbers
     if len(ids)==0:
       return
     return {
@@ -120,21 +119,17 @@ class SrcWin(BaseWin):
       if not bp.is_valid() or not bp.visible or bp.type!=gdb.BP_BREAKPOINT:
         continue
       bp_data={}
-      for name in ['silent','thread','ignore_count','number','temporary','hit_count','condition','commands']:
+      for name in ['silent','thread','ignore_count','number','temporary','hit_count','condition','commands','enabled']:
         value = getattr(bp,name)
-        if value is not None:
-          bp_data[name]=value
+        bp_data[name]=value
       external_id = self.bp_gdb_mc.get(bp.number)
       if external_id is not None:
         bp_data['external_id']=external_id
-        bps_data.append(bp_data)
       else:
         self.bp_gdb_mc[bp.number] = None
-        for filename,line in get_bp_locations(bp):
-          bp_data_1 = dict(bp_data)
-          bp_data_1['filename'] = filename
-          bp_data_1['line'] = line
-          bps_data.append(bp_data_1)
+        bp_data['locations'] = map(lambda fl:{'filename':fl[0],'line':fl[1]},get_bp_locations(bp))
+      bps_data.append(bp_data)
+
     if len(bps_data)==0:
       return
     return {
@@ -150,11 +145,10 @@ class SrcWin(BaseWin):
     delete_now=[]
     for bp_data in pkg.get('delete',[]):
       external_id=bp_data['external_id']
-      number=bp_data['number']
-      bp_exists = bpModif.delete( win_id=id(self),
+      number = bpModif.delete( win_id=id(self),
                       external_id=external_id,
-                      number=number)
-      if bp_exists:
+                      number=bp_data.get('number'))
+      if number is not None:
         self.bp_gdb_mc[number] = external_id
       else:
         #breakpoint creation request made, but breakpoint didn't create.
@@ -164,14 +158,15 @@ class SrcWin(BaseWin):
           'external_id':external_id,
         })
     if len(delete_now)>0:
-      self.send({'cmd':'bpsdel','ids':delete_now})
+      self.send({'cmd':'bpsdel','ids':delete_now}) #just send delete confirmation
     for bp_data in pkg.get('update',[]):
       #cration or modification
       kwargs={name:bp_data.get(name) for name in [
         'enabled','silent','ignore_count','temporary','thread',
-        'condition','commands','external_id','number','filename','line'
+        'condition','commands','external_id','number','create_loc'
       ]}
-      external_id  = bp_data['external_id']
+      external_id = bp_data['external_id']
+      assert external_id is not None
       number = bp_data.get('number')
       if number is not None and external_id not in self.bp_gdb_mc:
         self.bp_gdb_mc[number] = external_id

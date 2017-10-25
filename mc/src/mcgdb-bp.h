@@ -23,11 +23,10 @@ typedef struct mcgdb_bp{
   int thread;
   char *condition;
   char *commands;
-  long line;
-  char *filename;
   int id;
   int number; /**gdb id of breakpoint*/
-
+  GList *locations;
+  char * create_loc; /*user input string for create location*/
   bpwait wait_status;
 } mcgdb_bp;
 
@@ -38,7 +37,6 @@ void            mcgdb_bp_remove_all(void);
 
 
 mcgdb_bp*       mcgdb_bp_get    (const char *filename, long line); /*return mcgdb_bp if at line `line` exists breakpoint, else NULL*/
-gboolean        mcgdb_bp_remove (const char *filename, long line);
 
 int     mcgdb_bp_color  (const char *filename, long line); /*return color for drawing*/
 
