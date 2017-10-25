@@ -88,7 +88,7 @@ def matched_coords(b,bprev,lines,columns,tostring,regexes,overlay_regexes):
   return get_matched_coord(b,tostring,regexes)
 
 
-def diff(s1,s2,s1prev,tostring=split_dummy,regexes=[],overlay_regexes=[],special_color=None):
+def diff(s1,s2,s1prev,s2prev,tostring=split_dummy,regexes=[],overlay_regexes=[],special_color=None):
   assert s1['cols']==s2['cols']
   assert s1['rows']==s2['rows']
   cols=s1['cols']
@@ -96,22 +96,24 @@ def diff(s1,s2,s1prev,tostring=split_dummy,regexes=[],overlay_regexes=[],special
   b1=s1['buffer']
   b2=s2['buffer']
   buffer=[]
-  regex_matched = matched_coords(s1['buffer'],
-    s1prev.get('buffer') if s1prev is not None else None,
+  get_matched_coords = lambda s,sprev : matched_coords(s['buffer'],
+    sprev.get('buffer') if sprev is not None else None,
     rows,cols,tostring,regexes,overlay_regexes)
+  regex_matched  = get_matched_coords(s1,s1prev)
+  regex_matched |= get_matched_coords(s2,s2prev)
   ((sp_bg,sp_fg),sp_coords) = special_color if special_color is not None else ((None,None),[])
   for row in range(rows):
     line=[]
     for col in range(cols):
       c1=b1[row][col]
       c2=b2[row][col]
-      if (row,col) in sp_coords:
+      if (row,col) in regex_matched:
+        bg,fg='green','white'
+      elif (row,col) in sp_coords:
         if not c1==c2:
           bg,fg='red','white'
         else:
           bg,fg=sp_bg,sp_fg
-      elif (row,col) in regex_matched:
-        bg,fg='green','white'
       elif not c1==c2:
         bg,fg='red','white'
       else:
@@ -335,9 +337,9 @@ def show(stdscr,journal,journal2=None,start=0,regexes=[],overlay_regexes=[]):
         cur_overlay_regexes=filter_regexes(overlay_regexes,name,idx)
         tostring=get_tostring(name)
         print_screenshot(stdscr,
-          diff(s1,s2,s1prev,tostring=tostring,regexes=cur_regexes,overlay_regexes=cur_overlay_regexes,special_color=special_color),
+          diff(s1,s2,s1prev,s2prev,tostring=tostring,regexes=cur_regexes,overlay_regexes=cur_overlay_regexes,special_color=special_color),
           y,0)
-        sdiff=diff(s2,s1,s2prev,tostring=tostring,regexes=cur_regexes,overlay_regexes=cur_overlay_regexes,special_color=special_color)
+        sdiff=diff(s2,s1,s2prev,s1prev,tostring=tostring,regexes=cur_regexes,overlay_regexes=cur_overlay_regexes,special_color=special_color)
         print_screenshot(stdscr,sdiff,y,s1['cols']+2)
         line=y+sdiff['rows']+1
       else:
