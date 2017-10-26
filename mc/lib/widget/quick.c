@@ -410,10 +410,12 @@ quick_dialog_skip (quick_dialog_t * quick_dlg, int nskip)
                          dialog_colors, quick_dlg->callback, quick_dlg->mouse_callback,
                          quick_dlg->help, quick_dlg->title);
     else
-        dd = dlg_create (TRUE, quick_dlg->y, quick_dlg->x, y + 3, quick_dlg->cols,
+        dd = dlg_create (TRUE, quick_dlg->y, quick_dlg->x, MIN (y + 3, quick_dlg->lines), quick_dlg->cols,
                          WPOS_KEEP_DEFAULT, FALSE, dialog_colors, quick_dlg->callback,
                          quick_dlg->mouse_callback, quick_dlg->help, quick_dlg->title);
 
+    if (quick_dlg->dlg_draw_broadcast_msg)
+      dd->dlg_draw_broadcast_msg = quick_dlg->dlg_draw_broadcast_msg;
     /* add widgets into the dialog */
     x2 = x1 + width2 + 1;
     g = NULL;
@@ -613,5 +615,23 @@ quick_dialog_skip (quick_dialog_t * quick_dlg, int nskip)
 
     return return_val;
 }
+#if 0
+quick_checkbox_new (const char *txt, int * st, unsigned long * id) {
+  quick_widget_t * widget = g_new(quick_widget_t,1);
+  widget
+  {
+    .widget_type = quick_checkbox,
+    .options = WOP_DEFAULT,
+    .pos_flags = WPOS_KEEP_DEFAULT,
+    .id = id_,
+    .u = {
+        .checkbox = {
+            .text = txt,
+            .state = st
+        }
+     }
+  }
+#endif
+
 
 /* --------------------------------------------------------------------------------------------- */

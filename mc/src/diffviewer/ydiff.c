@@ -2375,7 +2375,7 @@ dview_diff_options (WDiff * dview)
     };
 
     quick_dialog_t qdlg = {
-        -1, -1, 56,
+        -1, -1, 56, -1,
         N_("Diff Options"), "[Diff Options]",
         quick_widgets, NULL, NULL
     };

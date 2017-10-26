@@ -102,7 +102,7 @@ mcdiffview_dialog_search (WDiff * dview)
         };
 
         quick_dialog_t qdlg = {
-            -1, -1, 58,
+            -1, -1, 58, -1,
             N_("Search"), "[Input Line Keys]",
             quick_widgets, NULL, NULL
         };

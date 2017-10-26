@@ -185,7 +185,7 @@ edit_options_dialog (WDialog * h)
         };
 
         quick_dialog_t qdlg = {
-            -1, -1, 74,
+            -1, -1, 74, -1,
             N_("Editor options"), "[Editor options]",
             quick_widgets, NULL, NULL
         };

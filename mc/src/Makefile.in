@@ -163,15 +163,15 @@ am__libinternal_la_SOURCES_DIST = cons.handler.c consaver/cons.saver.h \
 	events_init.h execute.c execute.h help.c help.h history.h \
 	keybind-defaults.c keybind-defaults.h learn.c learn.h setup.c \
 	setup.h textconf.c textconf.h util.c util.h mcgdb.c mcgdb.h \
-	mcgdb-bp.c mcgdb-bp.h selcodepage.c selcodepage.h background.c \
-	background.h
+	mcgdb-bp.c mcgdb-bp.h mcgdb-bp-widget.c mcgdb-bp-widget.h \
+	selcodepage.c selcodepage.h background.c background.h
 am__objects_1 = cons.handler.lo
 @CHARSET_TRUE@am__objects_2 = selcodepage.lo
 @ENABLE_BACKGROUND_TRUE@am__objects_3 = background.lo
 am_libinternal_la_OBJECTS = $(am__objects_1) args.lo clipboard.lo \
 	events_init.lo execute.lo help.lo keybind-defaults.lo learn.lo \
 	setup.lo textconf.lo util.lo mcgdb.lo mcgdb-bp.lo \
-	$(am__objects_2) $(am__objects_3)
+	mcgdb-bp-widget.lo $(am__objects_2) $(am__objects_3)
 libinternal_la_OBJECTS = $(am_libinternal_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -551,7 +551,8 @@ libinternal_la_SOURCES = $(SRC_mcgdb_mc_conssaver) args.c args.h \
 	execute.h help.c help.h history.h keybind-defaults.c \
 	keybind-defaults.h learn.c learn.h setup.c setup.h textconf.c \
 	textconf.h util.c util.h mcgdb.c mcgdb.h mcgdb-bp.c mcgdb-bp.h \
-	$(am__append_7) $(am__append_8)
+	mcgdb-bp-widget.c mcgdb-bp-widget.h $(am__append_7) \
+	$(am__append_8)
 EXTRA_DIST = $(SRC_maintainer) $(SRC_charset)
 all: all-recursive
 
@@ -671,6 +672,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/keybind-defaults.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/learn.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mcgdb-bp-widget.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mcgdb-bp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mcgdb.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/selcodepage.Plo@am__quote@

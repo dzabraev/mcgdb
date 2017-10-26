@@ -530,7 +530,7 @@ configure_box (void)
         };
 
         quick_dialog_t qdlg = {
-            -1, -1, 60,
+            -1, -1, 60, -1,
             N_("Configure options"), "[Configuration]",
             quick_widgets, configure_callback, NULL
         };
@@ -579,7 +579,7 @@ appearance_box (void)
         };
 
         quick_dialog_t qdlg = {
-            -1, -1, 54,
+            -1, -1, 54, -1,
             N_("Appearance"), "[Appearance]",
             quick_widgets, dlg_default_callback, NULL
         };
@@ -656,7 +656,7 @@ panel_options_box (void)
         };
 
         quick_dialog_t qdlg = {
-            -1, -1, 60,
+            -1, -1, 60, -1,
             N_("Panel options"), "[Panel options]",
             quick_widgets, NULL, NULL
         };
@@ -749,7 +749,7 @@ panel_listing_box (WPanel * panel, int num, char **userp, char **minip, int *use
         };
 
         quick_dialog_t qdlg = {
-            -1, -1, 48,
+            -1, -1, 48, -1,
             N_("Listing mode"), "[Listing Mode...]",
             quick_widgets, panel_listing_callback, NULL
         };
@@ -839,7 +839,7 @@ sort_box (dir_sort_options_t * op, const panel_field_t * sort_field)
         };
 
         quick_dialog_t qdlg = {
-            -1, -1, 40,
+            -1, -1, 40, -1,
             N_("Sort order"), "[Sort Order...]",
             quick_widgets, NULL, NULL
         };
@@ -878,7 +878,7 @@ confirm_box (void)
     };
 
     quick_dialog_t qdlg = {
-        -1, -1, 46,
+        -1, -1, 46, -1,
         N_("Confirmation"), "[Confirmation]",
         quick_widgets, NULL, NULL
     };
@@ -913,7 +913,7 @@ display_bits_box (void)
     };
 
     quick_dialog_t qdlg = {
-        -1, -1, 46,
+        -1, -1, 46, -1,
         _("Display bits"), "[Display bits]",
         quick_widgets, NULL, NULL
     };
@@ -971,7 +971,7 @@ display_bits_box (void)
         };
 
         quick_dialog_t qdlg = {
-            -1, -1, 46,
+            -1, -1, 46, -1,
             N_("Display bits"), "[Display bits]",
             quick_widgets, NULL, NULL
         };
@@ -1096,7 +1096,7 @@ configure_vfs (void)
         };
 
         quick_dialog_t qdlg = {
-            -1, -1, 56,
+            -1, -1, 56, -1,
             N_("Virtual File System Setting"), "[Virtual FS]",
             quick_widgets,
 #ifdef ENABLE_VFS_FTP
@@ -1152,7 +1152,7 @@ cd_dialog (void)
     };
 
     quick_dialog_t qdlg = {
-        w->y + w->lines - 6, w->x, w->cols,
+        w->y + w->lines - 6, w->x, w->cols, -1,
         N_("Quick cd"), "[Quick cd]",
         quick_widgets, NULL, NULL
     };
@@ -1181,7 +1181,7 @@ symlink_dialog (const vfs_path_t * existing_vpath, const vfs_path_t * new_vpath,
     };
 
     quick_dialog_t qdlg = {
-        -1, -1, 64,
+        -1, -1, 64, -1,
         N_("Symbolic link"), "[File Menu]",
         quick_widgets, NULL, NULL
     };
@@ -1305,7 +1305,7 @@ vfs_smb_get_authinfo (const char *host, const char *share, const char *domain, c
         };
 
         quick_dialog_t qdlg = {
-            -1, -1, 40,
+            -1, -1, 40, -1,
             N_("SMB authentication"), "[Smb Authinfo]",
             quick_widgets, NULL, NULL
         };

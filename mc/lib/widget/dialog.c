@@ -764,6 +764,11 @@ dlg_default_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, v
 
 /* --------------------------------------------------------------------------------------------- */
 
+static void
+default_dlg_draw_broadcast_msg (WDialog * h) {
+  return dlg_broadcast_msg (h, MSG_DRAW);
+}
+
 WDialog *
 dlg_create (gboolean modal, int y1, int x1, int lines, int cols, widget_pos_flags_t pos_flags,
             gboolean compact, const int *colors, widget_cb_fn callback,
@@ -777,6 +782,7 @@ dlg_create (gboolean modal, int y1, int x1, int lines, int cols, widget_pos_flag
     dlg_adjust_position (pos_flags, &y1, &x1, &lines, &cols);
     widget_init (w, y1, x1, lines, cols, (callback != NULL) ? callback : dlg_default_callback,
                  mouse_callback);
+    new_d->dlg_draw_broadcast_msg = default_dlg_draw_broadcast_msg;
     w->pos_flags = pos_flags;
     w->options |= WOP_SELECTABLE | WOP_TOP_SELECT;
 
@@ -1106,7 +1112,7 @@ dlg_redraw (WDialog * h)
     }
 
     send_message (h, NULL, MSG_DRAW, 0, NULL);
-    dlg_broadcast_msg (h, MSG_DRAW);
+    h->dlg_draw_broadcast_msg (h);
     update_cursor (h);
 }
 
@@ -1125,7 +1131,6 @@ void
 dlg_init (WDialog * h)
 {
     Widget *wh = WIDGET (h);
-
     if (top_dlg != NULL && widget_get_state (WIDGET (top_dlg->data), WST_MODAL))
         widget_set_state (wh, WST_MODAL, TRUE);
 

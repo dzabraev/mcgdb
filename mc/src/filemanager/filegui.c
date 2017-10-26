@@ -1259,7 +1259,7 @@ file_mask_dialog (file_op_context_t * ctx, FileOperation operation,
         };
 
         quick_dialog_t qdlg = {
-            -1, -1, fmd_xlen,
+            -1, -1, fmd_xlen, -1,
             op_names[operation], "[Mask Copy/Rename]",
             quick_widgets, NULL, NULL
         };

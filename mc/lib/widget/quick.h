@@ -331,12 +331,14 @@ struct quick_widget_t
 typedef struct
 {
     int y, x;                   /* if -1, then center the dialog */
-    int cols;                   /* heigth is calculated automatically */
+    int cols;
+    int lines;                  /* if -1, then heigth is calculated automatically */
     const char *title;
     const char *help;
     quick_widget_t *widgets;
     widget_cb_fn callback;
     widget_mouse_cb_fn mouse_callback;
+    dlg_draw_broadcast_fn dlg_draw_broadcast_msg;
 } quick_dialog_t;
 
 /*** global variables defined in .c file *********************************************************/

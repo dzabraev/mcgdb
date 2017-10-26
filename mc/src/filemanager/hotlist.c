@@ -991,7 +991,7 @@ add_new_entry_input (const char *header, const char *text1, const char *text2,
     };
 
     quick_dialog_t qdlg = {
-        -1, -1, 64,
+        -1, -1, 64, -1,
         header, help,
         quick_widgets, NULL, NULL
     };
@@ -1053,7 +1053,7 @@ add_new_group_input (const char *header, const char *label, char **result)
     };
 
     quick_dialog_t qdlg = {
-        -1, -1, 64,
+        -1, -1, 64, -1,
         header, "[Hotlist]",
         quick_widgets, NULL, NULL
     };

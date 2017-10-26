@@ -2542,7 +2542,7 @@ panel_select_unselect_files (WPanel * panel, const char *title, const char *hist
     };
 
     quick_dialog_t qdlg = {
-        -1, -1, 50,
+        -1, -1, 50, -1,
         title, "[Select/Unselect Files]",
         quick_widgets, NULL, NULL
     };

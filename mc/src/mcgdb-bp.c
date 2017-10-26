@@ -8,9 +8,10 @@
 
 #include "src/mcgdb.h"
 #include "src/mcgdb-bp.h"
+#include "src/mcgdb-bp-widget.h"
 
 
-static GList * mcgdb_bps = NULL;
+GList * mcgdb_bps = NULL;
 static int id_counter=1;
 
 #define MCGDB_BP(l) ((mcgdb_bp *)(l->data))
@@ -21,12 +22,8 @@ int mcgdb_bp_color_normal;
 int mcgdb_bp_color_disabled;
 
 
-static mcgdb_bp * mcgdb_bp_new (void);
-static void mcgdb_bp_free (mcgdb_bp * bp);
 static void mcgdb_bp_add_location (mcgdb_bp *bp, const char *filename, int line);
 static void mcgdb_bp_clear_locations (mcgdb_bp *bp);
-static int count_bps (const char *filename, long line);
-static gboolean breakpoints_edit_dialog (const char *filename, long line);
 static void delete_by_id (int id);
 static mcgdb_bp * get_by_id (int id);
 static mcgdb_bp * get_by_number (int number);
@@ -66,7 +63,6 @@ static gboolean bp_locs_compare (const bp_loc_t *loc1, const bp_loc_t *loc2);
 gboolean mcgdb_bp_has_location (const mcgdb_bp *bp, const char *filename, int line);
 gboolean mcgdb_bp_has_loc (const mcgdb_bp *bp, const_bp_loc_t *loc);
 gboolean mcgdb_bp_has_not_loc (const mcgdb_bp *bp, const_bp_loc_t *loc);
-static GList * mcgdb_bp_find_bp_with_location (GList *bpl, const char *filename, int line);
 static GList * mcgdb_bp_find_bp_with_loc (GList *bpl, const_bp_loc_t *loc);
 
 
@@ -219,11 +215,6 @@ send_pkg_update_bp (const mcgdb_bp * bp) {
 
 
 static gboolean
-breakpoints_edit_dialog (const char *filename, long line) {
-  return FALSE;
-}
-
-static gboolean
 bp_has_nondefault_vals(mcgdb_bp *bp) {
   return !(
   bp->enabled==TRUE      &&
@@ -262,7 +253,7 @@ mcgdb_bp_find_bp_with_loc (GList *bpl, const_bp_loc_t *loc) {
   return g_list_find_custom (bpl,loc,(GCompareFunc)mcgdb_bp_has_not_loc);
 }
 
-static GList *
+GList *
 mcgdb_bp_find_bp_with_location (GList *bpl, const char *filename, int line) {
   const_bp_loc_t loc = {.filename=filename,.line=line};
   return mcgdb_bp_find_bp_with_loc (bpl,&loc);
@@ -270,7 +261,7 @@ mcgdb_bp_find_bp_with_location (GList *bpl, const char *filename, int line) {
 
 
 
-static int
+int
 count_bps (const char *filename, long line) {
   int n=0;
   const_bp_loc_t loc = {.filename=filename,.line=line};
@@ -326,7 +317,7 @@ mcgdb_bp_process_click (const char *filename, long line, gboolean open_menu) {
     else {
       mcgdb_bp *bp = mcgdb_bp_new ();
       mcgdb_bp_add_location (bp,filename,line);
-      asprintf(&bp->create_loc,"%s:%d",filename,line);
+      asprintf(&bp->create_loc,"%s:%lu",filename,line);
       message_assert (bp->create_loc!=NULL);
       insert_bp_to_list (bp);
       send_pkg_update_bp (bp);
@@ -404,7 +395,7 @@ mcgdb_bp_clear_locations (mcgdb_bp *bp) {
   bp->locations = NULL;
 }
 
-static void
+void
 mcgdb_bp_free (mcgdb_bp * bp) {
   mcgdb_bp_clear_locations (bp);
   if (bp->condition)
@@ -415,8 +406,8 @@ mcgdb_bp_free (mcgdb_bp * bp) {
 }
 
 
-static mcgdb_bp *
-mcgdb_bp_new () {
+mcgdb_bp *
+mcgdb_bp_new (void) {
   mcgdb_bp * bp = g_new(mcgdb_bp,1);
   bp->number=-1;
   bp->enabled=TRUE;
@@ -434,7 +425,29 @@ mcgdb_bp_new () {
   return bp;
 }
 
+void
+mcgdb_bp_copy_to (const mcgdb_bp * bp, mcgdb_bp * bp_new) {
+  bp_new->number        = bp->number        ;
+  bp_new->enabled       = bp->enabled       ;
+  bp_new->silent        = bp->silent        ;
+  bp_new->ignore_count  = bp->ignore_count  ;
+  bp_new->hit_count     = bp->hit_count     ;
+  bp_new->temporary     = bp->temporary     ;
+  bp_new->thread        = bp->thread        ;
+  bp_new->condition     = bp->condition     ;
+  bp_new->commands      = bp->commands      ;
+  bp_new->id            = bp->id            ;
+  bp_new->wait_status   = bp->wait_status   ;
+  bp_new->locations     = bp->locations     ;
+  bp_new->create_loc    = bp->create_loc    ;
+}
 
+mcgdb_bp *
+mcgdb_bp_copy (const mcgdb_bp * bp) {
+  mcgdb_bp * bp_new = g_new (mcgdb_bp, 1);
+  mcgdb_bp_copy_to (bp,bp_new);
+  return bp_new;
+}
 
 static void
 delete_by_id (int id) {

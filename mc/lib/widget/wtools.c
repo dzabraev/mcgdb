@@ -218,7 +218,7 @@ fg_input_dialog_help (const char *header, const char *text, const char *help,
         };
 
         quick_dialog_t qdlg = {
-            -1, -1, COLS / 2, header,
+            -1, -1, COLS / 2, -1, header,
             help, quick_widgets, NULL, NULL
         };
 

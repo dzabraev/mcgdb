@@ -107,7 +107,7 @@ mcview_dialog_search (WView * view)
         };
 
         quick_dialog_t qdlg = {
-            -1, -1, 58,
+            -1, -1, 58, -1,
             N_("Search"), "[Input Line Keys]",
             quick_widgets, NULL, NULL
         };
@@ -213,7 +213,7 @@ mcview_dialog_goto (WView * view, off_t * offset)
         };
 
         quick_dialog_t qdlg = {
-            -1, -1, 40,
+            -1, -1, 40, -1,
             N_("Goto"), "[Input Line Keys]",
             quick_widgets, NULL, NULL
         };
