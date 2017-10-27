@@ -454,7 +454,13 @@ mcgdb_bp_copy_to (const mcgdb_bp * bp, mcgdb_bp * bp_new) {
   bp_new->commands      = bp->commands      ;
   bp_new->id            = bp->id            ;
   bp_new->wait_status   = bp->wait_status   ;
-  bp_new->locations     = g_list_copy_deep (bp->locations, gcopyfunc_bp_loc_copy, NULL);
+  //bp_new->locations     = g_list_copy_deep (bp->locations, gcopyfunc_bp_loc_copy, NULL);
+  {
+    bp_new->locations = NULL;
+    for (GList *l = bp_new->locations;l;l=l->next) {
+      bp_new->locations = g_list_append (bp_new->locations, bp_loc_copy (l->data));
+    }
+  }
   bp_new->create_loc    = bp->create_loc    ;
 }
 

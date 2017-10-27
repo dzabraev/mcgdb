@@ -80,13 +80,19 @@ bp_dlg_draw_broadcast_msg(WDialog * h) {
     h->current = h_current_svd;
 }
 
+#define quick_append(arr,X) do {\
+  aquick_widget_t q = (aquick_widget_t) X;\
+  g_array_append_val (arr,q);\
+} while (0)
+
 static int
-add_widget_exists_bp (aquick_widget_t * widgets, mcgdb_bp *bp) {
+add_widget_exists_bp (GArray * bps_widgets, mcgdb_bp *bp) {
   int idx=0;
   //QUICK_LABEL ()
   //widgets[idx++] = (quick_widget_t) QUICK_START_GROUPBOX (N_("breakpoint"));
   //dgets[idx++] = (quick_widget_t) QUICK_START_COLUMNS;
-  widgets[idx++] = (aquick_widget_t) QUICK_CHECKBOX (strdup(N_("enabled")), &bp->enabled, NULL);
+  quick_append (bps_widgets,QUICK_CHECKBOX (strdup(N_("enabled")), &bp->enabled, NULL));
+  //widgets[idx++] = (aquick_widget_t) ;
   //dgets[idx++] = (quick_widget_t) QUICK_SEPARATOR (FALSE);
   //dgets[idx++] = (quick_widget_t) QUICK_STOP_COLUMNS;
   //widgets[idx++] = (quick_widget_t) QUICK_STOP_GROUPBOX;
@@ -96,27 +102,28 @@ add_widget_exists_bp (aquick_widget_t * widgets, mcgdb_bp *bp) {
 gboolean
 breakpoints_edit_dialog (const char *filename, long line) {
   int nbps = count_bps (filename,line);
-  int per_widget=10;
-  int total=0;
-  aquick_widget_t * bps_widgets = g_new (aquick_widget_t,nbps*per_widget+1);
+  GArray * bps_widgets = g_array_new (FALSE, FALSE, sizeof(aquick_widget_t));
   mcgdb_bp ** copy_bps = g_new (mcgdb_bp *, nbps);
   quick_dialog_t qdlg;
   int idx=0;
   GList *l;
   mcgdb_bp *bp;
+
+  g_array_set_clear_func (bps_widgets, aquick_free);
+
   for (l=mcgdb_bp_find_bp_with_location (mcgdb_bps, filename, line);
         l!=0;
         l = mcgdb_bp_find_bp_with_location (l->next, filename, line),idx++) {
     message_assert (l!=0);
     bp = MCGDB_BP (l);
     copy_bps[idx] = mcgdb_bp_copy (bp);
-    total += add_widget_exists_bp (bps_widgets+total,copy_bps[idx]);
+    add_widget_exists_bp (bps_widgets,copy_bps[idx]);
   }
-  bps_widgets[total] = (aquick_widget_t) QUICK_END;
+  quick_append (bps_widgets, QUICK_END);
   qdlg = (quick_dialog_t) {
     1, 1, 60, 30,
     N_("Breakpoints"), "[Breakpoints]",
-    (quick_widget_t *) bps_widgets, NULL, bp_mouse_callback, bp_dlg_draw_broadcast_msg
+    (quick_widget_t *) bps_widgets->data, NULL, bp_mouse_callback, bp_dlg_draw_broadcast_msg
   };
   quick_dialog (&qdlg);
 
@@ -135,10 +142,7 @@ breakpoints_edit_dialog (const char *filename, long line) {
   g_free (copy_bps);
 
 
-  for (int i=0;i<total;i++) {
-    aquick_free (bps_widgets+i);
-  }
-  g_free (bps_widgets);
+  g_array_free (bps_widgets, TRUE);
 
 /*
     gboolean test;
