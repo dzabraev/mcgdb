@@ -101,6 +101,7 @@ typedef enum
     WPOS_KEEP_RIGHT = (1 << 5), /* keep widget distance to right border of dialog */
     WPOS_KEEP_TOP = (1 << 6),   /* keep widget distance to top border of dialog */
     WPOS_KEEP_BOTTOM = (1 << 7),        /* keep widget distance to bottom border of dialog */
+    WPOS_KEEP_CONST = (1<<8), /* don't modify y,x position of dialog */
     WPOS_KEEP_HORZ = WPOS_KEEP_LEFT | WPOS_KEEP_RIGHT,
     WPOS_KEEP_VERT = WPOS_KEEP_TOP | WPOS_KEEP_BOTTOM,
     WPOS_KEEP_ALL = WPOS_KEEP_HORZ | WPOS_KEEP_VERT,

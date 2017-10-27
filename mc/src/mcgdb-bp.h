@@ -32,7 +32,21 @@ typedef struct mcgdb_bp{
   bpwait wait_status;
 } mcgdb_bp;
 
-#define MCGDB_BP(l) ((mcgdb_bp *)(l->data))
+#define MCGDB_BP(l) ((mcgdb_bp *)((l) ? (l)->data : NULL))
+
+
+
+typedef struct bp_loc {
+  char *filename;
+  int line;
+} bp_loc_t;
+
+typedef struct const_bp_loc {
+  const char *filename;
+  int line;
+} const_bp_loc_t;
+
+#define BP_LOC(l) ((bp_loc_t *)((l) ? (l)->data : NULL))
 
 
 void            mcgdb_bp_module_init(void);

@@ -363,4 +363,19 @@ quick_dialog (quick_dialog_t * quick_dlg)
     return quick_dialog_skip (quick_dlg, 1);
 }
 
+
+typedef struct quick_dialog_self {
+  WDialog *dd;
+  int return_val;
+  GArray *widgets;
+  GList *input_labels;
+  quick_dialog_t * quick_dlg;
+  int nskip;
+} quick_dialog_self;
+
+
+void quick_dialog_skip_after (quick_dialog_self *self);
+int quick_dialog_skip_run (quick_dialog_self *self);
+WDialog * quick_dialog_skip_init (quick_dialog_self * self);
+
 #endif /* MC__QUICK_H */

@@ -713,7 +713,7 @@ dlg_set_position (WDialog * h, int y, int x, int lines, int cols)
 void
 dlg_set_size (WDialog * h, int lines, int cols)
 {
-    int x = 0, y = 0;
+    int x = WIDGET (h)->x, y = WIDGET (h)->y;
 
     dlg_adjust_position (WIDGET (h)->pos_flags, &y, &x, &lines, &cols);
     dlg_set_position (h, y, x, lines, cols);

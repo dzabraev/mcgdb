@@ -65,14 +65,62 @@ groupbox_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void
     case MSG_DRAW:
         {
             WDialog *h = w->owner;
+            Widget *wh = WIDGET(h);
+            long height;
+            long    A=wh->y+2,
+                    B=wh->y+wh->lines-2,
+                    A1=w->y,
+                    B1=w->y+w->lines-1;
+            gboolean draw_top = TRUE, draw_bottom=TRUE;
 
             gboolean disabled;
 
             disabled = widget_get_state (w, WST_DISABLED);
             tty_setcolor (disabled ? DISABLED_COLOR : h->color[DLG_COLOR_NORMAL]);
-            tty_draw_box (w->y, w->x, w->lines, w->cols, TRUE);
 
-            if (g->title != NULL)
+            if (A1<A) {
+              draw_top=FALSE;
+              A1=A;
+            }
+            if (B1<A) {
+              draw_bottom=FALSE;
+              B1=A;
+            }
+            if (A1>=B) {
+              draw_top=FALSE;
+              A1=B;
+            }
+            if (B1>=B) {
+              draw_bottom=FALSE;
+              B1=B;
+            }
+            if (draw_top) { /*top line*/
+              tty_draw_hline(A1,w->x+1,mc_tty_frm[MC_TTY_FRM_HORIZ],w->cols-1);
+              tty_gotoyx (A1, w->x);
+              tty_print_alt_char (ACS_ULCORNER, TRUE);
+              tty_gotoyx (A1, w->x+w->cols);
+              tty_print_alt_char (ACS_URCORNER, TRUE);
+            }
+            height = B1-A1-1;
+            if (height>0) {
+              int A2 = A1+1;
+              if (!draw_top) {
+                height++;
+                A2--;
+              }
+              tty_draw_vline(A2,w->x,mc_tty_frm[MC_TTY_FRM_VERT],height);
+              tty_draw_vline(A2,w->x+w->cols,mc_tty_frm[MC_TTY_FRM_VERT],height);
+            }
+
+            if (draw_bottom) { /**bottom line*/
+              tty_draw_hline(B1,w->x,mc_tty_frm[MC_TTY_FRM_HORIZ],w->cols);
+              tty_gotoyx (B1, w->x);
+              tty_print_alt_char (ACS_LLCORNER, TRUE);
+              tty_gotoyx (B1, w->x+w->cols);
+              tty_print_alt_char (ACS_LRCORNER, TRUE);
+            }
+
+            if (g->title != NULL && draw_top)
             {
                 tty_setcolor (disabled ? DISABLED_COLOR : h->color[DLG_COLOR_TITLE]);
                 widget_move (w, 0, 1);

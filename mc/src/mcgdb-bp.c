@@ -14,8 +14,6 @@
 GList * mcgdb_bps = NULL;
 static int id_counter=1;
 
-#define MCGDB_BP(l) ((mcgdb_bp *)(l->data))
-
 int mcgdb_bp_color_wait_remove;
 int mcgdb_bp_color_wait_insert;
 int mcgdb_bp_color_normal;
@@ -40,19 +38,6 @@ static json_t * pkg_delete_bp (const mcgdb_bp *bp);
 static void send_pkg (json_t *pkg);
 static void send_pkg_delete_bp (const mcgdb_bp * bp);
 static void send_pkg_update_bp (const mcgdb_bp * bp);
-
-
-
-
-typedef struct bp_loc {
-  char *filename;
-  int line;
-} bp_loc_t;
-
-typedef struct const_bp_loc {
-  const char *filename;
-  int line;
-} const_bp_loc_t;
 
 
 
