@@ -60,7 +60,7 @@ bp_mouse_callback(Widget * w, mouse_msg_t msg, mouse_event_t * event) {
 
 static void
 bp_dlg_draw_broadcast_msg(WDialog * h) {
-  WDialog *h_current_svd=h->current;
+  GList *h_current_svd=h->current;
   h->current=NULL;
   for(GList *l = h->widgets; l!=NULL; l = g_list_next (l)) {
     Widget *c = (Widget *)(l->data);
@@ -81,12 +81,12 @@ bp_dlg_draw_broadcast_msg(WDialog * h) {
 }
 
 static int
-add_widget_exists_bp (quick_widget_t * widgets, mcgdb_bp *bp) {
+add_widget_exists_bp (aquick_widget_t * widgets, mcgdb_bp *bp) {
   int idx=0;
   //QUICK_LABEL ()
   //widgets[idx++] = (quick_widget_t) QUICK_START_GROUPBOX (N_("breakpoint"));
   //dgets[idx++] = (quick_widget_t) QUICK_START_COLUMNS;
-  widgets[idx++] = (quick_widget_t) QUICK_CHECKBOX (N_("enabled"), &bp->enabled, NULL);
+  widgets[idx++] = (aquick_widget_t) QUICK_CHECKBOX (strdup(N_("enabled")), &bp->enabled, NULL);
   //dgets[idx++] = (quick_widget_t) QUICK_SEPARATOR (FALSE);
   //dgets[idx++] = (quick_widget_t) QUICK_STOP_COLUMNS;
   //widgets[idx++] = (quick_widget_t) QUICK_STOP_GROUPBOX;
@@ -98,7 +98,7 @@ breakpoints_edit_dialog (const char *filename, long line) {
   int nbps = count_bps (filename,line);
   int per_widget=10;
   int total=0;
-  quick_widget_t * bps_widgets = g_new (quick_widget_t,nbps*per_widget+1);
+  aquick_widget_t * bps_widgets = g_new (aquick_widget_t,nbps*per_widget+1);
   mcgdb_bp ** copy_bps = g_new (mcgdb_bp *, nbps);
   quick_dialog_t qdlg;
   int idx=0;
@@ -112,11 +112,11 @@ breakpoints_edit_dialog (const char *filename, long line) {
     copy_bps[idx] = mcgdb_bp_copy (bp);
     total += add_widget_exists_bp (bps_widgets+total,copy_bps[idx]);
   }
-  bps_widgets[total] = (quick_widget_t) QUICK_END;
+  bps_widgets[total] = (aquick_widget_t) QUICK_END;
   qdlg = (quick_dialog_t) {
     1, 1, 60, 30,
     N_("Breakpoints"), "[Breakpoints]",
-    bps_widgets, NULL, bp_mouse_callback, bp_dlg_draw_broadcast_msg
+    (quick_widget_t *) bps_widgets, NULL, bp_mouse_callback, bp_dlg_draw_broadcast_msg
   };
   quick_dialog (&qdlg);
 
@@ -130,9 +130,14 @@ breakpoints_edit_dialog (const char *filename, long line) {
   }
 
   for (int i=0;i<nbps;i++) {
-    mcgdb_bp_free (copy_bps[idx]);
+    mcgdb_bp_free (copy_bps[i]);
   }
   g_free (copy_bps);
+
+
+  for (int i=0;i<total;i++) {
+    aquick_free (bps_widgets+i);
+  }
   g_free (bps_widgets);
 
 /*

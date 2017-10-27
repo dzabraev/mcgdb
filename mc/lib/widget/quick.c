@@ -615,23 +615,46 @@ quick_dialog_skip (quick_dialog_t * quick_dlg, int nskip)
 
     return return_val;
 }
-#if 0
-quick_checkbox_new (const char *txt, int * st, unsigned long * id) {
-  quick_widget_t * widget = g_new(quick_widget_t,1);
-  widget
-  {
-    .widget_type = quick_checkbox,
-    .options = WOP_DEFAULT,
-    .pos_flags = WPOS_KEEP_DEFAULT,
-    .id = id_,
-    .u = {
-        .checkbox = {
-            .text = txt,
-            .state = st
-        }
-     }
-  }
-#endif
 
+void
+aquick_free (aquick_widget_t * widget) {
+  if (!widget)
+    return;
+  aquick_widget_t w = widget[0];
+  switch(widget->widget_type) {
+    case quick_end:
+    case quick_separator:
+    case quick_stop_groupbox:
+    case quick_buttons:
+    case quick_start_columns:
+    case quick_next_column:
+    case quick_stop_columns:
+      break;
+    case quick_checkbox:
+      g_free (w.u.checkbox.text);
+      break;
+    case quick_button:
+      g_free (w.u.button.text);
+      break;
+    case quick_input:
+      g_free (w.u.input.label_text);
+      g_free (w.u.input.text);
+      aquick_free (w.u.input.label);
+      break;
+    case quick_label:
+      g_free (w.u.label.text);
+      aquick_free (w.u.label.input);
+      break;
+    case quick_start_groupbox:
+      g_free (w.u.groupbox.title);
+      break;
+    case quick_radio:
+      for(int i=0;i<w.u.radio.count;i++) {
+        g_free (w.u.radio.items[i]);
+      }
+      g_free (w.u.radio.items);
+      break;
+  }
+}
 
 /* --------------------------------------------------------------------------------------------- */

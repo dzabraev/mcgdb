@@ -58,6 +58,8 @@ typedef struct const_bp_loc {
 
 static bp_loc_t *bp_loc_new (const char *filename, int line);
 static void bp_loc_free (bp_loc_t *loc);
+static bp_loc_t * bp_loc_copy (const bp_loc_t * loc);
+static gpointer gcopyfunc_bp_loc_copy (gconstpointer src, gpointer data);
 static gboolean bp_locs_compare (const bp_loc_t *loc1, const bp_loc_t *loc2);
 
 gboolean mcgdb_bp_has_location (const mcgdb_bp *bp, const char *filename, int line);
@@ -78,6 +80,20 @@ bp_loc_new (const char *filename, int line) {
   loc->line = line;
   return loc;
 }
+
+static bp_loc_t *
+bp_loc_copy (const bp_loc_t * loc) {
+  bp_loc_t *newloc = g_new (bp_loc_t,1);
+  newloc->filename = strdup (loc->filename);
+  newloc->line = loc->line;
+  return newloc;
+}
+
+static gpointer
+gcopyfunc_bp_loc_copy (gconstpointer src, gpointer data) {
+  return bp_loc_copy (src);
+}
+
 
 static void
 bp_loc_free (bp_loc_t *loc) {
@@ -438,7 +454,7 @@ mcgdb_bp_copy_to (const mcgdb_bp * bp, mcgdb_bp * bp_new) {
   bp_new->commands      = bp->commands      ;
   bp_new->id            = bp->id            ;
   bp_new->wait_status   = bp->wait_status   ;
-  bp_new->locations     = bp->locations     ;
+  bp_new->locations     = g_list_copy_deep (bp->locations, gcopyfunc_bp_loc_copy, NULL);
   bp_new->create_loc    = bp->create_loc    ;
 }
 

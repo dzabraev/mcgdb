@@ -262,71 +262,79 @@ typedef enum
 /*** structures declarations (and typedefs of structures)*****************************************/
 
 /* The widget is placed on relative_?/divisions_? of the parent widget */
-typedef struct quick_widget_t quick_widget_t;
 
-struct quick_widget_t
-{
-    quick_t widget_type;
 
-    widget_options_t options;
-    widget_state_t state;
-    widget_pos_flags_t pos_flags;
-    unsigned long *id;
 
-    /* widget parameters */
-    union
-    {
-        struct
-        {
-            const char *text;
-            int *state;         /* in/out */
-        } checkbox;
+#define QUICK_WIDGET_TYPE(PREFIX,CONST) \
+  typedef struct PREFIX ## quick_widget_t PREFIX ## quick_widget_t;\
+  struct PREFIX ## quick_widget_t { \
+      quick_t widget_type; \
+ \
+      widget_options_t options; \
+      widget_state_t state; \
+      widget_pos_flags_t pos_flags; \
+      unsigned long *id; \
+ \
+      /* widget parameters */ \
+      union \
+      { \
+          struct \
+          { \
+              CONST char *text; \
+              int *state;          /* in/out */ \
+          } checkbox; \
+ \
+          struct \
+          { \
+              CONST char *text; \
+              int action; \
+              bcback_fn callback; \
+          } button; \
+ \
+          struct \
+          { \
+              CONST char *label_text; \
+              quick_input_label_location_t label_location; \
+              PREFIX ## quick_widget_t *label; \
+              CONST char *text; \
+              input_complete_t completion_flags; \
+              gboolean is_passwd; /* TRUE -- is password */ \
+              gboolean strip_passwd; \
+              const char *histname; \
+              char **result; \
+          } input; \
+ \
+          struct \
+          { \
+              CONST char *text; \
+              PREFIX ## quick_widget_t *input; \
+          } label; \
+ \
+          struct \
+          { \
+              int count; \
+              CONST char **items; \
+              int *value;         /* in/out */ \
+          } radio; \
+ \
+          struct \
+          { \
+              CONST char *title; \
+          } groupbox; \
+ \
+          struct \
+          { \
+              gboolean space; \
+              gboolean line; \
+          } separator; \
+      } u; \
+    }
 
-        struct
-        {
-            const char *text;
-            int action;
-            bcback_fn callback;
-        } button;
+QUICK_WIDGET_TYPE(,const);
+QUICK_WIDGET_TYPE(a,);
 
-        struct
-        {
-            const char *label_text;
-            quick_input_label_location_t label_location;
-            quick_widget_t *label;
-            const char *text;
-            input_complete_t completion_flags;
-            gboolean is_passwd; /* TRUE -- is password */
-            gboolean strip_passwd;
-            const char *histname;
-            char **result;
-        } input;
 
-        struct
-        {
-            const char *text;
-            quick_widget_t *input;
-        } label;
-
-        struct
-        {
-            int count;
-            const char **items;
-            int *value;         /* in/out */
-        } radio;
-
-        struct
-        {
-            const char *title;
-        } groupbox;
-
-        struct
-        {
-            gboolean space;
-            gboolean line;
-        } separator;
-    } u;
-};
+void aquick_free (aquick_widget_t * widget);
 
 typedef struct
 {
