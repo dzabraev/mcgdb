@@ -8,7 +8,7 @@ from common import file_to_modname
 warnings=[]
 
 def is_buffers_equals(b1,b2,b1prev,b2prev,columns,lines,tostring,regexes,overlay_regexes):
-  mcoords = matched_coords(b1,b1prev,lines,columns,tostring,regexes,overlay_regexes) & \
+  mcoords = matched_coords(b1,b1prev,lines,columns,tostring,regexes,overlay_regexes) | \
             matched_coords(b2,b2prev,lines,columns,tostring,regexes,overlay_regexes)
   for col in range(columns):
     for row in range(lines):

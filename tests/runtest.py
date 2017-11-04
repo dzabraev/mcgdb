@@ -26,6 +26,8 @@ ALLTESTS=[
 
 def run_std_test(mcgdb,delay,logfile='logfile.log',wait=False,regexes='regexes.py'):
   has_regexes=os.path.exists(regexes)
+  if has_regexes:
+    regexes = os.path.abspath(regexes)
   cmd='make'
   print cmd
   subprocess.check_call(cmd, shell=True)

@@ -1,13 +1,18 @@
-testdirs = testsuite/variables.int testsuite/variables.wait_change_bug_1
+testcases = variables.int \
+            variables.wait_change_bug_1 \
+            variables.expand_change_null_step \
+            variables.incompl_struct \
+            srcwin.common
+
 
 all :
-	for testdir in $(testdirs); do \
-	  make -C $$testdir ; \
+	for name in $(testcases); do \
+	  make -C testsuite/$$name ; \
 	done
 
 clean :
-	for testdir in $(testdirs); do \
-	  make -C $$testdir clean ; \
+	for name in $(testcases); do \
+	  make -C testsuite/$$name clean ; \
 	done
 
 test : all

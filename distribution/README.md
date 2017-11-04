@@ -1,0 +1,1 @@
+для сборки pacur'ом: `cd pacur && sudo pacur project build`
