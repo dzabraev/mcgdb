@@ -1,7 +1,7 @@
 #coding=utf8
 
 from abc import abstractmethod, abstractproperty, ABCMeta
-import os,socket,ctypes,subprocess,time,logging,json
+import os,socket,ctypes,subprocess,time,logging,json,distutils.spawn
 import gdb
 
 import mcgdb
@@ -184,18 +184,6 @@ class BaseWin(CommunicationMixin,StorageId):
     '''
 
     mcgdb._dw[self.type]=self #debug
-    self.gui_window_cmd = '{cmd}'
-    if VALGRIND is not None:
-      self.gui_window_cmd = 'valgrind --log-file={logprefix}_{type}.log {cmd}'.format(
-        type=self.type,
-        logprefix=VALGRIND,
-        cmd=self.gui_window_cmd,
-      )
-    if COREDUMP:
-      self.gui_window_cmd = 'bash -c "cd {COREDUMP}; ulimit -c unlimited; {cmd}"'.format(
-        COREDUMP=COREDUMP,
-        cmd=self.gui_window_cmd)
-    self.gui_window_cmd='''gnome-terminal -e '{cmd}' '''.format(cmd=self.gui_window_cmd)
     self.lsock=socket.socket()
     self.lsock.bind( ('',0) )
     self.lsock.listen(1)
@@ -203,25 +191,44 @@ class BaseWin(CommunicationMixin,StorageId):
     self.listen_fd=self.lsock.fileno()
     manually=kwargs.pop('manually',False)
     cmd=self.make_runwin_cmd()
-    complete_cmd=self.gui_window_cmd.format(cmd=cmd)
     self.subentities={}
 
     if manually:
       gdb_print('''Execute manually `{cmd}` for start window'''.format(cmd=cmd))
     else:
+      gui_window_cmd = '{cmd}'
+      if VALGRIND is not None:
+        gui_window_cmd = 'valgrind --log-file={logprefix}_{type}.log {cmd}'.format(
+          type=self.type,
+          logprefix=VALGRIND,
+          cmd=gui_window_cmd,
+        )
+      if COREDUMP:
+        gui_window_cmd = 'bash -c "cd {COREDUMP}; ulimit -c unlimited; {cmd}"'.format(
+          COREDUMP=COREDUMP,
+          cmd=gui_window_cmd)
+      xterm,xterm_abspath = self.get_term()
+      gui_window_cmd='''{xterm} -e '{cmd1}' '''.format(cmd1=gui_window_cmd,xterm=xterm_abspath)
+      complete_cmd=gui_window_cmd.format(cmd=cmd)
       proc=subprocess.Popen(complete_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-      proc.wait()
-      rc=proc.returncode
-      if rc!=0:
-        out,err = proc.communicate()
-        error('''command: `{complete_cmd}` return error code: {rc}.
+      if xterm=='gnome-terminal':
+        proc.wait()
+        rc=proc.returncode
+        if rc!=0:
+          out,err = proc.communicate()
+          error('''command: `{complete_cmd}` return error code: {rc}.
 You can try execute this command manually from another terminal.
 stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
-  complete_cmd=complete_cmd,rc=rc,stdout=out,stderr=err))
-        gdb_print('''\nCan't open gui window({type}). execute manually: `{cmd}`\n'''.format(cmd=cmd,type=self.type))
-    if not hasattr(self,'subentities'):
-      self.subentities={}
+    complete_cmd=complete_cmd,rc=rc,stdout=out,stderr=err))
+          gdb_print('''\nCan't open gui window({type}). execute manually: `{cmd}`\n'''.format(cmd=cmd,type=self.type))
+
     super(BaseWin,self).__init__(**kwargs)
+
+  def get_term(self):
+    for term in ['gnome-terminal','xterm']:
+      abspath = distutils.spawn.find_executable(term)
+      if abspath:
+        return term,abspath
 
   @abstractproperty
   def subentities_cls(self): pass

@@ -12,6 +12,11 @@ with import <nixpkgs> { };
       slang
       gdb
       xterm
+
+      #packages for testing
+      (callPackage ./pyte.nix {})
+      pythonPackages.termcolor
+      pythonPackages.pexpect
     ];
   }
 
