@@ -1,5 +1,6 @@
 with import <nixpkgs> { };
   stdenv.mkDerivation {
+    hardeningDisable = ["all"];
     name = "mcgdb-env";
     buildInputs = [
       gcc
