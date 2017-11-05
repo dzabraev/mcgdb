@@ -20,7 +20,7 @@ mcgdb-python-build:
 	cp $(abs_srcdir)/python/mcgdb/__init__.py $(abs_builddir)/python/mcgdb/__init__.py
 	sed "s#__PATH_TO_DEFINES_MCGDB__#$(abs_builddir)/defines-mcgdb.gdb#"  $(abs_builddir)/python/mcgdb/__init__.py -i
 	sed "s#__PATH_TO_MC__#$(abs_builddir)/mc/src/mcgdb_mc#"               $(abs_builddir)/python/mcgdb/__init__.py -i
-	ln -sf $(abs_srcdir)/env.nix $(abs_builddir)/env.nix
+	cp -asf $(abs_srcdir)/env $(abs_builddir)
 
 #   tests
 	cp -asf $(abs_srcdir)/tests $(abs_builddir)
