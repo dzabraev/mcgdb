@@ -12,6 +12,7 @@ with import <nixpkgs> { };
       slang
       gdb
       xterm
+      git
 
       #packages for testing
       (callPackage ./pyte.nix {})
