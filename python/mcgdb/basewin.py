@@ -1,13 +1,14 @@
 #coding=utf8
 
 from abc import abstractmethod, abstractproperty, ABCMeta
-import os,socket,ctypes,subprocess,time,logging,json,distutils.spawn
+import os,socket,ctypes,subprocess,time,logging,json,distutils.spawn,sys
 import gdb
 
 import mcgdb
 from mcgdb.common import  pkgsend,pkgrecv,gdb_print,exec_cmd_in_gdb,gdb_stopped,\
                           error,get_prompt,debug,is_main_thread,exec_main,\
-                          mcgdbBaseException, TABID_TMP, gdbprint, VALGRIND, COREDUMP
+                          mcgdbBaseException, TABID_TMP, gdbprint, VALGRIND, COREDUMP, USETERM
+
 
 
 class StorageId(object):
@@ -225,6 +226,13 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     super(BaseWin,self).__init__(**kwargs)
 
   def get_term(self):
+    if USETERM:
+      term=USETERM
+      abspath=distutils.spawn.find_executable(term)
+      if abspath is None:
+        gdb_print('ERROR: cant find terminal from USETERM=%s\n' % term)
+        sys.exit(0)
+      return term,abspath
     for term in ['gnome-terminal','xterm']:
       abspath = distutils.spawn.find_executable(term)
       if abspath:

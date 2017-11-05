@@ -23,24 +23,24 @@ ALLTESTS=[
 ]
 
 
+def do_cmd(cmd):
+  print cmd
+  subprocess.check_call(cmd, shell=True)
+
 
 def run_std_test(mcgdb,delay,logfile='logfile.log',wait=False,regexes='regexes.py'):
   has_regexes=os.path.exists(regexes)
   if has_regexes:
     regexes = os.path.abspath(regexes)
-  cmd='make'
-  print cmd
-  subprocess.check_call(cmd, shell=True)
-  cmd="unxz --keep --force record.orig.play.xz"
-  print cmd
-  subprocess.check_call(cmd, shell=True)
+  do_cmd('make clean')
+  do_cmd('make')
+  do_cmd("unxz --keep --force record.orig.play.xz")
   cmd="mcgdb_play.py record.orig.py --delay={delay} --output=record.new.play --mcgdb={mcgdb}".format(delay=delay,mcgdb=mcgdb)
   if wait:
     cmd+=' --wait=record.orig.play'
     if has_regexes:
       cmd+=' --regexes=%s' % regexes
-  print cmd
-  subprocess.check_call(cmd, shell=True)
+  do_cmd(cmd)
   flog=open(logfile,'wb')
   kwargs={
       'journal1': 'record.orig.play',

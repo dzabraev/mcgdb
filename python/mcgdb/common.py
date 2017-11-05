@@ -34,6 +34,7 @@ VALGRIND    = os.environ.get('VALGRIND') #run gui window under valgrind
 WIN_LIST    = os.environ.get('WIN_LIST',"aux src").split()
 COVERAGE    = os.environ.get('COVERAGE')
 COREDUMP    = os.environ.get('COREDUMP')
+USETERM     = os.environ.get('USETERM')
 
 def setup_logging(DEBUG):       # pragma: no cover
   global debug_messages         # pragma: no cover
