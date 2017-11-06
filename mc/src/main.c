@@ -248,6 +248,11 @@ main (int argc, char *argv[])
         return exit_code;
     }
 
+    if (mcgdb_wait_gdb) {
+	int x=1;
+	while (x) {}
+    }
+
     ok = open_gdb_input_fd();
     if (!ok) {
       printf("Can't connect to gdb. Type `mcgdb open <type>` in gdb and repaste command.\n");

@@ -31,6 +31,7 @@
 
 #define STREQ(s1,s2) (!strncmp(s1,s2,strlen(s2)))
 
+gboolean mcgdb_wait_gdb;
 int mcgdb_listen_port;
 int gdb_input_fd;
 

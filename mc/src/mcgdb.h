@@ -130,6 +130,7 @@ typedef struct WEdit WEdit;
 void mcgdb_send_mouse_event_to_gdb(WEdit * edit, mouse_event_t * event);
 //int mcgdb_action_from_gdb(WEdit * edit);
 
+extern int	mcgdb_wait_gdb;
 extern int      mcgdb_listen_port;
 extern int      gdb_input_fd;
 

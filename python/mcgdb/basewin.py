@@ -7,7 +7,7 @@ import gdb
 import mcgdb
 from mcgdb.common import  pkgsend,pkgrecv,gdb_print,exec_cmd_in_gdb,gdb_stopped,\
                           error,get_prompt,debug,is_main_thread,exec_main,\
-                          mcgdbBaseException, TABID_TMP, gdbprint, VALGRIND, COREDUMP, USETERM
+                          mcgdbBaseException, TABID_TMP, gdbprint, VALGRIND, COREDUMP, USETERM, WAITGDB
 
 
 
@@ -250,8 +250,11 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
     ''' Данный метод формирует shell-команду для запуска окна с editor.
         Команда формируется на основе self.listen_port
     '''
-    return '{path_to_mc} -e --gdb-port={gdb_port}'.format(
+    cmd = '{path_to_mc} -e --gdb-port={gdb_port}'.format(
      path_to_mc=mcgdb.PATH_TO_MC,gdb_port=self.listen_port)
+    if WAITGDB is not None:
+      cmd += ' --wait-gdb'
+    return cmd
 
 
   def byemsg(self):

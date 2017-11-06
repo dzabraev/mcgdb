@@ -191,12 +191,20 @@ static const GOptionEntry argument_main_table[] = {
      N_("Edit files"),
      "<file> ..." },
     {
-     /* mc will be connect to this port */
+     /* mc will connect to this port */
      "gdb-port", 'G', G_OPTION_FLAG_IN_MAIN, G_OPTION_ARG_INT,
      &mcgdb_listen_port,
      N_("Set gdb listen port"),
      "<integer>"
     },
+
+    {
+     "wait-gdb", 'W', G_OPTION_FLAG_IN_MAIN, G_OPTION_ARG_NONE,
+     &mcgdb_wait_gdb,
+     N_("wait attach debugger (debug)"),
+     "<integer>"
+    },
+
 
     {
      NULL, '\0', 0, 0, NULL, NULL, NULL /* Complete struct initialization */
