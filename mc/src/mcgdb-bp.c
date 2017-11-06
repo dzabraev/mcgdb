@@ -36,8 +36,6 @@ static void     append_delete_bp (json_t *pkg, const mcgdb_bp *bp);
 static json_t * pkg_update_bp (const mcgdb_bp *bp);
 static json_t * pkg_delete_bp (const mcgdb_bp *bp);
 static void send_pkg (json_t *pkg);
-static void send_pkg_delete_bp (const mcgdb_bp * bp);
-static void send_pkg_update_bp (const mcgdb_bp * bp);
 
 
 
@@ -204,12 +202,12 @@ send_pkg (json_t *pkg) {
   free (resp);
 }
 
-static void
+void
 send_pkg_delete_bp (const mcgdb_bp * bp) {
   return send_pkg(pkg_delete_bp(bp));
 }
 
-static void
+void
 send_pkg_update_bp (const mcgdb_bp * bp) {
   return send_pkg(pkg_update_bp(bp));
 }
@@ -448,6 +446,31 @@ mcgdb_bp_copy_to (const mcgdb_bp * bp, mcgdb_bp * bp_new) {
   }
   bp_new->create_loc    = bp->create_loc    ;
 }
+
+gboolean
+mcgdb_bp_equals (const mcgdb_bp *bp1, const mcgdb_bp *bp2) {
+  return
+    bp1->number        == bp2->number        &&
+    bp1->enabled       == bp2->enabled       &&
+    bp1->silent        == bp2->silent        &&
+    bp1->ignore_count  == bp2->ignore_count  &&
+    bp1->temporary     == bp2->temporary     &&
+    bp1->thread        == bp2->thread        &&
+    bp1->condition     == bp2->condition     &&
+    bp1->commands      == bp2->commands      &&
+    bp1->id            == bp2->id            ;
+}
+
+void
+mcgdb_bp_assign (mcgdb_bp *bp1, const mcgdb_bp *bp2) {
+  bp1->enabled      = bp2->enabled       ;
+  bp1->silent       = bp2->silent        ;
+  bp1->ignore_count = bp2->ignore_count  ;
+  bp1->thread       = bp2->thread        ;
+  bp1->condition    = bp2->condition     ;
+  bp1->commands     = bp2->commands      ;
+}
+
 
 mcgdb_bp *
 mcgdb_bp_copy (const mcgdb_bp * bp) {

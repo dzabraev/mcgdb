@@ -70,12 +70,18 @@ GList * mcgdb_bp_find_bp_with_location (GList *bpl, const char *filename, int li
 void mcgdb_bp_free (mcgdb_bp * bp);
 mcgdb_bp * mcgdb_bp_new (void);
 
+gboolean
+mcgdb_bp_equals (const mcgdb_bp *bp1, const mcgdb_bp *bp2);
+
+void
+mcgdb_bp_assign (mcgdb_bp *bp1, const mcgdb_bp *bp2);
 
 
 
 void pkg_bps_upd(json_t *pkg);
 void pkg_bps_del(json_t *pkg);
 
-
+void send_pkg_delete_bp (const mcgdb_bp * bp);
+void send_pkg_update_bp (const mcgdb_bp * bp);
 
 #endif

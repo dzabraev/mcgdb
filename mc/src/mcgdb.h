@@ -83,6 +83,7 @@ typedef enum  {
   MCGDB_EXIT_DLG=1,
 } mcgdb_rc;
 
+extern gboolean disable_gdb_events;
 extern gboolean read_gdb_events;
 extern int mcgdb_current_line_color; /*color of current execute line*/
 extern long mcgdb_curline;

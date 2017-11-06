@@ -32,6 +32,7 @@ extern GArray *diff_keymap;
 #endif
 extern GArray *mcgdb_asm_keymap;
 extern GArray *mcgdb_aux_keymap;
+extern GArray *mcgdb_bpw_keymap;
 
 
 extern const global_keymap_t *main_map;
@@ -52,6 +53,7 @@ extern const global_keymap_t *diff_map;
 
 extern const global_keymap_t *mcgdb_asm_map;
 extern const global_keymap_t *mcgdb_aux_map;
+extern const global_keymap_t *mcgdb_bpw_map;
 
 
 /*** declarations of public functions ************************************************************/

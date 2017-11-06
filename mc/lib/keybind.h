@@ -24,6 +24,7 @@
 #define KEYMAP_SECTION_DIFFVIEWER "diffviewer"
 #define KEYMAP_SECTION_MCGDB_AUX "mcgdb_aux"
 #define KEYMAP_SECTION_MCGDB_ASM "mcgdb_asm"
+#define KEYMAP_SECTION_MCGDB_BPW "mcgdb_bpw"
 
 
 #define KEYMAP_SHORTCUT_LENGTH 32       /* FIXME: is 32 bytes enough for shortcut? */

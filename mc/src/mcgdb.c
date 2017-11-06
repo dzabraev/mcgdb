@@ -25,12 +25,13 @@
 
 #include "src/mcgdb.h"
 #include "src/mcgdb-bp.h"
+#include "src/mcgdb-bp-widget.h"
 #include "lib/widget/mcgdb_aux_widget.h"
 #include "lib/widget/mcgdb_asm_widget.h"
 
 
 #define STREQ(s1,s2) (!strncmp(s1,s2,strlen(s2)))
-
+gboolean disable_gdb_events=FALSE; /*turn off delivering gdb events to widgets*/
 gboolean mcgdb_wait_gdb;
 int mcgdb_listen_port;
 int gdb_input_fd;
@@ -509,7 +510,7 @@ evt_convertable_to_key(struct gdb_action * gdb_evt) {
 
 
 void mcgdb_checkset_read_gdb_events(WDialog * h) {
-  read_gdb_events = (find_editor (h)!=NULL) || is_mcgdb_aux_dialog(h) || is_mcgdb_asm_dialog(h);
+  read_gdb_events = !disable_gdb_events && ((find_editor (h)!=NULL) || is_mcgdb_aux_dialog (h) || is_mcgdb_asm_dialog (h) || is_bpw_dialog (h));
 }
 
 

@@ -497,5 +497,7 @@ PageUp = pgup
 Up = up
 Down = down
 
-
+[mcgdb_bpw]
+Up = up
+Down = down
 

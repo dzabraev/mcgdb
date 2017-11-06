@@ -53,6 +53,7 @@ GArray *diff_keymap = NULL;
 #endif
 GArray *mcgdb_aux_keymap = NULL;
 GArray *mcgdb_asm_keymap = NULL;
+GArray *mcgdb_bpw_keymap = NULL;
 
 const global_keymap_t *main_map = NULL;
 const global_keymap_t *main_x_map = NULL;
@@ -72,6 +73,7 @@ const global_keymap_t *diff_map = NULL;
 
 const global_keymap_t *mcgdb_aux_map = NULL;
 const global_keymap_t *mcgdb_asm_map = NULL;
+const global_keymap_t *mcgdb_bpw_map = NULL;
 
 /*** file scope macro definitions ****************************************************************/
 
