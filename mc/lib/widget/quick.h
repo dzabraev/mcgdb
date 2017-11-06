@@ -262,91 +262,81 @@ typedef enum
 /*** structures declarations (and typedefs of structures)*****************************************/
 
 /* The widget is placed on relative_?/divisions_? of the parent widget */
+typedef struct quick_widget_t quick_widget_t;
 
+struct quick_widget_t
+{
+    quick_t widget_type;
 
+    widget_options_t options;
+    widget_state_t state;
+    widget_pos_flags_t pos_flags;
+    unsigned long *id;
 
-#define QUICK_WIDGET_TYPE(PREFIX,CONST) \
-  typedef struct PREFIX ## quick_widget_t PREFIX ## quick_widget_t;\
-  struct PREFIX ## quick_widget_t { \
-      quick_t widget_type; \
- \
-      widget_options_t options; \
-      widget_state_t state; \
-      widget_pos_flags_t pos_flags; \
-      unsigned long *id; \
- \
-      /* widget parameters */ \
-      union \
-      { \
-          struct \
-          { \
-              CONST char *text; \
-              int *state;          /* in/out */ \
-          } checkbox; \
- \
-          struct \
-          { \
-              CONST char *text; \
-              int action; \
-              bcback_fn callback; \
-          } button; \
- \
-          struct \
-          { \
-              CONST char *label_text; \
-              quick_input_label_location_t label_location; \
-              PREFIX ## quick_widget_t *label; \
-              CONST char *text; \
-              input_complete_t completion_flags; \
-              gboolean is_passwd; /* TRUE -- is password */ \
-              gboolean strip_passwd; \
-              const char *histname; \
-              char **result; \
-          } input; \
- \
-          struct \
-          { \
-              CONST char *text; \
-              PREFIX ## quick_widget_t *input; \
-          } label; \
- \
-          struct \
-          { \
-              int count; \
-              CONST char **items; \
-              int *value;         /* in/out */ \
-          } radio; \
- \
-          struct \
-          { \
-              CONST char *title; \
-          } groupbox; \
- \
-          struct \
-          { \
-              gboolean space; \
-              gboolean line; \
-          } separator; \
-      } u; \
-    }
+    /* widget parameters */
+    union
+    {
+        struct
+        {
+            const char *text;
+            int *state;         /* in/out */
+        } checkbox;
 
-QUICK_WIDGET_TYPE(,const);
-QUICK_WIDGET_TYPE(a,);
+        struct
+        {
+            const char *text;
+            int action;
+            bcback_fn callback;
+        } button;
 
+        struct
+        {
+            const char *label_text;
+            quick_input_label_location_t label_location;
+            quick_widget_t *label;
+            const char *text;
+            input_complete_t completion_flags;
+            gboolean is_passwd; /* TRUE -- is password */
+            gboolean strip_passwd;
+            const char *histname;
+            char **result;
+        } input;
 
-void aquick_free (aquick_widget_t * widget);
+        struct
+        {
+            const char *text;
+            quick_widget_t *input;
+        } label;
+
+        struct
+        {
+            int count;
+            const char **items;
+            int *value;         /* in/out */
+        } radio;
+
+        struct
+        {
+            const char *title;
+        } groupbox;
+
+        struct
+        {
+            gboolean space;
+            gboolean line;
+        } separator;
+    } u;
+};
 
 typedef struct
 {
     int y, x;                   /* if -1, then center the dialog */
-    int cols;
-    int lines;                  /* if -1, then heigth is calculated automatically */
+    int cols;                   /* heigth is calculated automatically */
     const char *title;
     const char *help;
     quick_widget_t *widgets;
     widget_cb_fn callback;
     widget_mouse_cb_fn mouse_callback;
-    dlg_draw_broadcast_fn dlg_draw_broadcast_msg;
 } quick_dialog_t;
 
 /*** global variables defined in .c file *********************************************************/
@@ -362,20 +352,5 @@ quick_dialog (quick_dialog_t * quick_dlg)
 {
     return quick_dialog_skip (quick_dlg, 1);
 }
-
-
-typedef struct quick_dialog_self {
-  WDialog *dd;
-  int return_val;
-  GArray *widgets;
-  GList *input_labels;
-  quick_dialog_t * quick_dlg;
-  int nskip;
-} quick_dialog_self;
-
-
-void quick_dialog_skip_after (quick_dialog_self *self);
-int quick_dialog_skip_run (quick_dialog_self *self);
-WDialog * quick_dialog_skip_init (quick_dialog_self * self);
 
 #endif /* MC__QUICK_H */

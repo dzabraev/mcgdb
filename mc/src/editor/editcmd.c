@@ -459,7 +459,7 @@ edit_get_save_file_as (WEdit * edit)
     };
 
     quick_dialog_t qdlg = {
-        -1, -1, 64, -1,
+        -1, -1, 64,
         N_("Save As"), "[Save File As]",
         quick_widgets, NULL, NULL
     };
@@ -1661,7 +1661,7 @@ edit_save_mode_cmd (void)
         };
 
         quick_dialog_t qdlg = {
-            -1, -1, 38, -1,
+            -1, -1, 38,
             N_("Edit Save Mode"), "[Edit Save Mode]",
             quick_widgets, edit_save_mode_callback, NULL
         };
@@ -3313,7 +3313,7 @@ edit_mail_dialog (WEdit * edit)
     };
 
     quick_dialog_t qdlg = {
-        -1, -1, 50, -1,
+        -1, -1, 50,
         N_("Mail"), "[Input Line Keys]",
         quick_widgets, NULL, NULL
     };

@@ -158,10 +158,9 @@ quick_create_labeled_input (GArray * widgets, int *y, int x, quick_widget_t * qu
 /*** public functions ****************************************************************************/
 /* --------------------------------------------------------------------------------------------- */
 
-
-
-WDialog *
-quick_dialog_skip_init (quick_dialog_self * self) {
+int
+quick_dialog_skip (quick_dialog_t * quick_dlg, int nskip)
+{
     int len;
     int blen = 0;
     int x, y;                   /* current positions */
@@ -178,11 +177,13 @@ quick_dialog_skip_init (quick_dialog_self * self) {
     /* x position of 2nd column is 4 and it will be fixed later, after creation of all widgets */
     int x2 = 4;
 
+    GArray *widgets;
     size_t i;
     quick_widget_t *quick_widget;
-    quick_dialog_t * quick_dlg = self->quick_dlg;
     WGroupbox *g = NULL;
-    GArray *widgets;
+    WDialog *dd;
+    GList *input_labels = NULL; /* Widgets not directly requested by the user. */
+    int return_val;
 
     len = str_term_width1 (I18N (quick_dlg->title)) + 6;
     quick_dlg->cols = MAX (quick_dlg->cols, len);
@@ -190,8 +191,8 @@ quick_dialog_skip_init (quick_dialog_self * self) {
     y = 1;
     x = x1;
 
-    self->widgets = g_array_sized_new (FALSE, FALSE, sizeof (quick_widget_item_t), 8);
-    widgets = self->widgets;
+    /* create widgets */
+    widgets = g_array_sized_new (FALSE, FALSE, sizeof (quick_widget_item_t), 8);
 
     for (quick_widget = quick_dlg->widgets; quick_widget->widget_type != quick_end; quick_widget++)
     {
@@ -238,7 +239,7 @@ quick_dialog_skip_init (quick_dialog_self * self) {
             if (quick_widget->u.input.label_location != input_label_none)
             {
                 quick_create_labeled_input (widgets, &y, x, quick_widget, &width);
-                self->input_labels = g_list_prepend (self->input_labels, quick_widget->u.input.label);
+                input_labels = g_list_prepend (input_labels, quick_widget->u.input.label);
             }
             else
             {
@@ -405,21 +406,19 @@ quick_dialog_skip_init (quick_dialog_self * self) {
     width2 = (quick_dlg->cols - 7) / 2;
 
     if (quick_dlg->x == -1 || quick_dlg->y == -1)
-        self->dd = dlg_create (TRUE, 0, 0, y + 3, quick_dlg->cols, WPOS_CENTER | WPOS_TRYUP, FALSE,
+        dd = dlg_create (TRUE, 0, 0, y + 3, quick_dlg->cols, WPOS_CENTER | WPOS_TRYUP, FALSE,
                          dialog_colors, quick_dlg->callback, quick_dlg->mouse_callback,
                          quick_dlg->help, quick_dlg->title);
     else
-        self->dd = dlg_create (TRUE, quick_dlg->y, quick_dlg->x, MIN (y + 3, quick_dlg->lines), quick_dlg->cols,
+        dd = dlg_create (TRUE, quick_dlg->y, quick_dlg->x, y + 3, quick_dlg->cols,
                          WPOS_KEEP_DEFAULT, FALSE, dialog_colors, quick_dlg->callback,
                          quick_dlg->mouse_callback, quick_dlg->help, quick_dlg->title);
 
-    if (quick_dlg->dlg_draw_broadcast_msg)
-      self->dd->dlg_draw_broadcast_msg = quick_dlg->dlg_draw_broadcast_msg;
     /* add widgets into the dialog */
     x2 = x1 + width2 + 1;
     g = NULL;
     two_columns = FALSE;
-    x = (WIDGET (self->dd)->cols - blen) / 2;
+    x = (WIDGET (dd)->cols - blen) / 2;
 
     for (i = 0; i < widgets->len; i++)
     {
@@ -565,32 +564,24 @@ quick_dialog_skip_init (quick_dialog_self * self) {
             /* add widget into dialog */
             item->widget->options |= item->quick_widget->options;       /* FIXME: cannot reset flags, setup only */
             item->widget->state |= item->quick_widget->state;   /* FIXME: cannot reset flags, setup only */
-            id = add_widget_autopos (self->dd, item->widget, item->quick_widget->pos_flags, NULL);
+            id = add_widget_autopos (dd, item->widget, item->quick_widget->pos_flags, NULL);
             if (item->quick_widget->id != NULL)
                 *item->quick_widget->id = id;
         }
     }
 
-    while (self->nskip-- != 0)
-        dlg_set_current_widget_next (self->dd);
+    while (nskip-- != 0)
+        dlg_set_current_widget_next (dd);
 
-}
+    return_val = dlg_run (dd);
 
-int
-quick_dialog_skip_run (quick_dialog_self *self) {
-  int ret = dlg_run (self->dd);
-  self->return_val=ret;
-  return ret;
-}
-
-void
-quick_dialog_skip_after (quick_dialog_self *self) {
-    if (self->return_val != B_CANCEL)
-        for (int i = 0; i < self->widgets->len; i++)
+    /* Get the data if we found something interesting */
+    if (return_val != B_CANCEL)
+        for (i = 0; i < widgets->len; i++)
         {
             quick_widget_item_t *item;
 
-            item = &g_array_index (self->widgets, quick_widget_item_t, i);
+            item = &g_array_index (widgets, quick_widget_item_t, i);
 
             switch (item->quick_widget->widget_type)
             {
@@ -599,7 +590,7 @@ quick_dialog_skip_after (quick_dialog_self *self) {
                 break;
 
             case quick_input:
-                if ((item->quick_widget->u.input.completion_flags & INPUT_COMPLETE_CD) != 0)
+                if ((quick_widget->u.input.completion_flags & INPUT_COMPLETE_CD) != 0)
                     *item->quick_widget->u.input.result =
                         tilde_expand (INPUT (item->widget)->buffer);
                 else
@@ -615,66 +606,12 @@ quick_dialog_skip_after (quick_dialog_self *self) {
             }
         }
 
-    dlg_destroy (self->dd);
+    dlg_destroy (dd);
 
-    g_list_free_full (self->input_labels, g_free);    /* destroy input labels created before */
-    g_array_free (self->widgets, TRUE);
-}
+    g_list_free_full (input_labels, g_free);    /* destroy input labels created before */
+    g_array_free (widgets, TRUE);
 
-
-int
-quick_dialog_skip (quick_dialog_t * quick_dlg, int nskip)
-{
-  quick_dialog_self self = {0};
-  self.quick_dlg = quick_dlg;
-  self.nskip = nskip;
-
-  quick_dialog_skip_init (&self);
-  quick_dialog_skip_run (&self);
-  quick_dialog_skip_after (&self);
-
-  return self.return_val;
-}
-
-void
-aquick_free (aquick_widget_t * widget) {
-  if (!widget)
-    return;
-  aquick_widget_t w = widget[0];
-  switch(widget->widget_type) {
-    case quick_end:
-    case quick_separator:
-    case quick_stop_groupbox:
-    case quick_buttons:
-    case quick_start_columns:
-    case quick_next_column:
-    case quick_stop_columns:
-      break;
-    case quick_checkbox:
-      g_free (w.u.checkbox.text);
-      break;
-    case quick_button:
-      g_free (w.u.button.text);
-      break;
-    case quick_input:
-      g_free (w.u.input.label_text);
-      g_free (w.u.input.text);
-      //aquick_free (w.u.input.label);
-      break;
-    case quick_label:
-      g_free (w.u.label.text);
-      //aquick_free (w.u.label.input);
-      break;
-    case quick_start_groupbox:
-      g_free (w.u.groupbox.title);
-      break;
-    case quick_radio:
-      for(int i=0;i<w.u.radio.count;i++) {
-        g_free (w.u.radio.items[i]);
-      }
-      g_free (w.u.radio.items);
-      break;
-  }
+    return return_val;
 }
 
 /* --------------------------------------------------------------------------------------------- */

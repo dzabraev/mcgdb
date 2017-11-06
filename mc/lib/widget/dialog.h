@@ -54,9 +54,6 @@ typedef int dlg_colors_t[DLG_COLOR_COUNT];
 /* menu command execution */
 typedef cb_ret_t (*menu_exec_fn) (int command);
 
-
-typedef void (*dlg_draw_broadcast_fn) (WDialog * h);
-
 /*** structures declarations (and typedefs of structures)*****************************************/
 
 struct WDialog
@@ -85,7 +82,6 @@ struct WDialog
 
     dlg_shortcut_str get_shortcut;      /* Shortcut string */
     dlg_title_str get_title;    /* useless for modal dialogs */
-    dlg_draw_broadcast_fn dlg_draw_broadcast_msg;
 };
 
 /*** global variables defined in .c file *********************************************************/

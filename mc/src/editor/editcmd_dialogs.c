@@ -126,7 +126,7 @@ editcmd_dialog_search_show (WEdit * edit)
         };
 
         quick_dialog_t qdlg = {
-            -1, -1, 58, -1,
+            -1, -1, 58,
             N_("Search"), "[Input Line Keys]",
             quick_widgets, NULL, NULL
         };
@@ -223,7 +223,7 @@ editcmd_dialog_replace_show (WEdit * edit, const char *search_default, const cha
         };
 
         quick_dialog_t qdlg = {
-            -1, -1, 58, -1,
+            -1, -1, 58,
             N_("Replace"), "[Input Line Keys]",
             quick_widgets, NULL, NULL
         };
@@ -288,7 +288,7 @@ editcmd_dialog_replace_prompt_show (WEdit * edit, char *from_text, char *to_text
         };
 
         quick_dialog_t qdlg = {
-            ypos, xpos, -1, -1,
+            ypos, xpos, -1,
             N_("Confirm replace"), NULL,
             quick_widgets, NULL, NULL
         };

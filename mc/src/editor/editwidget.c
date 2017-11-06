@@ -156,7 +156,7 @@ edit_about (void)
     };
 
     quick_dialog_t qdlg = {
-        -1, -1, 40, -1,
+        -1, -1, 40,
         N_("About"), "[Internal File Editor]",
         quick_widgets, NULL, NULL
     };
