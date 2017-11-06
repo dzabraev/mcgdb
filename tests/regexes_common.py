@@ -1,3 +1,4 @@
+#coding=utf8
 import re
 
 ADDR_REGEX='(0x)?[0-9a-fA-F]+'
@@ -94,6 +95,9 @@ def test():
   '
   SubArrayPtrElemObj=SubArrayPtrElem(type='incompl_struct',name='is',nstars=6)
   print SubArrayPtrElemObj(test_SubArrayPtrElem)
+
+def ignore_frame (fr_num):
+  return u'#{fr_num} [^─]+'.format(fr_num=fr_num)
 
 if __name__=="__main__":
   test()

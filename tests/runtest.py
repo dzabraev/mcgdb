@@ -23,9 +23,10 @@ ALLTESTS=[
 ]
 
 
-def do_cmd(cmd):
+def do_cmd(cmd,check=True):
   print cmd
-  subprocess.check_call(cmd, shell=True)
+  fn = subprocess.check_call if check else subprocess.call
+  return fn(cmd, shell=True)
 
 
 def run_std_test(mcgdb,delay,logfile='logfile.log',wait=False,regexes='regexes.py'):
@@ -34,13 +35,19 @@ def run_std_test(mcgdb,delay,logfile='logfile.log',wait=False,regexes='regexes.p
     regexes = os.path.abspath(regexes)
   do_cmd('make clean')
   do_cmd('make')
-  do_cmd("unxz --keep --force record.orig.play.xz")
-  cmd="mcgdb_play.py record.orig.py --delay={delay} --output=record.new.play --mcgdb={mcgdb}".format(delay=delay,mcgdb=mcgdb)
+  do_cmd("unxz --keep --force {record_orig_py_xz}".format(
+    record_orig_py_xz = os.path.abspath('record.orig.play.xz'),
+  ))
+  cmd="mcgdb_play.py {record_orig} --delay={delay} --output={record_new} --mcgdb={mcgdb}".format(
+    record_orig=os.path.abspath('record.orig.py'),
+    record_new=os.path.abspath('record.new.play'),
+    delay=delay,
+    mcgdb=mcgdb)
   if wait:
     cmd+=' --wait=record.orig.play'
     if has_regexes:
       cmd+=' --regexes=%s' % regexes
-  do_cmd(cmd)
+  do_cmd(cmd,check=False)
   flog=open(logfile,'wb')
   kwargs={
       'journal1': 'record.orig.play',

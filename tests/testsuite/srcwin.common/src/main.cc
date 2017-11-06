@@ -5,22 +5,22 @@
 int factorial(int n);
 
 void skip(void) {}
-
+int thread_started=0;
 void *
 loop(void *) {
   int x=1,y=1;
+  thread_started=1;
   while (y) {}
   printf("%d\n",x);
   return 0;
 }
 
 
-
 void _init(void) {
   pthread_t tid;
   pthread_create(&tid,0,loop,0);
+  while (!thread_started) {sleep(0);}
 };
-
 
 void init(void) {
   _init();
