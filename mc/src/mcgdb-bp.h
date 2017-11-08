@@ -70,6 +70,8 @@ GList * mcgdb_bp_find_bp_with_location (GList *bpl, const char *filename, int li
 void mcgdb_bp_free (mcgdb_bp * bp);
 mcgdb_bp * mcgdb_bp_new (void);
 
+void insert_bp_to_list (mcgdb_bp *bp);
+
 gboolean
 mcgdb_bp_equals (const mcgdb_bp *bp1, const mcgdb_bp *bp2);
 

@@ -25,7 +25,6 @@ static void mcgdb_bp_clear_locations (mcgdb_bp *bp);
 static void delete_by_id (int id);
 static mcgdb_bp * get_by_id (int id);
 static mcgdb_bp * get_by_number (int number);
-static void insert_bp_to_list (mcgdb_bp *bp);
 static int mcgdb_bp_remove (const char *filename, long line);
 
 static json_t * breakpoints_pkg(void);
@@ -529,7 +528,7 @@ get_by_number (int number) {
 }
 
 
-static void
+void
 insert_bp_to_list (mcgdb_bp *bp) {
   mcgdb_bps = g_list_append (mcgdb_bps, bp);
 }
