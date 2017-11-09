@@ -288,7 +288,7 @@ mcgdb_bp_process_click (const char *filename, long line, gboolean open_menu) {
   if (nbps>0) {
     if (nbps==1) {
       mcgdb_bp * bp = MCGDB_BP(mcgdb_bp_find_bp_with_location (mcgdb_bps, filename, line));
-      if (bp_has_nondefault_vals (bp)) {
+      if (open_menu || bp_has_nondefault_vals (bp)) {
         need_redraw=breakpoints_edit_dialog (filename,line);
       }
       else {

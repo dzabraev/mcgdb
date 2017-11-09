@@ -1,4 +1,4 @@
-#inc7lude <config.h>
+#include <config.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -15,16 +15,10 @@ typedef enum bpw_widget_type {
   BPW_BOX=1,
   BPW_BOX_END,
   BPW_CHECKBOX,
+  BPW_BUTTON,
 } bpw_widget_type_t;
 
-
-
-typedef enum {
-  BPW_CANCEL=0,
-  BPW_OK=1
-} bpw_status_t;
-
-#define WIDGET_IDX (bpw,idx) g_array_index((bpw)->widgets_bps,bpw_widget *,idx)
+#define WIDGET_IDX(bpw,idx) g_array_index((bpw)->widgets,bpw_widget_t *,idx)
 
 typedef struct bp_widget {
   Widget w;
@@ -32,14 +26,33 @@ typedef struct bp_widget {
   GList * bps_tmp; /*copy of bps for comparsion*/
   GList * bps_del;
   GList * bps_creating;
-  bpw_status_t status; /*user cancel changes*/
   gboolean redraw;
   int offset;
   int widgets_lines; /*total height of all widgets (drawed on infinite screen)*/
   GArray *widgets;
   int last_idx; /*index of last widget. after it follows widgets for creation*/
+  int current_widget_idx;
 } bpw_t;
 
+typedef enum layout {
+  BLOCK=0,
+  INLINE=1,
+} layout_t;
+
+typedef enum align {
+  LEFT=0,
+  RIGHT=1,
+  CENTER=2,
+} align_t;
+
+typedef gboolean (*mouse_cb_t) (bpw_t *bpw, int idx, mouse_msg_t msg, mouse_event_t * event);
+
+#define BPW_WIDGET_REDRAW(bpw,idx) WIDGET_IDX((bpw),(idx))->draw(\
+  bpw,\
+  idx,\
+  WIDGET_IDX((bpw),(idx))->y,\
+  WIDGET_IDX((bpw),(idx))->x\
+)
 
 typedef struct bpw_widget {
   long x;
@@ -47,10 +60,14 @@ typedef struct bpw_widget {
   long cols;
   long lines;
   void (*draw)  (bpw_t *bpw, int idx, int y, int x);
-  void (*key)   (bpw_t *bpw, int idx, int command);
-  gboolean (*mouse) (bpw_t *bpw, int idx, mouse_msg_t msg, mouse_event_t * event);
+  gboolean (*key)   (bpw_t *bpw, int idx, int command);
+  mouse_cb_t mouse;
   //mouse_callback;
   bpw_widget_type_t type;
+  struct {
+    layout_t layout;
+    align_t align;
+  } style;
   union {
     struct {
       gchar * label;
@@ -62,33 +79,88 @@ typedef struct bpw_widget {
       int check_y; /*position of letter 'x' in [x]*/
       int check_x;
     } checkbox;
+    struct {
+      gchar * label;
+    } button;
   };
 } bpw_widget_t;
 
 static void
-bpw_print_string (bpw_t *bpw, int y, int xl, int xr, const char *str, int *y1, int *x1) {
+bpw_print_string (int y_start, int x_start, int yu, int yd, int xl, int xr, const char *str, int *y_end, int *x_end) {
   const char *p = str;
-  Widget *w = WIDGET(bpw);
-  int xc=xl;
-  int yc=y;
-  tty_gotoyx (y, xl);
+  int xc=x_start;
+  int yc=y_start;
+  tty_gotoyx (yc, xc);
   while (*p) {
-    if (xc>=w->x+w->cols) {
+    if (xc>=xr) {
       yc++;
       xc=xl;
       tty_gotoyx (yc, xc);
     }
-    if (yc<w->y+w->lines && yc>=w->y)
+    if (yc<yd && yc>=yu)
       tty_print_char (*p);
     p++;
     xc++;
   }
-  *y1=yc;
-  *x1=xc;
+  *y_end=yc;
+  *x_end=xc;
+}
+
+
+static gboolean
+button_mouse_cancel (bpw_t *bpw, int idx, mouse_msg_t msg, mouse_event_t * event) {
+  if (msg==MSG_MOUSE_CLICK) {
+    WDialog *h = WIDGET(bpw)->owner;
+    h->ret_value = B_CANCEL;
+    dlg_stop (h);
+    return TRUE;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+static gboolean
+button_mouse_save (bpw_t *bpw, int idx, mouse_msg_t msg, mouse_event_t * event) {
+  if (msg==MSG_MOUSE_CLICK) {
+    WDialog *h = WIDGET(bpw)->owner;
+    h->ret_value = B_ENTER;
+    dlg_stop (h);
+    return TRUE;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+
+static void
+bpw_button_draw (bpw_t *bpw, int idx, int y, int x) {
+  Widget * w = WIDGET (bpw);
+  bpw_widget_t *self = WIDGET_IDX (bpw,idx);
+  if (y>=0 && y<w->lines) {
+    tty_gotoyx (w->y+y,w->x+x);
+    tty_print_string (self->button.label);
+  }
+  self->x=x;
+  self->y=y;
+  self->lines=1;
+  self->cols=strlen(self->button.label);
+}
+
+static bpw_widget_t *
+bpw_button (gchar *label, mouse_cb_t mouse_cb) {
+  bpw_widget_t * w = g_new0 (bpw_widget_t,1);
+  w->type = BPW_BUTTON;
+  w->mouse = mouse_cb;
+  w->draw = bpw_button_draw;
+  w->button.label = label;
+  return w;
 }
 
 static gboolean
 bpw_checkbox_mouse (bpw_t *bpw, int idx, mouse_msg_t msg, mouse_event_t * event) {
+  gboolean handled=FALSE;
   bpw_widget_t *self = g_array_index (bpw->widgets,bpw_widget_t *,idx);
   switch (msg) {
     case MSG_MOUSE_CLICK:
@@ -96,31 +168,37 @@ bpw_checkbox_mouse (bpw_t *bpw, int idx, mouse_msg_t msg, mouse_event_t * event)
         self->checkbox.flag[0] = !self->checkbox.flag[0];
         self->draw (bpw, idx, self->y, self->x);
       }
+      handled=TRUE;
       break;
     default:
+      handled=FALSE;
       break;
   }
-  return TRUE;
+  return handled;
 }
 
 static void
 bpw_checkbox_draw (bpw_t *bpw, int idx, int y, int x) {
   Widget *w = WIDGET (bpw);
-  int x1=x,y1=y;
-  int xr=w->x+w->cols;
-  bpw_widget_t *self = g_array_index (bpw->widgets,bpw_widget_t *,idx);
+  int   x1=w->x+x,
+        y1=w->y+y,
+        top=w->y,
+        bottom=w->y+w->lines,
+        left=w->x,
+        right=w->x+w->cols;
+  bpw_widget_t *self = WIDGET_IDX (bpw,idx);
   self->y=y;
   self->x=x;
-  self->cols=WIDGET(bpw)->cols;
+  self->cols=w->cols;
   if (self->checkbox.label)
-    bpw_print_string (bpw, y1, x1, xr, self->checkbox.label, &y1, &x1);
-  bpw_print_string (bpw, y1, x1, xr,
+    bpw_print_string (y1,x1,top,bottom,left,right,self->checkbox.label,&y1, &x1);
+  bpw_print_string (y1,x1,top,bottom,left,right,
     self->checkbox.flag[0] ? "[x]" : "[ ]",
     &y1, &x1);
-  self->checkbox.check_x = x1-2;
-  self->checkbox.check_y = y1
+  self->checkbox.check_x = x1-2-w->x;
+  self->checkbox.check_y = y1-w->y;
 
-  self->lines=y1-y+1;
+  self->lines=y1-(w->y+y)+1;
 }
 
 
@@ -179,32 +257,32 @@ bpw_box_end_draw (bpw_t *bpw, int idx, int y, int x) {
 
 
   label = box_top->box.label;
-  top_draw = box_top->y >= w->y && box_top->y < w->y + w->lines;
-  bottom_draw = box_bottom->y >= w->y && box_bottom->y < w->y + w->lines;
+  top_draw = box_top->y >= 0 && box_top->y < w->lines;
+  bottom_draw = box_bottom->y >= 0 && box_bottom->y <  w->lines;
   if (top_draw) {
     /*draw top of box*/
-    tty_gotoyx (box_top->y, box_top->x);
+    tty_gotoyx (w->y+box_top->y, w->x+box_top->x);
     tty_print_alt_char (ACS_ULCORNER, TRUE);
-    tty_gotoyx (box_top->y, box_top->x+w->cols-1);
+    tty_gotoyx (w->y+box_top->y, w->x+box_top->x+w->cols-1);
     tty_print_alt_char (ACS_URCORNER, TRUE);
-    tty_draw_hline (box_top->y, box_top->x+1, mc_tty_frm[MC_TTY_FRM_HORIZ], w->cols-2);
-    tty_gotoyx (box_top->y, box_top->x+w->cols/2-strlen(label)/2);
+    tty_draw_hline (w->y+box_top->y, w->x+box_top->x+1, mc_tty_frm[MC_TTY_FRM_HORIZ], w->cols-2);
+    tty_gotoyx (w->y+box_top->y, w->x+box_top->x+w->cols/2-strlen(label)/2);
     tty_print_string (label);
   }
   if (bottom_draw) {
     /*draw bottom of box*/
-    tty_gotoyx (box_bottom->y, box_top->x);
+    tty_gotoyx (w->y+box_bottom->y, w->x+box_top->x);
     tty_print_alt_char (ACS_LLCORNER, TRUE);
-    tty_gotoyx (box_bottom->y, box_top->x+w->cols-1);
+    tty_gotoyx (w->y+box_bottom->y, w->x+box_top->x+w->cols-1);
     tty_print_alt_char (ACS_LRCORNER, TRUE);
-    tty_draw_hline (box_bottom->y, box_top->x+1, mc_tty_frm[MC_TTY_FRM_HORIZ], w->cols-2);
+    tty_draw_hline (w->y+box_bottom->y, w->x+box_top->x+1, mc_tty_frm[MC_TTY_FRM_HORIZ], w->cols-2);
   }
-  y1 = MIN(MAX(box_top->y,w->y),w->y+w->lines);
-  y2 = MIN(MAX(box_bottom->y,w->y),w->y+w->lines);
+  y1 = MIN(MAX(box_top->y,0),w->lines);
+  y2 = MIN(MAX(box_bottom->y,0),w->lines);
   bh = y2-y1-1;
   if (bh > 0) {
-    tty_draw_hline (y1+1, box_bottom->x, mc_tty_frm[MC_TTY_FRM_VERT], bh);
-    tty_draw_hline (y1+1, box_bottom->x+w->cols-1, mc_tty_frm[MC_TTY_FRM_VERT], bh);
+    tty_draw_vline (w->y+y1+1, w->x+box_bottom->x, mc_tty_frm[MC_TTY_FRM_VERT], bh);
+    tty_draw_vline (w->y+y1+1, w->x+box_bottom->x+w->cols-1, mc_tty_frm[MC_TTY_FRM_VERT], bh);
   }
 }
 
@@ -295,7 +373,7 @@ bpw_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
       command = keybind_lookup_keymap_command (mcgdb_bpw_map, parm);
       if (bpw->current_widget_idx!=-1) {
         int idx=bpw->current_widget_idx;
-        if (WIDGET_IDX (bpw,idx)->key (bpw,idx,command) == MSG_HANDLED)
+        if (WIDGET_IDX (bpw,idx)->key && WIDGET_IDX (bpw,idx)->key (bpw,idx,command) == MSG_HANDLED)
           return MSG_HANDLED;
       }
       return bpw_process_key (bpw, command);
@@ -309,9 +387,9 @@ bpw_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
 
 static int
 bpw_widget_yx_idx (bpw_t *bpw, int y, int x) {
-  for (int idx=0;idx<bpw->widgets; idx++) {
+  for (int idx=0;idx<bpw->widgets->len; idx++) {
     bpw_widget_t *bw = WIDGET_IDX (bpw,idx);
-    if (bw->y<=y && y<bw->y+bw->lines && bw->x<=x && x<bw->x+bw->lines) {
+    if (bw->y<=y && y<bw->y+bw->lines && bw->x<=x && x<bw->x+bw->cols) {
       return idx;
     }
   }
@@ -321,26 +399,33 @@ bpw_widget_yx_idx (bpw_t *bpw, int y, int x) {
 static void
 bpw_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
   bpw_t *bpw = (bpw_t *)w;
+  gboolean redraw=FALSE;
+  int saved_offset=bpw->offset;
 
   int idx = bpw_widget_yx_idx (bpw,event->y,event->x);
   if (idx>=0) {
-    if (WIDGET_IDX (bpw,idx)->mouse (bpw,idx,msg,event))
-      return;
+    if (WIDGET_IDX (bpw,idx)->mouse && WIDGET_IDX (bpw,idx)->mouse (bpw,idx,msg,event)) {
+        bpw->current_widget_idx = idx;
+        return;
+    }
   }
 
   switch (msg) {
     case MSG_MOUSE_SCROLL_UP:
-      bpw->offset-=2;
-      bpw_normalize_offset (bpw);
-      break;
+        bpw->offset-=2;
+        bpw_normalize_offset (bpw);
+        break;
     case MSG_MOUSE_SCROLL_DOWN:
-      bpw->offset+=2;
-      bpw_normalize_offset (bpw);
-      break;
+        bpw->offset+=2;
+        bpw_normalize_offset (bpw);
+        break;
     default:
-      break;
+        break;
   }
 
+    redraw = saved_offset!=bpw->offset;
+    if (redraw)
+        bpw_draw (bpw);
 }
 
 
@@ -348,6 +433,7 @@ static bpw_t *
 bpw_new (void) {
   bpw_t * bpw = g_new0 (bpw_t, 1);
   bpw->widgets    = g_array_new (FALSE,FALSE,sizeof(bpw_widget_t *));
+  bpw->current_widget_idx=-1;
   widget_init (WIDGET(bpw), 1, 1, 1, 1, bpw_callback, bpw_mouse_callback);
   widget_set_options (WIDGET(bpw), WOP_SELECTABLE, TRUE);
   return bpw;
@@ -373,8 +459,8 @@ bpw_draw (bpw_t *bpw) {
   w->x=x;
   w->lines=lines;
   w->cols=cols;
-  draw_x = w->x;
-  draw_y = w->y - bpw->offset;
+  draw_x = 0;
+  draw_y = -bpw->offset;
   bpw->widgets_lines = draw_y;
   for (size_t i=0;i<bpw->widgets->len;i++) {
     bpw_widget_t *bw = g_array_index (bpw->widgets,bpw_widget_t *,i);
@@ -386,6 +472,7 @@ bpw_draw (bpw_t *bpw) {
       draw_x-=2;
   }
   bpw->widgets_lines = draw_y - bpw->widgets_lines;
+  tty_gotoyx (LINES, COLS);
 }
 
 static void
@@ -393,15 +480,17 @@ bpw_apply_changes (bpw_t *bpw) {
   GList *l,*ltmp;
   for (l=bpw->bps,ltmp=bpw->bps_tmp; l; l=l->next,ltmp=ltmp->next) {
     mcgdb_bp *bp = MCGDB_BP (l), *bp_tmp = MCGDB_BP (ltmp);
-    if (!mcgdb_bp_equals (bp, bp_tmp)) {
-      send_pkg_update_bp (bp);
+    if (!mcgdb_bp_equals (bp, bp_tmp) && !g_list_find (bpw->bps_del,bp_tmp)) {
       mcgdb_bp_assign (bp, bp_tmp);
+      bp->wait_status=BP_WAIT_UPDATE;
+      send_pkg_update_bp (bp);
       bpw->redraw=TRUE;
     }
   }
 
   for (l=bpw->bps_del; l; l=l->next) {
     mcgdb_bp *bp = MCGDB_BP (l);
+    bp->wait_status=BP_WAIT_DELETE;
     send_pkg_delete_bp (bp);
     bpw->redraw=TRUE;
   }
@@ -435,6 +524,66 @@ bpw_add_bp (bpw_t *bpw, mcgdb_bp *bp) {
   }
 }
 
+static gboolean
+button_mouse_set_enabled (bpw_t *bpw, int idx, mouse_msg_t msg, mouse_event_t * event, gboolean value) {
+  if (msg==MSG_MOUSE_CLICK) {
+    for (GList *l=bpw->bps_tmp; l; l=l->next) {
+      MCGDB_BP (l)->enabled=value;
+    }
+    for (GList *l=bpw->bps_creating; l; l=l->next) {
+      MCGDB_BP (l)->enabled=value;
+    }
+    send_message (WIDGET (bpw), NULL, MSG_DRAW, 0, NULL);
+    return TRUE;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+static gboolean
+button_mouse_disable_all (bpw_t *bpw, int idx, mouse_msg_t msg, mouse_event_t * event) {
+  return button_mouse_set_enabled (bpw,idx,msg,event,FALSE);
+}
+
+static gboolean
+button_mouse_enable_all (bpw_t *bpw, int idx, mouse_msg_t msg, mouse_event_t * event) {
+  return button_mouse_set_enabled (bpw,idx,msg,event,TRUE);
+}
+
+
+
+static gboolean
+button_mouse_delete_all (bpw_t *bpw, int idx, mouse_msg_t msg, mouse_event_t * event) {
+  if (msg==MSG_MOUSE_CLICK) {
+    WDialog *h = WIDGET(bpw)->owner;
+    g_list_free (bpw->bps_del);
+    bpw->bps_del = g_list_copy (bpw->bps_tmp);
+    dlg_stop (h);
+    h->ret_value = B_ENTER;
+    return TRUE;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+
+static void
+bpw_add_epilogue (bpw_t *bpw) {
+  bpw_widget_t  *save = bpw_button (strdup("[Save]"),button_mouse_save),
+                *disable_all = bpw_button (strdup("[Disable all]"),button_mouse_disable_all),
+                *enable_all = bpw_button (strdup("[Enable all]"),button_mouse_enable_all),
+                *delete_all = bpw_button (strdup("[DELETE all]"),button_mouse_delete_all),
+                *cancel = bpw_button (strdup("[Cancel]"),button_mouse_cancel);
+  bpw->last_idx = bpw->widgets->len;
+  g_array_append_val (bpw->widgets, enable_all);
+  g_array_append_val (bpw->widgets, disable_all);
+  g_array_append_val (bpw->widgets, delete_all);
+  g_array_append_val (bpw->widgets, save);
+  g_array_append_val (bpw->widgets, cancel);
+}
+
 gboolean
 is_bpw_dialog (WDialog *h) {
   return h->widget.callback==bpw_dialog_callback;
@@ -445,6 +594,7 @@ breakpoints_edit_dialog (const char *filename, long line) {
   WDialog *dlg;
   bpw_t *bpw;
   gboolean redraw;
+  int return_val;
   dlg = dlg_create (TRUE, 0, 0, 0, 0, WPOS_KEEP_DEFAULT, FALSE, NULL, bpw_dialog_callback,
                     NULL, "[breakpoints]", NULL);
   bpw = bpw_new ();
@@ -456,12 +606,14 @@ breakpoints_edit_dialog (const char *filename, long line) {
     bpw_add_bp (bpw, MCGDB_BP (l));
   }
 
+  bpw_add_epilogue (bpw); /*save/cancel buttons, widgets for creation*/
+
   add_widget (dlg, bpw);
   disable_gdb_events = TRUE;
-  dlg_run (dlg);
+  return_val = dlg_run (dlg);
   disable_gdb_events = FALSE;
 
-  if (bpw->status==BPW_OK)
+  if (return_val!=B_CANCEL)
     bpw_apply_changes (bpw);
 
   redraw = bpw->redraw;
