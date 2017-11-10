@@ -1,19 +1,24 @@
 #ifndef _GNU_SOURCE
 #   define _GNU_SOURCE 1
 #endif
+
+#include <config.h>
+
+
 #include <stdio.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/types.h>
 #include <arpa/inet.h>
-#include <config.h>
 #include <stdlib.h>
 #include <assert.h>
 
 
 //#include "src/editor/edit.h"
 #include "lib/global.h"
+#include "lib/widget.h"
+
 #include "src/editor/edit-impl.h"
 #include "lib/tty/tty-slang.h"
 #include "lib/tty/key.h"
