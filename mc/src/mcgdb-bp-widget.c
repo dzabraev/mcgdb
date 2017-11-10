@@ -405,27 +405,27 @@ bpw_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
   int idx = bpw_widget_yx_idx (bpw,event->y,event->x);
   if (idx>=0) {
     if (WIDGET_IDX (bpw,idx)->mouse && WIDGET_IDX (bpw,idx)->mouse (bpw,idx,msg,event)) {
-        bpw->current_widget_idx = idx;
-        return;
+      bpw->current_widget_idx = idx;
+      return;
     }
   }
 
   switch (msg) {
     case MSG_MOUSE_SCROLL_UP:
-        bpw->offset-=2;
-        bpw_normalize_offset (bpw);
-        break;
+      bpw->offset-=2;
+      bpw_normalize_offset (bpw);
+      break;
     case MSG_MOUSE_SCROLL_DOWN:
-        bpw->offset+=2;
-        bpw_normalize_offset (bpw);
-        break;
+      bpw->offset+=2;
+      bpw_normalize_offset (bpw);
+      break;
     default:
-        break;
+      break;
   }
 
-    redraw = saved_offset!=bpw->offset;
-    if (redraw)
-        bpw_draw (bpw);
+  redraw = saved_offset!=bpw->offset;
+  if (redraw)
+    bpw_draw (bpw);
 }
 
 
@@ -572,9 +572,9 @@ button_mouse_delete_all (bpw_t *bpw, int idx, mouse_msg_t msg, mouse_event_t * e
 static void
 bpw_add_epilogue (bpw_t *bpw) {
   bpw_widget_t  *save = bpw_button (strdup("[Save]"),button_mouse_save),
-                *disable_all = bpw_button (strdup("[Disable all]"),button_mouse_disable_all),
-                *enable_all = bpw_button (strdup("[Enable all]"),button_mouse_enable_all),
-                *delete_all = bpw_button (strdup("[DELETE all]"),button_mouse_delete_all),
+                *disable_all = bpw_button (strdup("[Disable]"),button_mouse_disable_all),
+                *enable_all = bpw_button (strdup("[Enable]"),button_mouse_enable_all),
+                *delete_all = bpw_button (strdup("[DELETE]"),button_mouse_delete_all),
                 *cancel = bpw_button (strdup("[Cancel]"),button_mouse_cancel);
   bpw->last_idx = bpw->widgets->len;
   g_array_append_val (bpw->widgets, enable_all);
