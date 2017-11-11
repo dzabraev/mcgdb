@@ -1,5 +1,8 @@
-#include "config.h"
+#include <config.h>
+#include <strings.h>
+
 #include "lib/widget/block-widget.h"
+
 
 #define WBMAIN(w) ((WBlockMain *)(w))
 
@@ -233,19 +236,32 @@ wblock_dfl_destroy (WBlock *wb) {
 }
 
 WBlock *
-wblock_new (
-  wblock_mouse_cb_t mouse,
-  wblock_key_cb_t key,
+wblock_init (
+  WBlock *wb
+  wblock_mouse_cb_t   mouse,
+  wblock_key_cb_t     key,
   wblock_destroy_cb_t destroy,
-  wblock_draw_cb_t draw,
+  wblock_draw_cb_t    draw,
   gpointer wdata)
 {
-  WBlock *wb = g_new0 (WBlock,1);
+  bzero (wb, sizeof (WBlock));
   wb->destroy   = destroy   ? destroy   : wblock_dfl_default;
   wb->draw      = draw      ? draw      : wblock_dfl_draw;
   wb->key       = key       ? key       : wblock_dfl_key;
   wb->mouse     = mouse     ? mouse     : wblock_dfl_mouse;
-  wv->wdata = wdata;
+  wv->wdata     = wdata;
+}
+
+WBlock *
+wblock_new (
+  wblock_mouse_cb_t   mouse,
+  wblock_key_cb_t     key,
+  wblock_destroy_cb_t destroy,
+  wblock_draw_cb_t    draw,
+  gpointer wdata)
+{
+  WBlock *wb = g_new0 (WBlock,1);
+  wblock_init (wb, mouse, key, destroy, wdata);
   return wb;
 }
 

@@ -80,12 +80,19 @@ int
 wblock_run (WBlock * wb, pos_callback_t calcpos);
 
 WBlock *wblock_new (
-  wblock_mouse_cb_t mouse,
-  wblock_key_cb_t key,
+  wblock_mouse_cb_t   mouse,
+  wblock_key_cb_t     key,
   wblock_destroy_cb_t destroy,
-  wblock_draw_cb_t draw,
+  wblock_draw_cb_t    draw,
   gpointer wdata);
 
+WBlock *wblock_init (
+  WBlock *wb
+  wblock_mouse_cb_t   mouse,
+  wblock_key_cb_t     key,
+  wblock_destroy_cb_t destroy,
+  wblock_draw_cb_t    draw,
+  gpointer wdata);
 
 void wblock_add_widget (WBlock * wb, WBlock * widget);
 
@@ -105,5 +112,6 @@ WBlock *
 wblock_get_widget_yx (WBlock *wb, int y, int x);
 
 #include "wb-checkbox.h"
+#include "wb-frame.h"
 
 #endif __block_widget_h__

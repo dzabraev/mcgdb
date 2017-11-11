@@ -28,6 +28,9 @@ libmcwidget_la_SOURCES = \
 	block-widget/block-widget.c \
 	block-widget/block-widget.h \
 	block-widget/wb-checkbox.h \
-	block-widget/wb-checkbox.d
+	block-widget/wb-checkbox.c \
+	block-widget/wb-frame.h \
+	block-widget/wb-frame.c \
+
 
 AM_CPPFLAGS = -I$(top_srcdir) $(GLIB_CFLAGS)
