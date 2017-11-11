@@ -25,6 +25,9 @@ libmcwidget_la_SOURCES = \
 	mcgdb_aux_widget.c mcgdb_aux_widget.h \
 	mcgdb_asm_widget.c mcgdb_asm_widget.h \
 	wtable.c wtable.h \
-	block-widget.c block-widget.h
+	block-widget/block-widget.c \
+	block-widget/block-widget.h \
+	block-widget/wb-checkbox.h \
+	block-widget/wb-checkbox.d
 
 AM_CPPFLAGS = -I$(top_srcdir) $(GLIB_CFLAGS)

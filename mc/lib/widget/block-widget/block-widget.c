@@ -3,6 +3,18 @@
 
 #define WBMAIN(w) ((WBlockMain *)(w))
 
+#define WBM_WBLOCK_DRAW(wbm,do_draw) \
+WBLOCK_DRAW ( \
+  wbm->wb, \
+  WIDGET(wbm)->y-wbm->offset, \
+  WIDGET(wbm)->x, \
+  WIDGET(wbm)->y, \
+  WIDGET(wbm)->x, \
+  WIDGET(wbm)->lines, \
+  WIDGET(wbm)->cols, \
+  do_draw)
+
+
 typedef struct WBlockMain {
   Widget w;
   WBlock *wb;
@@ -21,8 +33,14 @@ static void
 wbm_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
   WBlockMain *wbm = WBMAIN(w);
   int saved_offset = wbm->offset;
-  if (WBLOCK_MOUSE (wbm->wb, msg, event))
-    return;
+  gboolean res;
+  event->y-=w->y;
+  event->x-=w->x;
+  res = WBLOCK_MOUSE (wbm->wb, msg, event);
+  event->y+=w->y;
+  event->x+=w->x;
+  if (res)
+	return
 
   switch (msg) {
     case MSG_MOUSE_SCROLL_UP:
@@ -39,7 +57,7 @@ wbm_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
 
   redraw = saved_offset!=wbm->offset;
   if (redraw)
-    WBLOCK_CALLBACK (wbm->wb,MSG_DRAW,0,NULL);
+	WBM_WBLOCK_DRAW (wbm,TRUE);
 }
 
 static cb_ret_t
@@ -52,11 +70,18 @@ wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
   switch (msg) {
     case MSG_RESIZE:
     case MSG_INIT:
-      WBMAIN(w)->calcpos(w);
-      WBLOCK_CALCSIZE (wb,w->y,w->x,w->y,w->x,w->lines,w->cols);
+  	  {
+  		int y,x,lines,cols;
+        WBMAIN(w)->calcpos(&y,&x,&lines,&cols);
+        w->x=x;
+        w->y=y;
+        w->lines=lines;
+        w->cols=cols;
+      }
+      WBM_WBLOCK_DRAW (wbm,FALSE);
       break;
     case MSG_DRAW:
-      WBLOCK_DRAW (wb,w->y-wbm->offset,w->x,w->y,w->x,w->lines,w->cols);
+      WBM_WBLOCK_DRAW (wbm,TRUE);
       return MSG_HANDLED;
     case MSG_KEY:
       if (WBLOCK_KEY (wb,parm))
@@ -91,7 +116,7 @@ wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
       wbm_normalize_offset (wbm);
       redraw = saved_offset!=wbm->offset;
       if (redraw)
-        WBLOCK_DRAW (wb,w->y-wbm->offset,w->x,w->y,w->x,w->lines,w->cols);
+    	WBM_WBLOCK_DRAW (wbm,TRUE);
       break;
     default:
       break;
@@ -113,68 +138,82 @@ wbm_new (WBlock *wb, pos_callback_t calcpos) {
 
 WBlock *
 wblock_get_widget_yx (WBlock *wb, int y, int x) {
+  if (!YX_IN_WIDGET (wb,y,x))
+	return NULL;
 
+  for (GList *l=g_list_last (wb->widgets);l;l=l->prev) {
+	WBlock *c = WBLOCK (l);
+	if (YX_IN_WIDGET (c,y,x)) {
+	  return wblock_get_widget_yx (c, y, x);
+	}
+  }
+
+  return wb;
 }
 
 gboolead
 wblock_dfl_mouse (WBlock *wb, mouse_msg_t msg, mouse_event_t * event) {
-  WBlock *wb_child = wblock_get_widget_yx (wb, event->y, event->x);
-  if (wb_child && wb_child->mouse_callback) {
-    if (WBLOCK_MOUSE (wb_child, msg, event)) {
-      wb->selected_widget = wb_child;
-      return TRUE;
-    }
-    else {
-      wb->selected_widget = NULL;
-      return FALSE;
-    }
+  WBlock *c = wblock_get_widget_yx (wb, event->y, event->x); //most depth widget
+  while (c) {
+	if (c->mouse) {
+	  gboolean res;
+	  event->x-=c->x;
+	  event->y-=c->y;
+	  res = WBLOCK_MOUSE (c, msg, event);
+	  event->x+=c->x;
+	  event->y+=c->y;
+	  if (res)
+		return TRUE
+	}
+	c = c->parent;	
   }
-}
-
-void __wblock_dfl_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean draw) {
-
+  wb->selected_widget = NULL;
+  return FALSE;
 }
 
 void
-wblock_dfl_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols) {
-  int y1=y0,x1=x0;
-  int line_bottom=y0;
+wblock_dfl_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw) {
+  int y_line=y0,
+      y_line_bottom=y0,
+      x_line=x0;
+ 
   for (GList *l=wb->widgets;l;l=l->next) {
+    int y_widget, x_widget;
     WBlock *c = WBLOCK (l);
-    style = c->style;
-    int x2,y2;
-    if (style.layout==LAYOUT_BLOCK) {
-      x2 = x0+style.marign.left;
-      y2 = line_bottom+style.marign.left;
+
+    if (c->style.layout==LAYOUT_BLOCK) {
+	  y_widget = y_line_bottom;
+	  x_widget = x0;
     }
-    else if (style.layout==LAYOUT_INLINE) {
-      x1 = MAX(x1,c->x+c->lines+style.margin.right);
+    else if (c->style.layout==LAYOUT_INLINE) {
+	  y_widget = y_line;
+	  x_widget = x_line;
     }
-    WBLOCK_DRAW (c, y2, x2, y, x, lines, cols);
-    if (style.layout==LAYOUT_BLOCK) {
-      y1 = MAX(c->y+c->lines+style.marin.bottom,y1);
-      x1 = x0;
+
+    x_widget+=c->style.margin.left;
+    y_widget+=c->style.margin.top;
+
+	c->y = y_widget;
+	c->x = x_widget;
+	c->lines=-1;
+	c->cols=-1;
+    WBLOCK_DRAW (c, y_widget, x_widget, y, x, lines, cols, do_draw);
+    message_assert (c->lines>=0);
+    message_assert (c->cols>=0);
+    
+
+	y_line_bottom = MAX(y_line_bottom, y_widget+c->lines+c->style.margin.bottom);
+
+    if (c->style.layout==LAYOUT_BLOCK) {
+	  y_widget = y_line_bottom;
+	  x_widget = x0;
     }
-    else if (style.layout==LAYOUT_INLINE) {
-      x1 = MAX(x1,c->x+c->lines+style.margin.right);
+    else if (c->style.layout==LAYOUT_INLINE) {
+	  x_line+=c->lines+x->style.margin.right;
     }
   }
 }
 
-void
-wblock_dfl_calc_size (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols) {
-  wb->x=x+cols;
-  wb->y=y+lines
-  wb->cols=0;
-  wb->lines=0;
-  __wblock_dfl_draw (wb,y0,x0,y,x,lines,cols,FALSE);
-  for (GList *l=wb->widgets;l;l=l->next) {
-    WBlock *c = WBLOCK (l);
-
-    wb->x = MIN(c->x,wb->x);
-    wb->y = MIN(c->x,wb->x);
-  }
-}
 
 gboolean
 wblock_dfl_key (WBlock *wb, int parm) {
@@ -190,6 +229,7 @@ wblock_dfl_destroy (WBlock *wb) {
     WBLOCK_DESTROY (WBLOCK (l));
   }
   g_list_free (wb->widgets);
+  g_free (wb->data);
 }
 
 WBlock *
@@ -198,14 +238,12 @@ wblock_new (
   wblock_key_cb_t key,
   wblock_destroy_cb_t destroy,
   wblock_draw_cb_t draw,
-  wblock_calc_size_cb_t calc_size,
   gpointer wdata)
 {
   WBlock *wb = g_new0 (WBlock,1);
   wb->destroy   = destroy   ? destroy   : wblock_dfl_default;
   wb->draw      = draw      ? draw      : wblock_dfl_draw;
   wb->key       = key       ? key       : wblock_dfl_key;
-  wb->calc_size = calc_size ? calc_size : wblock_dfl_calc_size;
   wb->mouse     = mouse     ? mouse     : wblock_dfl_mouse;
   wv->wdata = wdata;
   return wb;
