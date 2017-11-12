@@ -177,7 +177,8 @@ wblock_dfl_mouse (WBlock *wb, mouse_msg_t msg, mouse_event_t * event) {
 void
 wblock_dfl_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw) {
   int y_line=y0,
-      y_line_bottom=y0,
+      y_line_max=y0,
+      x_line_max=x0,
       x_line=x0;
  
   for (GList *l=wb->widgets;l;l=l->next) {
@@ -185,7 +186,7 @@ wblock_dfl_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, 
     WBlock *c = WBLOCK (l);
 
     if (c->style.layout==LAYOUT_BLOCK) {
-	  y_widget = y_line_bottom;
+	  y_widget = y_line_max;
 	  x_widget = x0;
     }
     else if (c->style.layout==LAYOUT_INLINE) {
@@ -205,16 +206,20 @@ wblock_dfl_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, 
     message_assert (c->cols>=0);
     
 
-	y_line_bottom = MAX(y_line_bottom, y_widget+c->lines+c->style.margin.bottom);
+	y_line_max = MAX(y_line_max, y_widget+c->lines+c->style.margin.bottom);
+	x_line_max = MAX(x_line_max, x_widget+c->cols+c->style.margin.right);
 
     if (c->style.layout==LAYOUT_BLOCK) {
-	  y_widget = y_line_bottom;
+	  y_widget = y_line_max;
 	  x_widget = x0;
     }
     else if (c->style.layout==LAYOUT_INLINE) {
 	  x_line+=c->lines+x->style.margin.right;
     }
   }
+
+  wb->lines = y_line_max - y0;
+  wb->cols = x_line_max - x0;
 }
 
 
