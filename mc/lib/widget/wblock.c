@@ -1,8 +1,10 @@
 #include <config.h>
+
+#include "lib/global.h"
 #include <strings.h>
-
-#include "lib/widget/block-widget.h"
-
+#include "src/keybind-defaults.h" /*bpw_map*/
+#include "src/mcgdb.h"
+#include "lib/widget/wblock.h"
 
 #define WBMAIN(w) ((WBlockMain *)(w))
 
@@ -26,6 +28,8 @@ typedef struct WBlockMain {
   int lines_total;
 } WBlockMain;
 
+static WBlockMain * wbm_new (WBlock *wb, pos_callback_t calcpos);
+static void wbm_free (WBlockMain * wbm);
 
 static void
 wbm_normalize_offset (WBlockMain *wbm) {
@@ -36,14 +40,14 @@ static void
 wbm_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
   WBlockMain *wbm = WBMAIN(w);
   int saved_offset = wbm->offset;
-  gboolean res;
+  gboolean res, redraw;
   event->y-=w->y;
   event->x-=w->x;
   res = WBLOCK_MOUSE (wbm->wb, msg, event);
   event->y+=w->y;
   event->x+=w->x;
   if (res)
-	return
+	return;
 
   switch (msg) {
     case MSG_MOUSE_SCROLL_UP:
@@ -66,9 +70,10 @@ wbm_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
 static cb_ret_t
 wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *data) {
   int command;
+  gboolean redraw;
   cb_ret_t handled = MSG_NOT_HANDLED;
   WBlockMain *wbm = WBMAIN(w);
-  WBlcok *wb = wbm->wb;
+  WBlock *wb = wbm->wb;
   int saved_offset = wbm->offset;
   switch (msg) {
     case MSG_RESIZE:
@@ -98,19 +103,19 @@ wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
       command = keybind_lookup_keymap_command (mcgdb_bpw_map, parm);
       switch (command) {
         case CK_Up:
-          bpw->offset-=1;
+          wbm->offset-=1;
           handled=MSG_HANDLED;
           break;
         case CK_Down:
-          bpw->offset+=1;
+          wbm->offset+=1;
           handled=MSG_HANDLED;
           break;
         case CK_PageUp:
-          bpw->offset-=w->lines/3;
+          wbm->offset-=w->lines/3;
           handled=MSG_HANDLED;
           break;
         case CK_PageDown:
-          bpw->offset+=w->lines/3;
+          wbm->offset+=w->lines/3;
           handled=MSG_HANDLED;
           break;
         default:
@@ -128,15 +133,21 @@ wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
   return handled;
 }
 
-WBlockMain *
+static WBlockMain *
 wbm_new (WBlock *wb, pos_callback_t calcpos) {
-  WBlockMain *wbm = g_new0 (WBlockMain);
-  wb_main->wb = wb;
-  wb_main->calcpos = calcpos;
-  Widget *w = WIDGET(wbm)
+  WBlockMain *wbm = g_new0 (WBlockMain, 1);
+  Widget *w;
+  wbm->wb = wb;
+  wbm->calcpos = calcpos;
+  w = WIDGET(wbm);
   widget_init (w, 1, 1, 1, 1, wbm_callback, wbm_mouse_callback);
   widget_set_options (w, WOP_SELECTABLE, TRUE);
   return wbm;
+}
+
+static void
+wbm_free (WBlockMain * wbm) {
+  g_free (wbm);
 }
 
 WBlock *
@@ -145,7 +156,7 @@ wblock_get_widget_yx (WBlock *wb, int y, int x) {
 	return NULL;
 
   for (GList *l=g_list_last (wb->widgets);l;l=l->prev) {
-	WBlock *c = WBLOCK (l);
+	WBlock *c = WBLOCK (l->data);
 	if (YX_IN_WIDGET (c,y,x)) {
 	  return wblock_get_widget_yx (c, y, x);
 	}
@@ -154,7 +165,7 @@ wblock_get_widget_yx (WBlock *wb, int y, int x) {
   return wb;
 }
 
-gboolead
+gboolean
 wblock_dfl_mouse (WBlock *wb, mouse_msg_t msg, mouse_event_t * event) {
   WBlock *c = wblock_get_widget_yx (wb, event->y, event->x); //most depth widget
   while (c) {
@@ -166,7 +177,7 @@ wblock_dfl_mouse (WBlock *wb, mouse_msg_t msg, mouse_event_t * event) {
 	  event->x+=c->x;
 	  event->y+=c->y;
 	  if (res)
-		return TRUE
+		return TRUE;
 	}
 	c = c->parent;	
   }
@@ -183,7 +194,7 @@ wblock_dfl_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, 
  
   for (GList *l=wb->widgets;l;l=l->next) {
     int y_widget, x_widget;
-    WBlock *c = WBLOCK (l);
+    WBlock *c = WBLOCK (l->data);
 
     if (c->style.layout==LAYOUT_BLOCK) {
 	  y_widget = y_line_max;
@@ -214,7 +225,7 @@ wblock_dfl_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, 
 	  x_widget = x0;
     }
     else if (c->style.layout==LAYOUT_INLINE) {
-	  x_line+=c->lines+x->style.margin.right;
+	  x_line+=c->lines+c->style.margin.right;
     }
   }
 
@@ -234,15 +245,15 @@ wblock_dfl_key (WBlock *wb, int parm) {
 void
 wblock_dfl_destroy (WBlock *wb) {
   for (GList *l=wb->widgets;l!=NULL;l=l->next) {
-    WBLOCK_DESTROY (WBLOCK (l));
+    WBLOCK_DESTROY (WBLOCK (l->data));
   }
   g_list_free (wb->widgets);
-  g_free (wb->data);
+  g_free (wb->wdata);
 }
 
-WBlock *
+void
 wblock_init (
-  WBlock *wb
+  WBlock *wb,
   wblock_mouse_cb_t   mouse,
   wblock_key_cb_t     key,
   wblock_destroy_cb_t destroy,
@@ -250,11 +261,11 @@ wblock_init (
   gpointer wdata)
 {
   bzero (wb, sizeof (WBlock));
-  wb->destroy   = destroy   ? destroy   : wblock_dfl_default;
+  wb->destroy   = destroy   ? destroy   : wblock_dfl_destroy;
   wb->draw      = draw      ? draw      : wblock_dfl_draw;
   wb->key       = key       ? key       : wblock_dfl_key;
   wb->mouse     = mouse     ? mouse     : wblock_dfl_mouse;
-  wv->wdata     = wdata;
+  wb->wdata     = wdata;
 }
 
 WBlock *
@@ -266,7 +277,7 @@ wblock_new (
   gpointer wdata)
 {
   WBlock *wb = g_new0 (WBlock,1);
-  wblock_init (wb, mouse, key, destroy, wdata);
+  wblock_init (wb, mouse, key, destroy, draw, wdata);
   return wb;
 }
 
@@ -290,6 +301,7 @@ wblock_run (WBlock * wb, pos_callback_t calcpos) {
   return_val = dlg_run (dlg);
 
   dlg_destroy (dlg);
+  wbm_free (wbm);
 
   return return_val;
 }

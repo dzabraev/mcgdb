@@ -1,12 +1,16 @@
 #ifndef __block_widget_h__
 #define __block_widget_h__
 
-#include <config.h>
+#include "lib/global.h"
+#include "lib/widget.h"
 
-struct WBlock;
+//#include "lib/widget/mouse.h"
 
 
-typedef void (*pos_callback_t) (int *y, int *y, int *lines, int *cols);
+typedef struct WBlock WBlock;
+
+
+typedef void (*pos_callback_t) (int *y, int *x, int *lines, int *cols);
 
 typedef enum {
   ALIGN_LEFT=0,
@@ -28,25 +32,27 @@ typedef struct {
   int cols;
 } draw_data_t;
 
-#define WBLOCK(l) (l) ? ((WBlock *)((l)->data)) : NULL
+
+typedef gboolean (*wblock_mouse_cb_t) (WBlock *wb, mouse_msg_t msg, mouse_event_t * event);
+typedef gboolean (*wblock_key_cb_t) (WBlock *wb, int parm);
+typedef void (*wblock_destroy_cb_t) (WBlock *wb);
+typedef void (*wblock_draw_cb_t) (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw);
+
+#define WBLOCK(p) ((WBlock *)(p))
+#define WBLOCK_DATA(l) (l) ? ((WBlock *)((l)->data)) : NULL
 
 #define WBLOCK_DRAW(wb,y0,x0,y,x,lines,cols,do_draw) \
   wb->draw(wb,y0,x0,y,x,lines,cols,do_draw)
 
 #define WBLOCK_REDRAW(wb) wb->draw(wb,wb->y,wb->x,wb->y,wb->x,wb->lines,wb->cols,TRUE)
 #define WBLOCK_KEY(wb,parm) wb->key(wb,parm)
-#define WBLOCK_MOUSE(wb,msg,event) (wb)->mouse_callback(wb,msg,event)
+#define WBLOCK_MOUSE(wb,msg,event) (wb)->mouse(wb,msg,event)
 #define WBLOCK_DESTROY(wb) (wb)->destroy(wb)
 
 #define IN_RECTANGLE(y0,x0,y,x,lines,cols) \
 ((y0)>=(y) && (y0)<(y)+(lines) && (x0)>=(x) && (x0)<(x)+(cols))
 
-#define YX_IN_WIDGET(w,y,x) IN_RECTANGLE(y,x,w->y,w->x,w->lines,w->cols)
-
-typedef gboolead (*wblock_mouse_cb_t) (WBlock *wb, mouse_msg_t msg, mouse_event_t * event);
-typedef gboolead (*wblock_key_cb_t) (WBlock *wb, int parm);
-typedef void (*wblock_destroy_cb_t) (WBlock *wb);
-typedef void (*wblock_draw_cb_t) (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw);
+#define YX_IN_WIDGET(w,_y,_x) IN_RECTANGLE(_y,_x,(w)->y,(w)->x,(w)->lines,(w)->cols)
 
 
 typedef struct WBlock {
@@ -67,7 +73,9 @@ typedef struct WBlock {
       int bottom;
     } margin;
   } style;
-  
+
+  WBlock *selected_widget;
+
   wblock_mouse_cb_t mouse;
   wblock_key_cb_t key;
   wblock_destroy_cb_t destroy;
@@ -86,8 +94,8 @@ WBlock *wblock_new (
   wblock_draw_cb_t    draw,
   gpointer wdata);
 
-WBlock *wblock_init (
-  WBlock *wb
+void wblock_init (
+  WBlock *wb,
   wblock_mouse_cb_t   mouse,
   wblock_key_cb_t     key,
   wblock_destroy_cb_t destroy,
@@ -96,7 +104,7 @@ WBlock *wblock_init (
 
 void wblock_add_widget (WBlock * wb, WBlock * widget);
 
-gboolead
+gboolean
 wblock_dfl_mouse (WBlock *wb, mouse_msg_t msg, mouse_event_t * event);
 
 void
@@ -111,7 +119,7 @@ wblock_dfl_destroy (WBlock *wb);
 WBlock *
 wblock_get_widget_yx (WBlock *wb, int y, int x);
 
-#include "wb-checkbox.h"
-#include "wb-frame.h"
+#include "wblock-checkbox.h"
+#include "wblock-frame.h"
 
-#endif __block_widget_h__
+#endif //__block_widget_h__

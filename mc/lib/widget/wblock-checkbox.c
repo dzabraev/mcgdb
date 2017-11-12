@@ -1,12 +1,17 @@
-#include "block-widget.h"
+#include <config.h>
+#include "lib/global.h"
+#include "lib/tty/tty.h"
 
 
-gboolead
+#include "wblock.h"
+
+
+gboolean
 wb_checkbox_mouse (WBlock *wb, mouse_msg_t msg, mouse_event_t * event) {
   gboolean *flag = CHECKBOX_DATA (wb->wdata)->flag;
   flag[0] = !flag[0];
   WBLOCK_REDRAW (wb);
-  return TRUE;    
+  return TRUE;
 }
 
 

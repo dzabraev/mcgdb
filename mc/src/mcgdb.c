@@ -515,7 +515,7 @@ evt_convertable_to_key(struct gdb_action * gdb_evt) {
 
 
 void mcgdb_checkset_read_gdb_events(WDialog * h) {
-  read_gdb_events = !disable_gdb_events && ((find_editor (h)!=NULL) || is_mcgdb_aux_dialog (h) || is_mcgdb_asm_dialog (h) || is_bpw_dialog (h));
+  read_gdb_events = !disable_gdb_events && ((find_editor (h)!=NULL) || is_mcgdb_aux_dialog (h) || is_mcgdb_asm_dialog (h));
 }
 
 
