@@ -39,7 +39,7 @@ typedef struct {
 #define WBLOCK_DESTROY(wb) (wb)->destroy(wb)
 
 #define IN_RECTANGLE(y0,x0,y,x,lines,cols) \
-((y0)>=(y) && (y0)<(y)+(lines) && (x0)<=(x) && (x0)<=(x)+(cols))
+((y0)>=(y) && (y0)<(y)+(lines) && (x0)>=(x) && (x0)<(x)+(cols))
 
 #define YX_IN_WIDGET(w,y,x) IN_RECTANGLE(y,x,w->y,w->x,w->lines,w->cols)
 

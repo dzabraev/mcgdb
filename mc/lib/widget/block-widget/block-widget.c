@@ -288,3 +288,4 @@ wblock_run (WBlock * wb, pos_callback_t calcpos) {
 
   return return_val;
 }
+
