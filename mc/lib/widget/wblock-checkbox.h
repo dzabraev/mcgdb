@@ -8,14 +8,14 @@ typedef struct CheckboxData {
   gboolean *flag;
 } CheckboxData;
 
-gboolean wb_checkbox_mouse (WBlock *wb, mouse_msg_t msg, mouse_event_t * event);
-gboolean wb_checkbox_key (WBlock *wb, int parm);
-void wb_checkbox_destroy (WBlock *wb);
+gboolean wblock_checkbox_mouse (WBlock *wb, mouse_msg_t msg, mouse_event_t * event);
+gboolean wblock_checkbox_key (WBlock *wb, int parm);
+void wblock_checkbox_destroy (WBlock *wb);
 
 void
-wb_checkbox_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw);
+wblock_checkbox_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw);
 
 
-WBlock * wb_checkbox_new (char *label, gboolean *flag);
+WBlock * wblock_checkbox_new (char *label, gboolean *flag);
 
 #endif

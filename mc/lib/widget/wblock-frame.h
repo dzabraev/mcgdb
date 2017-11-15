@@ -12,8 +12,8 @@ typedef struct FrameData {
 
 
 void
-wb_frame_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw);
+wblock_frame_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw);
 
-WBlock * wb_frame_new (char *label);
+WBlock * wblock_frame_new (char *label);
 
 #endif

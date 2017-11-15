@@ -312,6 +312,23 @@ wblock_add_widget (WBlock * wb, WBlock * widget) {
 }
 
 
+
+void
+draw_string_oneline (const char *p, int *draw_cols, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw) {
+  int x_line=x0;
+  while (*p) {
+    if (IN_RECTANGLE (y0,x_line,y,x,lines,cols)) {
+      x_line++;
+      if (do_draw) {
+        tty_gotoyx (y0, x_line);
+        tty_print_char (*p);
+      }
+    }
+    p++;
+  }
+  *draw_cols += x_line - x0;
+}
+
 static cb_ret_t
 wblock_dlg_default_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *data)
 {

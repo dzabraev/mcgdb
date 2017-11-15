@@ -54,8 +54,13 @@ bpw_add_bp (BPWidget *bpw, mcgdb_bp *bp) {
   bpw->bps = g_list_append (bpw->bps, bp);
   tmp_bp = mcgdb_bp_copy (bp);
   bpw->bps_tmp = g_list_append (bpw->bps_tmp, tmp_bp);
-  widget_bp = wb_frame_new (g_strdup_printf ("Breakpoint %d",tmp_bp->number));
-  
+  widget_bp = wblock_frame_new (g_strdup_printf ("Breakpoint %d",tmp_bp->number));
+  wblock_add_widget (
+    widget_bp,
+    wblock_checkbox_new (
+      strdup ("enabled"),
+      &tmp_bp->enabled
+  ));
   wblock_add_widget (WBLOCK (bpw), widget_bp);
 }
 

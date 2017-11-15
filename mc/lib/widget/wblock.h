@@ -118,6 +118,13 @@ wblock_dfl_destroy (WBlock *wb);
 WBlock *
 wblock_get_widget_yx (WBlock *wb, int y, int x);
 
+void
+draw_string_oneline (
+  const char *p,
+  int *draw_cols,
+  int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw);
+
+
 #include "wblock-checkbox.h"
 #include "wblock-frame.h"
 

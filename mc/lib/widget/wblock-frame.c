@@ -6,7 +6,7 @@
 #include "wblock.h"
 
 void
-wb_frame_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw) {
+wblock_frame_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw) {
   const char *label = FRAME_DATA (wb->wdata)->label;
   int lines0 = wb->lines,
       cols0 = wb->cols;
@@ -19,7 +19,7 @@ wb_frame_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gb
                 draw_X  = x0+1<x+cols-1  && x0+cols0-1>=x+1,
                 draw_bound_UP = (y0>=y && y0<=y+lines-1 && draw_X),
                 draw_bound_LO = (y0+lines0-1>=y && y0+lines0-1<=y+lines-1 && draw_X),
-                draw_Y  = y0+1<y+lines-1 && y0+lines0-1>y+1,
+                draw_Y  = y0<=y+lines-1 && y0+lines0-1>=y,
                 draw_bound_LE = x0>=x && x0<=x+lines-1 && draw_Y,
                 draw_bound_RI = x0+cols0-1>=x && x0+cols0-1<=x+cols-1 && draw_Y;
 
@@ -67,17 +67,24 @@ wb_frame_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gb
     }
 
     if (draw_bound_LE || draw_bound_RI) {
-      int yu = MAX(y0+1,y+1),
-          yl = MIN(y0+lines0-1,y+lines-1);
+      int yu = y0>=y ? y0+1 : y,
+          yl = y0+lines0<=y+lines?y0+lines0-1:y+lines;
 
       if (draw_bound_LE)
-        tty_draw_vline (yu, x0, ACS_VLINE, yl-yu-1);
+        tty_draw_vline (yu, x0, ACS_VLINE, yl-yu);
       if (draw_bound_RI)
-        tty_draw_vline (yu, x0+cols0, ACS_VLINE, yl-yu-1);
+        tty_draw_vline (yu, x0+cols0-1, ACS_VLINE, yl-yu);
     }
   }
 
-  wblock_dfl_draw (wb, y0+1, x0+1, y+1, x+1, lines-2, cols-2, do_draw);
+  wblock_dfl_draw (wb,
+    y0+1,
+    x0+1,
+    y0>=y ? y+1 : y,
+    x0>=x ? x+1 : x,
+    y0+lines0<=y+lines ? lines-2 : lines-1,
+    x0+cols0<=x+cols ? cols-2 : cols-1,
+    do_draw);
 
   if (!do_draw) {
     wb->cols = MAX (MAX (wb->cols,3), label ? strlen(label):0);
@@ -88,12 +95,12 @@ wb_frame_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gb
 }
 
 WBlock *
-wb_frame_new (char *label) {
+wblock_frame_new (char *label) {
   WBlock *wb = g_new0 (WBlock, 1);
   FrameData *data = g_new (FrameData, 1);
   data->label = label;
   data->color = EDITOR_NORMAL_COLOR;
-  wblock_init (wb, NULL, NULL, NULL, wb_frame_draw, data);
+  wblock_init (wb, NULL, NULL, NULL, wblock_frame_draw, data);
   wb->style.width_type = WIDTH_MAX;
   return wb;
 }
