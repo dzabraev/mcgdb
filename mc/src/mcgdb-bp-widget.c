@@ -3,6 +3,7 @@
 #include "mcgdb-bp-widget.h"
 #include "mcgdb.h"
 #include "mcgdb-bp.h"
+#include "lib/tty/tty.h"        /* LINES */
 
 typedef struct BPWidget {
   WBlock wb;
@@ -24,7 +25,7 @@ static void
 calcpos (int *y, int *x, int *lines, int *cols) {
   *y=5;
   *x=9;
-  *lines=20;
+  *lines=MAX (3,MIN (20,LINES-7));
   *cols=40;
 }
 

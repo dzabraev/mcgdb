@@ -32,6 +32,11 @@ typedef struct {
   int cols;
 } draw_data_t;
 
+typedef enum {
+  WIDTH_AUTO = 0,
+  //WIDTH_FIXED = 1,
+  WIDTH_MAX = 2,
+} width_compute_t;
 
 typedef gboolean (*wblock_mouse_cb_t) (WBlock *wb, mouse_msg_t msg, mouse_event_t * event);
 typedef gboolean (*wblock_key_cb_t) (WBlock *wb, int parm);
@@ -72,9 +77,9 @@ typedef struct WBlock {
       int right;
       int bottom;
     } margin;
+    width_compute_t width_type;
+    int width;
   } style;
-
-  WBlock *selected_widget;
 
   wblock_mouse_cb_t mouse;
   wblock_key_cb_t key;
@@ -104,14 +109,8 @@ void wblock_init (
 
 void wblock_add_widget (WBlock * wb, WBlock * widget);
 
-gboolean
-wblock_dfl_mouse (WBlock *wb, mouse_msg_t msg, mouse_event_t * event);
-
 void
 wblock_dfl_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw);
-
-gboolean
-wblock_dfl_key (WBlock *wb, int parm);
 
 void
 wblock_dfl_destroy (WBlock *wb);

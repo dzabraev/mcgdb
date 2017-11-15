@@ -22,8 +22,9 @@ with import <nixpkgs> { };
       pythonPackages.pexpect
     ];
     shellHook = ''
-	export PS1='\[\033[1;32m\][nix-shell:\W]$\[\033[0m\] ' 
-	alias grep="grep --color"
+    export PS1='\[\033[1;32m\][nix-shell:\W]$\[\033[0m\] ' 
+    alias grep="grep --color"
+    printf "\e[?2004l"
     '';
   }
 
