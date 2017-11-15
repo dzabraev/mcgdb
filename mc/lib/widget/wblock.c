@@ -79,12 +79,13 @@ static void
 wbm_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
   WBlockMain *wbm = WBMAIN(w);
   int saved_offset = wbm->offset;
+  int y_saved=w->y, x_saved=w->x;
   gboolean res, redraw;
-  event->y-=w->y;
-  event->x-=w->x;
+  event->y+=y_saved;
+  event->x+=x_saved;
   res = wbm_mouse (wbm, msg, event);
-  event->y+=w->y;
-  event->x+=w->x;
+  event->y-=y_saved;
+  event->x-=x_saved;
   if (res)
     return;
 
@@ -259,6 +260,8 @@ wblock_dfl_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, 
   }
 
   if (!do_draw) {
+    wb->x = x0;
+    wb->y = y0;
     wb->lines = y_line_max - y0;
     wb->cols = x_line_max - x0;
   }
