@@ -48,19 +48,10 @@ wblock_frame_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols
           xr=MIN(x0+cols0-1,x+cols-1);
 
       if (draw_bound_UP) {
+        int draw_cols=0;
+        int xc = x0+cols0/2-strlen(label)/2;
         tty_draw_hline (y0, xl, ACS_HLINE, xr-xl);
-        if (label) {
-          const char *p = label;
-          int xc = x0+cols0/2-strlen(label)/2;
-          while (*p) {
-            if (YX_IN_WIDGET (wb,y0,xc)) {
-              tty_gotoyx (y0,xc);
-              tty_print_char (*p);
-            }
-            p++;
-            xc++;
-          }
-        }
+        draw_string_oneline (label, &draw_cols, y0, xc, y, x, lines, cols, do_draw);
       }
       if (draw_bound_LO)
         tty_draw_hline (y0+lines0-1, xl, ACS_HLINE, xr-xl);

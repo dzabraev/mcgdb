@@ -27,6 +27,7 @@ libmcwidget_la_SOURCES = \
 	wtable.c wtable.h \
 	wblock.c wblock.h \
 	wblock-checkbox.h wblock-checkbox.c \
+	wblock-label.h wblock-label.c \
 	wblock-frame.h wblock-frame.c
 
 

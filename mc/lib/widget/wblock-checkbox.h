@@ -4,7 +4,6 @@
 #define CHECKBOX_DATA(p) ((CheckboxData *)(p))
 
 typedef struct CheckboxData {
-  gchar *label;
   gboolean *flag;
 } CheckboxData;
 
@@ -16,6 +15,7 @@ void
 wblock_checkbox_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw);
 
 
-WBlock * wblock_checkbox_new (char *label, gboolean *flag);
+WBlock * wblock_checkbox_new (gboolean *flag);
+WBlock * wblock_checkbox_labeled_new (char *label, gboolean *flag);
 
 #endif

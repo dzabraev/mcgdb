@@ -47,20 +47,70 @@ bpw_add_epilogue (BPWidget *bpw) {
 
 }
 
+static char *
+last_slash (int n, const char *str) {
+  /* a/b/c.txt
+    n==0 => c.txt
+    n==1 => b/c.txt
+  */
+  const char *last, *p=str;
+  while (*p)
+    last=p++;
+  for (;last!=str;last--) {
+    if (*last=='/') {
+      if (n<=0)
+        return strdup (last+1);
+      else
+        n--;
+    }
+  }
+
+  return strdup (str);
+}
+
 static void
 bpw_add_bp (BPWidget *bpw, mcgdb_bp *bp) {
+  int location_idx=1;
   WBlock *widget_bp;
+  WBlock *widget_locs = wblock_new (NULL,NULL,NULL,NULL,NULL);
   mcgdb_bp *tmp_bp;
   bpw->bps = g_list_append (bpw->bps, bp);
   tmp_bp = mcgdb_bp_copy (bp);
   bpw->bps_tmp = g_list_append (bpw->bps_tmp, tmp_bp);
   widget_bp = wblock_frame_new (g_strdup_printf ("Breakpoint %d",tmp_bp->number));
+
+  wblock_add_widget (widget_bp,wblock_label_new (strdup("Locations:"),TRUE));
+  widget_locs->style.margin.left=2;
+
+  for (GList *l=tmp_bp->locations;l;l=l->next, location_idx++) {
+    char *short_fname = last_slash (1, BP_LOC (l)->filename); /*keep one or 0 slashes*/
+    wblock_add_widget (
+      widget_locs,
+      wblock_multilabel_new (
+        FALSE,
+        g_strdup_printf ("%d. %s:%d",location_idx, short_fname, BP_LOC (l)->line),
+        g_strdup_printf ("%d. %s:%d",location_idx, BP_LOC (l)->filename, BP_LOC (l)->line),
+        NULL
+    ));
+    g_free (short_fname);
+  }
+
+  wblock_add_widget (widget_bp, widget_locs);
+
   wblock_add_widget (
     widget_bp,
-    wblock_checkbox_new (
-      strdup ("enabled"),
+    wblock_checkbox_labeled_new (
+      strdup ("enabled "),
       &tmp_bp->enabled
   ));
+
+  wblock_add_widget (
+    widget_bp,
+    wblock_checkbox_labeled_new (
+      strdup ("silent  "),
+      &tmp_bp->silent
+  ));
+
   wblock_add_widget (WBLOCK (bpw), widget_bp);
 }
 

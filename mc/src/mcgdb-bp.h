@@ -27,7 +27,7 @@ typedef struct mcgdb_bp{
   char *commands;
   int id;
   int number; /**gdb id of breakpoint*/
-  GList *locations;
+  GList *locations; /*bp_loc_t*/
   char * create_loc; /*user input string for create location*/
   bpwait wait_status;
 } mcgdb_bp;

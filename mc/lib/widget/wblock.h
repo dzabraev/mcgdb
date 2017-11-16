@@ -86,6 +86,8 @@ typedef struct WBlock {
   wblock_destroy_cb_t destroy;
   wblock_draw_cb_t draw;
 
+  gboolean redraw;
+
   gpointer wdata;
 } WBlock;
 
@@ -119,6 +121,14 @@ WBlock *
 wblock_get_widget_yx (WBlock *wb, int y, int x);
 
 void
+draw_string (
+  const char *p,
+  int *draw_lines, int *draw_cols,
+  int y0, int x0, int y, int x, int lines, int cols,
+  gboolean do_draw, gboolean oneline);
+
+
+void
 draw_string_oneline (
   const char *p,
   int *draw_cols,
@@ -127,5 +137,7 @@ draw_string_oneline (
 
 #include "wblock-checkbox.h"
 #include "wblock-frame.h"
+#include "wblock-label.h"
+
 
 #endif //__block_widget_h__

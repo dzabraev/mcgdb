@@ -42,10 +42,12 @@ typedef struct WBlockMain {
   pos_callback_t calcpos;
   int offset;
   WBlock *selected_widget;
+  gboolean redraw;
 } WBlockMain;
 
 static WBlockMain * wbm_new (WBlock *wb, pos_callback_t calcpos);
 static void wbm_cleanup (WBlockMain * wbm);
+static gboolean wbm_exists_redraw (WBlockMain * wbm);
 
 static void
 wbm_normalize_offset (WBlockMain *wbm) {
@@ -74,6 +76,38 @@ wbm_mouse (WBlockMain *wbm, mouse_msg_t msg, mouse_event_t * event) {
   return FALSE;
 }
 
+static gboolean
+wbm_exists_redraw_1 (WBlock *wb) {
+  if (wb->redraw)
+    return TRUE;
+  for (GList *l=wb->widgets;l;l=l->next) {
+    if (wbm_exists_redraw_1 ( WBLOCK_DATA (l)))
+      return TRUE;
+  }
+  return FALSE;
+}
+
+static gboolean
+wbm_exists_redraw (WBlockMain * wbm) {
+  WBlock *wb = wbm->wb;
+  return wbm_exists_redraw_1 (wb);
+}
+
+
+static void
+wbm_erase_redraw_1 (WBlock *wb) {
+  wb->redraw = FALSE;
+  for (GList *l=wb->widgets;l;l=l->next) {
+    wbm_erase_redraw_1 (WBLOCK_DATA (l));
+  }
+}
+
+static void
+wbm_erase_redraw (WBlockMain * wbm) {
+  WBlock *wb = wbm->wb;
+  return wbm_erase_redraw_1 (wb);
+}
+
 
 static void
 wbm_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
@@ -86,7 +120,9 @@ wbm_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
   res = wbm_mouse (wbm, msg, event);
   event->y-=y_saved;
   event->x-=x_saved;
-  if (res)
+  if (wbm_exists_redraw (wbm))
+    goto label_redraw;
+  else if (res)
     return;
 
   switch (msg) {
@@ -104,8 +140,10 @@ wbm_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
 
   redraw = saved_offset!=wbm->offset;
   if (redraw) {
+    label_redraw:;
     WBM_UPDATE_COORDS (wbm);
     WBM_REDRAW (wbm);
+    wbm_erase_redraw (wbm);
   }
 }
 
@@ -135,7 +173,13 @@ wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
       return MSG_HANDLED;
     case MSG_KEY:
       if (wbm->selected_widget && WBLOCK_KEY (wbm->selected_widget, parm))
-        return MSG_HANDLED;
+        if (wbm->selected_widget->redraw) {
+          wbm->selected_widget->redraw = FALSE;
+          goto label_redraw;
+        }
+        else {
+          return MSG_HANDLED;
+        }
       break;
     default:
       break;
@@ -167,8 +211,10 @@ wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
       wbm_normalize_offset (wbm);
       redraw = saved_offset!=wbm->offset;
       if (redraw) {
+        label_redraw:;
         WBM_UPDATE_COORDS (wbm);
         WBM_REDRAW (wbm);
+        wbm_erase_redraw (wbm);
       }
       break;
     default:
@@ -314,22 +360,40 @@ wblock_add_widget (WBlock * wb, WBlock * widget) {
   widget->parent = wb;
 }
 
+void
+draw_string (const char *p, int *draw_lines, int *draw_cols, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw, gboolean oneline) {
+  int x_line=x0;
+  int x_line_max=x0;
+  int y_line=y0;
+  while (*p) {
+    if (IN_RECTANGLE (y_line,x_line,y,x,lines,cols)) {
+      if (do_draw) {
+        tty_gotoyx (y_line, x_line);
+        tty_print_char (*p);
+      }
+      x_line++;
+    }
+    if (!oneline && x_line>=x+cols) {
+      x_line_max = MAX (x_line, x_line_max);
+      x_line = x0;
+      y_line ++;
+    }
+    p++;
+  }
+
+
+  x_line_max = MAX (x_line, x_line_max);
+  *draw_cols += x_line_max - x0;
+  if (x_line>x0)
+    y_line++;
+  *draw_lines += y_line - y0;
+}
 
 
 void
 draw_string_oneline (const char *p, int *draw_cols, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw) {
-  int x_line=x0;
-  while (*p) {
-    if (IN_RECTANGLE (y0,x_line,y,x,lines,cols)) {
-      x_line++;
-      if (do_draw) {
-        tty_gotoyx (y0, x_line);
-        tty_print_char (*p);
-      }
-    }
-    p++;
-  }
-  *draw_cols += x_line - x0;
+  int draw_lines=0;
+  draw_string (p,&draw_lines,draw_cols,y0,x0,y,x,lines,cols,do_draw,TRUE);
 }
 
 static cb_ret_t
