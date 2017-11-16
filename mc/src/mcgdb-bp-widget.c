@@ -68,6 +68,17 @@ last_slash (int n, const char *str) {
   return strdup (str);
 }
 
+struct {
+  BPWidget *bpw;
+  int * color;
+  gboolean direct_delete;
+} ButtonDeleteData;
+
+static void
+bpw_button_delete_cb (WBlock *wb, gointer data) {
+
+}
+
 static void
 bpw_add_bp (BPWidget *bpw, mcgdb_bp *bp) {
   int location_idx=1;
@@ -78,6 +89,15 @@ bpw_add_bp (BPWidget *bpw, mcgdb_bp *bp) {
   tmp_bp = mcgdb_bp_copy (bp);
   bpw->bps_tmp = g_list_append (bpw->bps_tmp, tmp_bp);
   widget_bp = wblock_frame_new (g_strdup_printf ("Breakpoint %d",tmp_bp->number));
+
+  wblock_add_widget (
+    widget_bp,
+    wblock_button_new (
+        strdup ("[Delete Breakpoint]"),
+        bpw_button_delete_cb,
+        (gpointer) bpw_button_delete_data)
+  );
+
 
   wblock_add_widget (widget_bp,wblock_label_new (strdup("Locations:"),TRUE));
   widget_locs->style.margin.left=2;

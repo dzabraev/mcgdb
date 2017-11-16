@@ -138,6 +138,7 @@ draw_string_oneline (
 #include "wblock-checkbox.h"
 #include "wblock-frame.h"
 #include "wblock-label.h"
+#include "wblock-button.h"
 
 
 #endif //__block_widget_h__
