@@ -5,12 +5,14 @@
 #include "mcgdb-bp.h"
 #include "lib/tty/tty.h"        /* LINES */
 
+typedef struct bp_pair {
+  mcgdb_bp *orig;
+  mcgdb_bp *temp;
+} bp_pair_t;
+
 typedef struct BPWidget {
   WBlock wb;
-  GList * bps;
-  GList * bps_tmp; /*copy of bps for comparsion*/
-  GList * bps_del;
-  GList * bps_creating;
+  GList * bps; /*bp_pair*/
   gboolean redraw;
 } BPWidget;
 
@@ -42,10 +44,32 @@ bpw_free (BPWidget *bpw) {
   g_free (bpw);
 }
 
+
+static void
+bpw_delete_all (WBlock *wb, gpointer data) {
+  GList *pairs = (GList *)data;
+  for (GList *l=pairs;l;l=l->next) {
+    ((bp_pair_t)(l->data))->wait_status = BP_WAIT_DELETE;
+  }
+  h->ret_value = ;
+  dlg_stop (h);
+}
+
 static void
 bpw_add_epilogue (BPWidget *bpw) {
+  wblock_add_widget (bwp->wb, wblock_button_new (
+    strdup ("[DEL ALL]"),
+    bpw_delete_all,
+    bpw->bps
+  ));
+}
+
+static void
+bpw_add_prologue (BPWidget *bpw) {
 
 }
+
+
 
 static char *
 last_slash (int n, const char *str) {
@@ -68,41 +92,96 @@ last_slash (int n, const char *str) {
   return strdup (str);
 }
 
-struct {
+typedef struct {
   BPWidget *bpw;
-  int * color;
-  gboolean direct_delete;
+  bp_pair_t *bp_pair;
+  WBlock *parent;
 } ButtonDeleteData;
 
 static void
-bpw_button_delete_cb (WBlock *wb, gointer data) {
-
+bpw_button_delete_cb (WBlock *wb, gpointer gdata) {
+  WBlock *frame_parent;
+  ButtonDeleteData *data = (ButtonDeleteData *)gdata;
+  mcgdb_bp *orig = data->bp_pair->orig,
+           *temp = data->bp_pair->temp;
+  WBlockFrameData *frame_data;
+  int new_frame_color;
+  if (orig!=NULL) {
+    if (temp->wait_status!=BP_WAIT_DELETE) {
+      temp->wait_status = BP_WAIT_DELETE;
+    }
+    else {
+      if (orig->wait_status==BP_WAIT_UPDATE || !mcgdb_bp_equals (orig, temp)) {
+        temp->wait_status = BP_WAIT_UPDATE;
+      }
+      else {
+        temp->wait_status = orig->wait_status;
+      }
+    }
+    frame_parent = data->parent; /*frame around breakpoint widget*/
+    message_assert (frame_parent!=NULL);
+    frame_data = WBLOCK_FRAME_DATA (frame_parent->wdata);
+    switch (temp->wait_status) {
+      case BP_WAIT_DELETE:
+        new_frame_color = COLOR_BP_WAIT_DELETE;
+        break;
+      case BP_WAIT_UPDATE:
+        new_frame_color = COLOR_BP_WAIT_UPDATE;
+        break;
+      default:
+        new_frame_color = WBLOCK_FRAME_COLOR_NORMAL;
+        break;
+    }
+    if (frame_data->color != new_frame_color) {
+      frame_data->color = new_frame_color;
+      wb->parent->redraw = TRUE;
+    }
+  }
+  else {
+    if (wb->parent) {
+      wb->parent->widgets = g_list_remove (wb->parent->widgets, wb);
+      wb->parent->redraw = TRUE;
+    }
+    WBLOCK_DESTROY(wb);
+  }
 }
 
 static void
 bpw_add_bp (BPWidget *bpw, mcgdb_bp *bp) {
   int location_idx=1;
-  WBlock *widget_bp;
+  WBlock *widget_bp, *top_widget;
   WBlock *widget_locs = wblock_new (NULL,NULL,NULL,NULL,NULL);
-  mcgdb_bp *tmp_bp;
-  bpw->bps = g_list_append (bpw->bps, bp);
-  tmp_bp = mcgdb_bp_copy (bp);
-  bpw->bps_tmp = g_list_append (bpw->bps_tmp, tmp_bp);
-  widget_bp = wblock_frame_new (g_strdup_printf ("Breakpoint %d",tmp_bp->number));
+  bp_pair_t *bp_pair = g_new0 (bp_pair_t, 1);
+  mcgdb_bp *bp_tmp = mcgdb_bp_copy (bp);
+  bp_pair->orig = bp;
+  bp_pair->temp = bp_tmp;
 
-  wblock_add_widget (
-    widget_bp,
-    wblock_button_new (
-        strdup ("[Delete Breakpoint]"),
-        bpw_button_delete_cb,
-        (gpointer) bpw_button_delete_data)
-  );
+  bpw->bps = g_list_append (bpw->bps, bp_pair);
+  top_widget = wblock_new (NULL,NULL,NULL,NULL,NULL);
+  widget_bp = wblock_frame_new (g_strdup_printf ("Breakpoint %d",bp->number));
+  widget_bp->style.layout=LAYOUT_INLINE;
+  wblock_add_widget (top_widget, widget_bp);
+
+  {
+    ButtonDeleteData *data = g_new0 (ButtonDeleteData,1);
+    WBlock *delbtn;
+    data->bpw=bpw;
+    data->bp_pair = bp_pair;
+    data->parent = widget_bp;
+    delbtn = wblock_button_new (
+          strdup ("[DEL]"),
+          bpw_button_delete_cb,
+          (gpointer) data);
+    delbtn->style.margin.left=-6;
+    delbtn->style.layout=LAYOUT_INLINE;
+    wblock_add_widget (top_widget, delbtn);
+  }
 
 
   wblock_add_widget (widget_bp,wblock_label_new (strdup("Locations:"),TRUE));
   widget_locs->style.margin.left=2;
 
-  for (GList *l=tmp_bp->locations;l;l=l->next, location_idx++) {
+  for (GList *l=bp->locations;l;l=l->next, location_idx++) {
     char *short_fname = last_slash (1, BP_LOC (l)->filename); /*keep one or 0 slashes*/
     wblock_add_widget (
       widget_locs,
@@ -121,45 +200,67 @@ bpw_add_bp (BPWidget *bpw, mcgdb_bp *bp) {
     widget_bp,
     wblock_checkbox_labeled_new (
       strdup ("enabled "),
-      &tmp_bp->enabled
+      &bp_tmp->enabled
   ));
 
   wblock_add_widget (
     widget_bp,
     wblock_checkbox_labeled_new (
       strdup ("silent  "),
-      &tmp_bp->silent
+      &bp_tmp->silent
   ));
 
-  wblock_add_widget (WBLOCK (bpw), widget_bp);
+  wblock_add_widget (WBLOCK (bpw), top_widget);
 }
 
 
 static void
 bpw_apply_changes (BPWidget *bpw) {
-  GList *l,*ltmp;
-  for (l=bpw->bps,ltmp=bpw->bps_tmp; l; l=l->next,ltmp=ltmp->next) {
-    mcgdb_bp *bp = MCGDB_BP (l), *bp_tmp = MCGDB_BP (ltmp);
-    if (!mcgdb_bp_equals (bp, bp_tmp) && !g_list_find (bpw->bps_del,bp_tmp)) {
-      mcgdb_bp_assign (bp, bp_tmp);
-      bp->wait_status=BP_WAIT_UPDATE;
-      send_pkg_update_bp (bp);
-      bpw->redraw=TRUE;
+  for (GList *l=bpw->bps;l;l=l->next) {
+    bp_pair_t *p = (bp_pair_t *)(l->data);
+      mcgdb_bp  *orig = p->orig,
+                *temp = p->temp;
+
+    if (orig && temp) {
+      if (orig->wait_status!=BP_WAIT_DELETE && temp->wait_status!=BP_WAIT_DELETE) {
+        /*compare*/
+        if (!mcgdb_bp_equals (orig, temp)) {
+          /*update*/
+          temp->wait_status=BP_WAIT_UPDATE;
+          send_pkg_update_bp (temp);
+          mcgdb_bp_assign (orig,temp);
+          bpw->redraw=TRUE;
+        }
+      }
+      else if (orig->wait_status==BP_WAIT_DELETE && temp->wait_status!=BP_WAIT_DELETE) {
+        /*update*/
+        temp->wait_status=BP_WAIT_UPDATE;
+        send_pkg_update_bp (temp);
+        mcgdb_bp_assign (orig,temp);
+        bpw->redraw=TRUE;
+      }
+      else if (orig->wait_status!=BP_WAIT_DELETE && temp->wait_status==BP_WAIT_DELETE) {
+        /*delete*/
+        temp->wait_status=BP_WAIT_DELETE;
+        send_pkg_delete_bp (temp);
+        mcgdb_bp_assign (orig,temp);
+        bpw->redraw=TRUE;
+      }
+      else if (orig->wait_status==BP_WAIT_DELETE && temp->wait_status==BP_WAIT_DELETE) {
+        /*do nothing*/
+      }
+
     }
-  }
-
-  for (l=bpw->bps_del; l; l=l->next) {
-    mcgdb_bp *bp = MCGDB_BP (l);
-    bp->wait_status=BP_WAIT_DELETE;
-    send_pkg_delete_bp (bp);
-    bpw->redraw=TRUE;
-  }
-
-  for (l=bpw->bps_creating; l; l=l->next) {
-    mcgdb_bp *bp = MCGDB_BP (l);
-    send_pkg_update_bp (bp);
-    bpw->redraw=TRUE;
-    insert_bp_to_list (bp);
+    else if (orig==NULL && temp!=NULL) {
+      /*creation*/
+      temp->wait_status=BP_WAIT_UPDATE;
+      send_pkg_update_bp (temp);
+      bpw->redraw=TRUE;
+      insert_bp_to_list (temp);
+    }
+    else {
+      message_assert (FALSE);
+    }
   }
 }
 
@@ -169,7 +270,8 @@ breakpoints_edit_dialog (const char *filename, long line) {
   BPWidget *bpw = bpw_new ();
   gboolean redraw;
   int return_val;
-  
+
+  bpw_add_prologue (bpw);
 
   for ( GList *l=mcgdb_bp_find_bp_with_location (mcgdb_bps, filename, line);
         l!=0;
@@ -189,6 +291,6 @@ breakpoints_edit_dialog (const char *filename, long line) {
 
   redraw = bpw->redraw;
   bpw_free (bpw);
-  
+
   return redraw;
 }

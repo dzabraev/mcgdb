@@ -6,6 +6,7 @@
 
 //#include "lib/widget/mouse.h"
 
+#define WBLOCK_COLOR_NORMAL BUTTONBAR_BUTTON_COLOR
 
 typedef struct WBlock WBlock;
 

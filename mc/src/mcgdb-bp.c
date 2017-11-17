@@ -15,7 +15,7 @@ GList * mcgdb_bps = NULL;
 static int id_counter=1;
 
 int mcgdb_bp_color_wait_remove;
-int mcgdb_bp_color_wait_insert;
+int mcgdb_bp_color_wait_update;
 int mcgdb_bp_color_normal;
 int mcgdb_bp_color_disabled;
 
@@ -286,27 +286,7 @@ mcgdb_bp_process_click (const char *filename, long line, gboolean open_menu) {
     return need_redraw;
   nbps = count_bps (filename,line);
   if (nbps>0) {
-    if (nbps==1) {
-      mcgdb_bp * bp = MCGDB_BP(mcgdb_bp_find_bp_with_location (mcgdb_bps, filename, line));
-      if (open_menu || bp_has_nondefault_vals (bp)) {
-        need_redraw=breakpoints_edit_dialog (filename,line);
-      }
-      else {
-        if (bp->wait_status==BP_NOWAIT || bp->wait_status==BP_WAIT_UPDATE) {
-          bp->wait_status = BP_WAIT_DELETE;
-          send_pkg_delete_bp (bp);
-          need_redraw=TRUE;
-        }
-        else if (bp->wait_status==BP_WAIT_DELETE) {
-          bp->wait_status = BP_WAIT_UPDATE;
-          send_pkg_update_bp (bp);
-          need_redraw=TRUE;
-        }
-      }
-    }
-    else {
-      need_redraw=breakpoints_edit_dialog (filename,line);
-    }
+    need_redraw=breakpoints_edit_dialog (filename,line);
   }
   else {
     if (open_menu) {
@@ -367,7 +347,7 @@ mcgdb_bp_color(const char * filename, long line) {
   }
 
   if (exists_wait_upd)
-    return mcgdb_bp_color_wait_insert;
+    return mcgdb_bp_color_wait_update;
   else if (exists_wait_del)
     return mcgdb_bp_color_wait_remove;
   else if (exists_enable_no_cond)
@@ -468,6 +448,7 @@ mcgdb_bp_assign (mcgdb_bp *bp1, const mcgdb_bp *bp2) {
   bp1->thread       = bp2->thread        ;
   bp1->condition    = bp2->condition     ;
   bp1->commands     = bp2->commands      ;
+  bp1->wait_status  = bp2->wait_status   ;
 }
 
 
@@ -602,6 +583,10 @@ void pkg_bps_upd(json_t *pkg) {
     }
 
     bp->wait_status = BP_NOWAIT;
+
+    if (bp->number==-1) {
+      bp->number = myjson_int (bp_data, "number");
+    }
 
     tmp = json_object_get (bp_data, "locations");
     if (tmp) {

@@ -2,13 +2,17 @@
 #define __block_frame_h__
 
 #include "lib/global.h"
+#include "lib/skin.h" /*EDITOR_NORMAL_COLOR*/
 
-#define FRAME_DATA(p) ((FrameData *)(p))
 
-typedef struct FrameData {
-  gchar *label;
+#define WBLOCK_FRAME_COLOR_NORMAL WBLOCK_COLOR_NORMAL
+
+#define WBLOCK_FRAME_DATA(p) ((WBlockFrameData *)(p))
+
+typedef struct WBlockFrameData {
+  WBlock *label;
   int color;
-} FrameData;
+} WBlockFrameData;
 
 
 void

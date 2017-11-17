@@ -1,13 +1,13 @@
 #include <config.h>
 #include "lib/global.h"
 #include "lib/tty/tty.h"
-#include "lib/skin.h" /*EDITOR_NORMAL_COLOR*/
 
 #include "wblock.h"
 
 void
 wblock_frame_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw) {
-  const char *label = FRAME_DATA (wb->wdata)->label;
+  WBlockFrameData *data = WBLOCK_FRAME_DATA (wb->wdata);
+  const char *label = data->label;
   int lines0 = wb->lines,
       cols0 = wb->cols;
 
@@ -22,6 +22,8 @@ wblock_frame_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols
                 draw_Y  = y0<=y+lines-1 && y0+lines0-1>=y,
                 draw_bound_LE = x0>=x && x0<=x+lines-1 && draw_Y,
                 draw_bound_RI = x0+cols0-1>=x && x0+cols0-1<=x+cols-1 && draw_Y;
+
+    tty_setcolor (data->color);
 
     if (draw_UL) {
       tty_gotoyx (y0,x0);
@@ -85,13 +87,15 @@ wblock_frame_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols
   }
 }
 
+
 WBlock *
 wblock_frame_new (char *label) {
   WBlock *wb = g_new0 (WBlock, 1);
-  FrameData *data = g_new (FrameData, 1);
+  WBlockFrameData *data = g_new (WBlockFrameData, 1);
   data->label = label;
-  data->color = EDITOR_NORMAL_COLOR;
+  data->color = WBLOCK_FRAME_COLOR_NORMAL;
   wblock_init (wb, NULL, NULL, NULL, wblock_frame_draw, data);
   wb->style.width_type = WIDTH_MAX;
   return wb;
+
 }

@@ -25,7 +25,7 @@
 
 #define WBM_REDRAW(wbm) \
   do { \
-  tty_setcolor (BUTTONBAR_BUTTON_COLOR);\
+  tty_setcolor (WBLOCK_COLOR_NORMAL);\
   tty_fill_region ( \
     WIDGET(wbm)->y, \
     WIDGET(wbm)->x, \
@@ -141,9 +141,15 @@ wbm_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
   redraw = saved_offset!=wbm->offset;
   if (redraw) {
     label_redraw:;
+    int saved_lines = wbm->wb->lines;
     WBM_UPDATE_COORDS (wbm);
+    if (saved_lines>wbm->wb->lines) {
+      /*redraw all dialogs*/
+      dialog_change_screen_size ();
+    }
     WBM_REDRAW (wbm);
     wbm_erase_redraw (wbm);
+    tty_gotoyx (LINES,COLS);
   }
 }
 
@@ -172,7 +178,9 @@ wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
       WBM_REDRAW (wbm);
       return MSG_HANDLED;
     case MSG_KEY:
-      if (wbm->selected_widget && WBLOCK_KEY (wbm->selected_widget, parm))
+      if (wbm->selected_widget &&
+          wbm->selected_widget->key &&
+          WBLOCK_KEY (wbm->selected_widget, parm))
         if (wbm->selected_widget->redraw) {
           wbm->selected_widget->redraw = FALSE;
           goto label_redraw;
@@ -212,9 +220,15 @@ wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
       redraw = saved_offset!=wbm->offset;
       if (redraw) {
         label_redraw:;
+        int saved_lines = wbm->wb->lines;
         WBM_UPDATE_COORDS (wbm);
+        if (saved_lines>wbm->wb->lines) {
+          /*redraw all dialogs*/
+          dialog_change_screen_size ();
+        }
         WBM_REDRAW (wbm);
         wbm_erase_redraw (wbm);
+        tty_gotoyx (LINES,COLS);
       }
       break;
     default:
@@ -281,6 +295,8 @@ wblock_dfl_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, 
       c->lines=-1;
       c->cols=-1;
     }
+    if (do_draw)
+      tty_setcolor (WBLOCK_COLOR_NORMAL);
     WBLOCK_DRAW (c, y_widget, x_widget, y, x, lines, cols, do_draw);
     if (!do_draw) {
       message_assert (c->lines>=0);
@@ -366,7 +382,7 @@ draw_string (const char *p, int *draw_lines, int *draw_cols, int y0, int x0, int
   int x_line_max=x0;
   int y_line=y0;
   while (*p) {
-    if (IN_RECTANGLE (y_line,x_line,y,x,lines,cols)) {
+    if (!do_draw || IN_RECTANGLE (y_line,x_line,y,x,lines,cols)) {
       if (do_draw) {
         tty_gotoyx (y_line, x_line);
         tty_print_char (*p);

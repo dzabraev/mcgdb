@@ -2,7 +2,7 @@
 #define __mcgdb_bp_h__
 
 extern int mcgdb_bp_color_wait_remove;
-extern int mcgdb_bp_color_wait_insert;
+extern int mcgdb_bp_color_wait_update;
 extern int mcgdb_bp_color_normal;
 extern int mcgdb_bp_color_disabled;
 

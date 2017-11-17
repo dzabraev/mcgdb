@@ -269,7 +269,6 @@ get_command_num(json_t *pkg) {
     else if (compare_cmd("bpsupd"))             {return MCGDB_BPSUPD;}
 
     else if (compare_cmd("set_window_type"))    {return MCGDB_SET_WINDOW_TYPE;}
-    else if (compare_cmd("color"))              {return MCGDB_COLOR;}
     else if (compare_cmd("set_curline"))        {return MCGDB_SET_CURLINE;}
     else if (compare_cmd("exit"))               {return MCGDB_EXIT;}
     else if (compare_cmd("error_message"))      {return MCGDB_ERROR_MESSAGE;}

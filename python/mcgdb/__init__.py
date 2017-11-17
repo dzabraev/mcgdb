@@ -12,7 +12,6 @@ def init_commands():
   mcgdb_main = mcgdb.common.McgdbMain()
   mcgdb.commands.McgdbCompleter()
   mcgdb.commands.CmdOpenWindow()
-  mcgdb.commands.CmdColor()
 
 
 def init():
