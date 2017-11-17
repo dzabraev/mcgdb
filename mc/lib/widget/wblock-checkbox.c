@@ -9,6 +9,9 @@
 gboolean
 wblock_checkbox_mouse (WBlock *wb, mouse_msg_t msg, mouse_event_t * event) {
   gboolean *flag = CHECKBOX_DATA (wb->wdata)->flag;
+
+  (void) event;
+
   if (msg!=MSG_MOUSE_CLICK)
     return FALSE;
   flag[0] = !flag[0];
@@ -19,6 +22,8 @@ wblock_checkbox_mouse (WBlock *wb, mouse_msg_t msg, mouse_event_t * event) {
 
 gboolean
 wblock_checkbox_key (WBlock *wb, int parm) {
+  (void) wb;
+  (void) parm;
   return FALSE;
 }
 

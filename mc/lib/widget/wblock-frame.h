@@ -10,7 +10,7 @@
 #define WBLOCK_FRAME_DATA(p) ((WBlockFrameData *)(p))
 
 typedef struct WBlockFrameData {
-  WBlock *label;
+  char *label;
   int color;
 } WBlockFrameData;
 

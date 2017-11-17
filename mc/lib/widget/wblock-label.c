@@ -41,6 +41,9 @@ wblock_multilabel_mouse (WBlock *wb, mouse_msg_t msg, mouse_event_t * event) {
   WBlockMultilabelData *data = WBLOCK_MULTILABEL_DATA (wb->wdata);
   int total = g_list_length (data->labels);
   int saved = data->current;
+
+  (void) event;
+
   if (msg!=MSG_MOUSE_CLICK)
     return FALSE;
   data->current = (data->current+1) % total;

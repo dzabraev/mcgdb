@@ -60,8 +60,10 @@ typedef void (*wblock_draw_cb_t) (WBlock *wb, int y0, int x0, int y, int x, int 
 
 #define YX_IN_WIDGET(w,_y,_x) IN_RECTANGLE(_y,_x,(w)->y,(w)->x,(w)->lines,(w)->cols)
 
+typedef struct WBlockMain WBlockMain;
 
 typedef struct WBlock {
+  WBlockMain *wbm;
   GList *widgets;
   //Garray *coord; /* triplets (xl,xr,y) */
   int y;
@@ -110,6 +112,26 @@ void wblock_init (
   wblock_draw_cb_t    draw,
   gpointer wdata);
 
+#define WBLOCK_EMPTY() wblock_new(NULL,NULL,NULL,NULL,NULL)
+
+#define WBLOCK_MARGIN(_left,_top,_right,_bottom) \
+({\
+  WBlock *wb = WBLOCK_EMPTY ();\
+  wb->style.margin.left=_left;\
+  wb->style.margin.top=_top;\
+  wb->style.margin.right=_right;\
+  wb->style.margin.bottom=_bottom;\
+  wb;\
+})
+
+#define WBLOCK_NEWLINE WBLOCK_MARGIN(0,1,0,0)
+
+#define WBLOCK_NSPACE(_n) ({\
+  WBlock *__wb = WBLOCK_MARGIN(_n,0,0,0);\
+  __wb->style.layout = LAYOUT_INLINE;\
+  __wb;\
+})
+
 void wblock_add_widget (WBlock * wb, WBlock * widget);
 
 void
@@ -135,6 +157,21 @@ draw_string_oneline (
   int *draw_cols,
   int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw);
 
+
+
+WBlockMain * wblock_get_wbm (WBlock *wb);
+WDialog * wblock_get_dialog (WBlock *wb);
+
+WBlock * set_layout (WBlock *wb, layout_t layout);
+WBlock * layout_inline (WBlock *wb);
+
+WBlock * wblock_empty (void);
+WBlock * set_margin (WBlock *wb, int left, int top, int right, int bottom);
+WBlock * wblock_newline (void);
+WBlock * wblock_nspace (int n);
+
+
+void wblock_shift_yx (WBlock *wb, int shift_y, int shift_x);
 
 #include "wblock-checkbox.h"
 #include "wblock-frame.h"

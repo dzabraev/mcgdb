@@ -76,6 +76,35 @@ wbm_mouse (WBlockMain *wbm, mouse_msg_t msg, mouse_event_t * event) {
   return FALSE;
 }
 
+static void
+wbm_erase_redraw_1 (WBlock *wb) {
+  wb->redraw = FALSE;
+  for (GList *l=wb->widgets;l;l=l->next) {
+    wbm_erase_redraw_1 (WBLOCK_DATA (l));
+  }
+}
+
+static void
+wbm_erase_redraw (WBlockMain * wbm) {
+  WBlock *wb = wbm->wb;
+  return wbm_erase_redraw_1 (wb);
+}
+
+static void
+wbm_redraw_full (WBlockMain *wbm) {
+  int saved_lines = wbm->wb->lines;
+  WBM_UPDATE_COORDS (wbm);
+  if (saved_lines>wbm->wb->lines) {
+    /*redraw all dialogs*/
+    dialog_change_screen_size ();
+  }
+  else {
+    WBM_REDRAW (wbm);
+  }
+  wbm_erase_redraw (wbm);
+  tty_gotoyx (LINES,COLS);
+}
+
 static gboolean
 wbm_exists_redraw_1 (WBlock *wb) {
   if (wb->redraw)
@@ -94,19 +123,7 @@ wbm_exists_redraw (WBlockMain * wbm) {
 }
 
 
-static void
-wbm_erase_redraw_1 (WBlock *wb) {
-  wb->redraw = FALSE;
-  for (GList *l=wb->widgets;l;l=l->next) {
-    wbm_erase_redraw_1 (WBLOCK_DATA (l));
-  }
-}
 
-static void
-wbm_erase_redraw (WBlockMain * wbm) {
-  WBlock *wb = wbm->wb;
-  return wbm_erase_redraw_1 (wb);
-}
 
 
 static void
@@ -140,16 +157,7 @@ wbm_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
 
   redraw = saved_offset!=wbm->offset;
   if (redraw) {
-    label_redraw:;
-    int saved_lines = wbm->wb->lines;
-    WBM_UPDATE_COORDS (wbm);
-    if (saved_lines>wbm->wb->lines) {
-      /*redraw all dialogs*/
-      dialog_change_screen_size ();
-    }
-    WBM_REDRAW (wbm);
-    wbm_erase_redraw (wbm);
-    tty_gotoyx (LINES,COLS);
+    label_redraw: wbm_redraw_full (wbm);
   }
 }
 
@@ -160,6 +168,10 @@ wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
   cb_ret_t handled = MSG_NOT_HANDLED;
   WBlockMain *wbm = WBMAIN(w);
   int saved_offset = wbm->offset;
+
+  (void) sender;
+  (void) data;
+
   switch (msg) {
     case MSG_RESIZE:
     case MSG_INIT:
@@ -181,6 +193,7 @@ wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
       if (wbm->selected_widget &&
           wbm->selected_widget->key &&
           WBLOCK_KEY (wbm->selected_widget, parm))
+      {
         if (wbm->selected_widget->redraw) {
           wbm->selected_widget->redraw = FALSE;
           goto label_redraw;
@@ -188,6 +201,7 @@ wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
         else {
           return MSG_HANDLED;
         }
+      }
       break;
     default:
       break;
@@ -219,16 +233,7 @@ wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
       wbm_normalize_offset (wbm);
       redraw = saved_offset!=wbm->offset;
       if (redraw) {
-        label_redraw:;
-        int saved_lines = wbm->wb->lines;
-        WBM_UPDATE_COORDS (wbm);
-        if (saved_lines>wbm->wb->lines) {
-          /*redraw all dialogs*/
-          dialog_change_screen_size ();
-        }
-        WBM_REDRAW (wbm);
-        wbm_erase_redraw (wbm);
-        tty_gotoyx (LINES,COLS);
+        label_redraw: wbm_redraw_full (wbm);
       }
       break;
     default:
@@ -242,6 +247,7 @@ static WBlockMain *
 wbm_new (WBlock *wb, pos_callback_t calcpos) {
   WBlockMain *wbm = g_new0 (WBlockMain, 1);
   Widget *w;
+
   wbm->wb = wb;
   wbm->calcpos = calcpos;
   w = WIDGET(wbm);
@@ -252,7 +258,7 @@ wbm_new (WBlock *wb, pos_callback_t calcpos) {
 
 static void
 wbm_cleanup (WBlockMain * wbm) {
-
+  (void) wbm;
 }
 
 WBlock *
@@ -270,6 +276,14 @@ wblock_get_widget_yx (WBlock *wb, int y, int x) {
   return wb;
 }
 
+void
+wblock_shift_yx (WBlock *wb, int shift_y, int shift_x) {
+  wb->y += shift_y;
+  wb->x += shift_x;
+  for (GList *l=wb->widgets;l;l=l->next) {
+    wblock_shift_yx (WBLOCK_DATA (l), shift_y, shift_x);
+  }
+}
 
 void
 wblock_dfl_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw) {
@@ -278,26 +292,28 @@ wblock_dfl_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, 
   int y_widget=y0, x_widget=x0;
 
   for (GList *l=wb->widgets;l;l=l->next) {
-    //int draw_x, draw_y, draw_lines, draw_cols;
     WBlock *c = WBLOCK (l->data);
 
-    if (c->style.layout==LAYOUT_BLOCK) {
-      y_widget = y_line_max;
-      x_widget = x0;
-    }
-
-    x_widget+=c->style.margin.left;
-    y_widget+=c->style.margin.top;
-
     if (!do_draw) {
+      if (c->style.layout==LAYOUT_BLOCK) {
+        y_widget = y_line_max;
+        x_widget = x0;
+      }
+
+      x_widget+=c->style.margin.left;
+      y_widget+=c->style.margin.top;
+
       c->y = y_widget;
       c->x = x_widget;
       c->lines=-1;
       c->cols=-1;
     }
-    if (do_draw)
+    else {
       tty_setcolor (WBLOCK_COLOR_NORMAL);
-    WBLOCK_DRAW (c, y_widget, x_widget, y, x, lines, cols, do_draw);
+    }
+
+    WBLOCK_DRAW (c, c->y, c->x, y, x, lines, cols, do_draw);
+
     if (!do_draw) {
       message_assert (c->lines>=0);
       message_assert (c->cols>=0);
@@ -308,16 +324,33 @@ wblock_dfl_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, 
         default:
           break;
       }
-    }
-    y_line_max = MAX(y_line_max, y_widget+c->lines+c->style.margin.bottom);
-    x_line_max = MAX(x_line_max, x_widget+c->cols+c->style.margin.right);
+      /*do align*/
+      {
+        int xc1,xc2,shift;
+        switch (c->style.align) {
+          case ALIGN_CENTER:
+            xc1 = (x_widget + x+cols-1)/2; /*center of available space*/
+            xc2 = x_widget + c->cols/2; /*center of widget*/
+            shift = xc1 - xc2;
+            wblock_shift_yx (c, 0, shift);
+            break;
+          case ALIGN_RIGHT:
+            break;
+          default:
+            break;
+        }
+      }
 
-    if (c->style.layout==LAYOUT_BLOCK) {
-      y_widget = y_line_max;
-      x_widget = x0;
-    }
-    else if (c->style.layout==LAYOUT_INLINE) {
-      x_widget+=c->cols+c->style.margin.right;
+      y_line_max = MAX(y_line_max, y_widget+c->lines+c->style.margin.bottom);
+      x_line_max = MAX(x_line_max, x_widget+c->cols+c->style.margin.right);
+
+      if (c->style.layout==LAYOUT_BLOCK) {
+        y_widget = y_line_max;
+        x_widget = x0;
+      }
+      else if (c->style.layout==LAYOUT_INLINE) {
+        x_widget+=c->cols+c->style.margin.right;
+      }
     }
   }
 
@@ -420,6 +453,60 @@ wblock_dlg_default_callback (Widget * w, Widget * sender, widget_msg_t msg, int 
 }
 
 
+WBlockMain *
+wblock_get_wbm (WBlock *wb) {
+  WBlock *p = wb->parent, *q=wb;
+  while (p) {
+    q=p;
+    p=p->parent;
+  }
+  return q->wbm;
+}
+
+WDialog *
+wblock_get_dialog (WBlock *wb) {
+  return WIDGET (wblock_get_wbm (wb))->owner;
+}
+
+
+WBlock *
+set_layout (WBlock *wb, layout_t layout) {
+  wb->style.layout = layout;
+  return wb;
+}
+
+WBlock *
+layout_inline (WBlock *wb) {
+  return set_layout (wb,LAYOUT_INLINE);
+}
+
+WBlock *
+wblock_empty (void) {
+  return wblock_new(NULL,NULL,NULL,NULL,NULL);
+}
+
+WBlock *
+set_margin (WBlock *wb, int left, int top, int right, int bottom) {
+  wb->style.margin.left     =left;
+  wb->style.margin.top      =top;
+  wb->style.margin.right    =right;
+  wb->style.margin.bottom   =bottom;
+  return wb;
+}
+
+WBlock *
+wblock_newline (void) {
+  return set_margin (wblock_empty (), 0, 1, 0, 0);
+}
+
+WBlock *
+wblock_nspace (int n) {
+  return set_margin (
+          layout_inline (
+            wblock_empty ()), n, 0, 0, 0);
+}
+
+
 int
 wblock_run (WBlock * wb, pos_callback_t calcpos) {
   WDialog *dlg;
@@ -428,6 +515,7 @@ wblock_run (WBlock * wb, pos_callback_t calcpos) {
   dlg = dlg_create (TRUE, 0, 0, 0, 0, WPOS_KEEP_DEFAULT, FALSE, NULL, wblock_dlg_default_callback,
                     NULL, "[wblock]", NULL);
 
+  wb->wbm = wbm;
   add_widget (dlg, wbm);
   return_val = dlg_run (dlg);
 

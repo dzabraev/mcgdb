@@ -80,6 +80,8 @@ wblock_frame_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols
     do_draw);
 
   if (!do_draw) {
+    wb->x-=1;
+    wb->y-=1;
     wb->cols = MAX (MAX (wb->cols,3), label ? strlen(label):0);
     wb->cols+=2;
     wb->lines = MAX (wb->lines, 0);

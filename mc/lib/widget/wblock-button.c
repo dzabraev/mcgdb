@@ -8,7 +8,8 @@
 void
 wblock_button_destroy (WBlock *wb) {
   WBlockButtonData *data = WBLOCK_BUTTON_DATA (wb->wdata);
-  g_free (data->data);
+  if (data->destroy)
+    data->destroy (data->data);
   wblock_dfl_destroy (wb);
 }
 
@@ -28,8 +29,30 @@ wblock_button_mouse (WBlock *wb, mouse_msg_t msg, mouse_event_t * event) {
 
 gboolean
 wblock_button_key (WBlock *wb, int parm) {
+  (void) wb;
+  (void) parm;
   return FALSE;
 }
+
+void
+wblock_button_code (WBlock *wb, int code) {
+  WDialog *h = wblock_get_dialog (wb);
+  h->ret_value = code;
+  dlg_stop (h);
+}
+
+void
+wblock_button_ok (WBlock *wb, gpointer data) {
+  (void) data;
+  wblock_button_code (wb, B_ENTER);
+}
+
+void
+wblock_button_cancel (WBlock *wb, gpointer data) {
+  (void) data;
+  wblock_button_code (wb, B_CANCEL);
+}
+
 
 
 void
@@ -49,16 +72,16 @@ wblock_button_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int col
 
 
 WBlock *
-wblock_button_new (char *label, wblock_push_t push, gpointer user_data) {
+wblock_button_new (char *label, wblock_push_t push, gpointer user_data, GDestroyNotify destroy) {
   WBlockButtonData *data = g_new0 (WBlockButtonData, 1);
   data->label = label;
   data->push = push;
   data->data = user_data;
+  data->destroy = destroy;
   return wblock_new (
     wblock_button_mouse,
     wblock_button_key,
     wblock_button_destroy,
     wblock_button_draw,
     data);
-
 }

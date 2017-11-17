@@ -49,19 +49,44 @@ static void
 bpw_delete_all (WBlock *wb, gpointer data) {
   GList *pairs = (GList *)data;
   for (GList *l=pairs;l;l=l->next) {
-    ((bp_pair_t)(l->data))->wait_status = BP_WAIT_DELETE;
+    ((bp_pair_t *)(l->data))->temp->wait_status = BP_WAIT_DELETE;
   }
-  h->ret_value = ;
-  dlg_stop (h);
+  wblock_button_ok (wb, data);
 }
 
 static void
 bpw_add_epilogue (BPWidget *bpw) {
-  wblock_add_widget (bwp->wb, wblock_button_new (
-    strdup ("[DEL ALL]"),
+  WBlock *top = wblock_empty ();
+  WBlock *tmp;
+
+  wblock_add_widget (top, layout_inline (wblock_button_new (
+    strdup ("[DeleteAll]"),
     bpw_delete_all,
-    bpw->bps
-  ));
+    bpw->bps,
+    NULL
+  )));
+
+  wblock_add_widget (top, wblock_nspace (1));
+
+  wblock_add_widget (top, layout_inline (wblock_button_new (
+    strdup ("[Save]"),
+    wblock_button_ok,
+    NULL,
+    NULL
+  )));
+
+  wblock_add_widget (top, wblock_nspace (1));
+
+  wblock_add_widget (top, layout_inline (wblock_button_new (
+    strdup ("[Cancel]"),
+    wblock_button_cancel,
+    NULL,
+    NULL
+  )));
+
+  wblock_add_widget (top, wblock_newline ());
+  top->style.align = ALIGN_CENTER;
+  wblock_add_widget (&bpw->wb, top);
 }
 
 static void
@@ -171,7 +196,8 @@ bpw_add_bp (BPWidget *bpw, mcgdb_bp *bp) {
     delbtn = wblock_button_new (
           strdup ("[DEL]"),
           bpw_button_delete_cb,
-          (gpointer) data);
+          (gpointer) data,
+          NULL);
     delbtn->style.margin.left=-6;
     delbtn->style.layout=LAYOUT_INLINE;
     wblock_add_widget (top_widget, delbtn);
