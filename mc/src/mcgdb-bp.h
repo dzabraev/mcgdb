@@ -5,6 +5,7 @@ extern int mcgdb_bp_color_wait_remove;
 extern int mcgdb_bp_color_wait_update;
 extern int mcgdb_bp_color_normal;
 extern int mcgdb_bp_color_disabled;
+extern int mcgdb_bp_frame_color_wait_delete;
 
 extern GList * mcgdb_bps;
 

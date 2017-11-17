@@ -18,7 +18,7 @@ int mcgdb_bp_color_wait_remove;
 int mcgdb_bp_color_wait_update;
 int mcgdb_bp_color_normal;
 int mcgdb_bp_color_disabled;
-
+int mcgdb_bp_frame_color_wait_delete;
 
 static void mcgdb_bp_add_location (mcgdb_bp *bp, const char *filename, int line);
 static void mcgdb_bp_clear_locations (mcgdb_bp *bp);
@@ -70,12 +70,6 @@ bp_loc_copy (const bp_loc_t * loc) {
   newloc->line = loc->line;
   return newloc;
 }
-
-static gpointer
-gcopyfunc_bp_loc_copy (gconstpointer src, gpointer data) {
-  return bp_loc_copy (src);
-}
-
 
 static void
 bp_loc_free (bp_loc_t *loc) {
@@ -210,22 +204,6 @@ void
 send_pkg_update_bp (const mcgdb_bp * bp) {
   return send_pkg(pkg_update_bp(bp));
 }
-
-
-static gboolean
-bp_has_nondefault_vals(mcgdb_bp *bp) {
-  return !(
-  bp->enabled==TRUE      &&
-  bp->silent==FALSE      &&
-  bp->ignore_count==0    &&
-  bp->temporary==FALSE   &&
-  bp->thread==-1         &&
-  bp->condition==NULL    &&
-  bp->commands==NULL);
-
-}
-
-
 
 gboolean
 mcgdb_bp_has_loc (const mcgdb_bp *bp, const_bp_loc_t *loc) {

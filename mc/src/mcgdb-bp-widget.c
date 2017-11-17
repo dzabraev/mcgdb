@@ -19,8 +19,7 @@ typedef struct BPWidget {
 static void calcpos (int *y, int *x, int *lines, int *cols);
 static BPWidget * bpw_new (void);
 static void bpw_free (BPWidget *bpw);
-static void bpw_add_epilogue (BPWidget *bpw);
-static void bpw_add_bp (BPWidget *bpw, mcgdb_bp *bp);
+static bp_pair_t * bpw_add_bp (BPWidget *bpw, mcgdb_bp *bp);
 static void bpw_apply_changes (BPWidget *bpw);
 
 static void
@@ -54,10 +53,9 @@ bpw_delete_all (WBlock *wb, gpointer data) {
   wblock_button_ok (wb, data);
 }
 
-static void
-bpw_add_epilogue (BPWidget *bpw) {
+static WBlock *
+buttons_widget (BPWidget *bpw) {
   WBlock *top = wblock_empty ();
-  WBlock *tmp;
 
   wblock_add_widget (top, layout_inline (wblock_button_new (
     strdup ("[DeleteAll]"),
@@ -84,14 +82,20 @@ bpw_add_epilogue (BPWidget *bpw) {
     NULL
   )));
 
-  wblock_add_widget (top, wblock_newline ());
   top->style.align = ALIGN_CENTER;
-  wblock_add_widget (&bpw->wb, top);
+  return top;
 }
 
-static void
-bpw_add_prologue (BPWidget *bpw) {
+static WBlock *
+bpw_epilog (BPWidget *bpw) {
+  WBlock *buttons = buttons_widget (bpw);
+  return buttons;
+}
 
+static WBlock *
+bpw_prolog (BPWidget *bpw) {
+  WBlock *buttons = buttons_widget (bpw);
+  return buttons;
 }
 
 
@@ -148,10 +152,10 @@ bpw_button_delete_cb (WBlock *wb, gpointer gdata) {
     frame_data = WBLOCK_FRAME_DATA (frame_parent->wdata);
     switch (temp->wait_status) {
       case BP_WAIT_DELETE:
-        new_frame_color = COLOR_BP_WAIT_DELETE;
+        new_frame_color = COLOR_BP_FRAME_WAIT_DELETE;
         break;
       case BP_WAIT_UPDATE:
-        new_frame_color = COLOR_BP_WAIT_UPDATE;
+        new_frame_color = WBLOCK_FRAME_COLOR_NORMAL;
         break;
       default:
         new_frame_color = WBLOCK_FRAME_COLOR_NORMAL;
@@ -171,19 +175,24 @@ bpw_button_delete_cb (WBlock *wb, gpointer gdata) {
   }
 }
 
-static void
+static bp_pair_t *
 bpw_add_bp (BPWidget *bpw, mcgdb_bp *bp) {
-  int location_idx=1;
-  WBlock *widget_bp, *top_widget;
-  WBlock *widget_locs = wblock_new (NULL,NULL,NULL,NULL,NULL);
   bp_pair_t *bp_pair = g_new0 (bp_pair_t, 1);
   mcgdb_bp *bp_tmp = mcgdb_bp_copy (bp);
   bp_pair->orig = bp;
   bp_pair->temp = bp_tmp;
-
   bpw->bps = g_list_append (bpw->bps, bp_pair);
+  return bp_pair;
+}
+
+static WBlock *
+bp_widget (BPWidget *bpw, bp_pair_t *bp_pair) {
+  int location_idx=1;
+  mcgdb_bp *bp_tmp = bp_pair->temp;
+  WBlock *widget_bp, *top_widget;
+  WBlock *widget_locs = wblock_new (NULL,NULL,NULL,NULL,NULL);
   top_widget = wblock_new (NULL,NULL,NULL,NULL,NULL);
-  widget_bp = wblock_frame_new (g_strdup_printf ("Breakpoint %d",bp->number));
+  widget_bp = wblock_frame_new (g_strdup_printf ("Breakpoint %d",bp_tmp->number));
   widget_bp->style.layout=LAYOUT_INLINE;
   wblock_add_widget (top_widget, widget_bp);
 
@@ -207,7 +216,7 @@ bpw_add_bp (BPWidget *bpw, mcgdb_bp *bp) {
   wblock_add_widget (widget_bp,wblock_label_new (strdup("Locations:"),TRUE));
   widget_locs->style.margin.left=2;
 
-  for (GList *l=bp->locations;l;l=l->next, location_idx++) {
+  for (GList *l=bp_tmp->locations;l;l=l->next, location_idx++) {
     char *short_fname = last_slash (1, BP_LOC (l)->filename); /*keep one or 0 slashes*/
     wblock_add_widget (
       widget_locs,
@@ -236,7 +245,7 @@ bpw_add_bp (BPWidget *bpw, mcgdb_bp *bp) {
       &bp_tmp->silent
   ));
 
-  wblock_add_widget (WBLOCK (bpw), top_widget);
+  return top_widget;
 }
 
 
@@ -294,19 +303,25 @@ bpw_apply_changes (BPWidget *bpw) {
 gboolean
 breakpoints_edit_dialog (const char *filename, long line) {
   BPWidget *bpw = bpw_new ();
+  WBlock    *widget_bps = wblock_empty ();
   gboolean redraw;
   int return_val;
-
-  bpw_add_prologue (bpw);
 
   for ( GList *l=mcgdb_bp_find_bp_with_location (mcgdb_bps, filename, line);
         l!=0;
         l = mcgdb_bp_find_bp_with_location (l->next, filename, line))
   {
-    bpw_add_bp (bpw, MCGDB_BP (l));
+    mcgdb_bp *bp = MCGDB_BP (l);
+    bp_pair_t *bp_pair = bpw_add_bp (bpw, bp);
+    wblock_add_widget (widget_bps, bp_widget (bpw, bp_pair));
   }
 
-  bpw_add_epilogue (bpw); /*save/cancel buttons, widgets for creation*/
+  wblock_add_widget (WBLOCK (bpw), wblock_newline ());
+  wblock_add_widget (WBLOCK (bpw), bpw_prolog (bpw));
+  wblock_add_widget (WBLOCK (bpw), wblock_newline ());
+  wblock_add_widget (WBLOCK (bpw), widget_bps);
+  wblock_add_widget (WBLOCK (bpw), bpw_epilog (bpw));
+  wblock_add_widget (WBLOCK (bpw), wblock_newline ());
 
   disable_gdb_events = TRUE;
   return_val = wblock_run (WBLOCK (bpw), calcpos);

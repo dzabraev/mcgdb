@@ -641,6 +641,8 @@ mcgdb_module_init(void) {
   mcgdb_bp_color_disabled    = tty_try_alloc_color_pair2 ("red", "wite",    NULL, FALSE);
   mcgdb_bp_color_wait_update = tty_try_alloc_color_pair2 ("red", "yellow",  NULL, FALSE);
   mcgdb_bp_color_wait_remove = tty_try_alloc_color_pair2 ("red", "magenta", NULL, FALSE);
+  mcgdb_bp_frame_color_wait_delete = 
+                               tty_try_alloc_color_pair2 ("yellow", "cyan", NULL, FALSE);
   option_line_state=1;
 }
 
@@ -655,6 +657,7 @@ mcgdb_cmd_breakpoint (WEdit * edit) {
 
 void
 mcgdb_cmd_disableenable_bp (WEdit * edit) {
+  (void) edit;
 }
 
 
