@@ -375,11 +375,6 @@ pkg_unmark_all (WEdit * edit) {
 
 
 static void
-pkg_color (json_t *pkg, WEdit * edit) {
-  mcgdb_set_color(pkg,edit);
-}
-
-static void
 pkg_set_curline (json_t *pkg, WEdit * edit) {
   long line = (long)json_integer_value(json_object_get(pkg, "line"));
   book_mark_clear (edit, mcgdb_curline, mcgdb_current_line_color);
@@ -415,9 +410,6 @@ process_action_from_gdb_edit(WEdit * edit, struct gdb_action * act) {
       break;
     case MCGDB_GOTO:
       pkg_goto (pkg,edit);
-      break;
-    case MCGDB_COLOR:
-      pkg_color (pkg,edit);
       break;
     case MCGDB_SET_CURLINE:
       pkg_set_curline(pkg,edit);
@@ -641,44 +633,6 @@ mcgdb_permissible_key(WEdit * e, int c) {
 
 }
 
-static void
-extract_color( json_t *color, const char **text_color,
-    const char **bg_color, const char **attrs) {
-  json_t *j_attrs;
-  *text_color = json_string_value (json_object_get (color, "text_color"));
-  *bg_color = json_string_value (json_object_get (color, "background_color"));
-  j_attrs = json_object_get (color, "attrs");
-  *attrs = j_attrs ? json_string_value (j_attrs) : NULL;
-}
-
-#define SET_COLOR_BP(pkg,type) do {\
-  json_t * color_bp = json_object_get (pkg, "color_bp_" #type); \
-  if (color_bp) { \
-    const char *text_color, *bg_color, *attrs; \
-    extract_color(color_bp, &text_color, &bg_color, &attrs); \
-    mcgdb_bp_color_ ## type  = tty_try_alloc_color_pair2 (text_color, bg_color, attrs, FALSE); \
-  } \
-} while(0)\
-
-void
-mcgdb_set_color (json_t * pkg, WEdit * edit) {
-  json_t *color_curline;
-  color_curline = json_object_get (pkg, "color_curline");
-  if (color_curline) {
-    const char *text_color, *bg_color, *attrs;
-    extract_color(color_curline, &text_color, &bg_color, &attrs);
-    if (edit && mcgdb_curline>=0)
-      book_mark_clear (edit, mcgdb_curline, mcgdb_current_line_color);
-    mcgdb_current_line_color = tty_try_alloc_color_pair2 (text_color, bg_color, attrs, FALSE);
-    if (edit && mcgdb_curline>=0)
-      book_mark_insert (edit, mcgdb_curline, mcgdb_current_line_color);
-  }
-  SET_COLOR_BP(pkg,normal);
-  SET_COLOR_BP(pkg,disabled);
-  SET_COLOR_BP(pkg,wait_remove);
-  SET_COLOR_BP(pkg,wait_insert);
-  edit->force |= REDRAW_COMPLETELY;
-}
 
 static void
 mcgdb_module_init(void) {
@@ -686,7 +640,7 @@ mcgdb_module_init(void) {
   mcgdb_current_line_color   = tty_try_alloc_color_pair2 ("red", "black",   "bold", FALSE);
   mcgdb_bp_color_normal      = tty_try_alloc_color_pair2 ("red", "black",   NULL, FALSE);
   mcgdb_bp_color_disabled    = tty_try_alloc_color_pair2 ("red", "wite",    NULL, FALSE);
-  mcgdb_bp_color_wait_insert = tty_try_alloc_color_pair2 ("red", "yellow",  NULL, FALSE);
+  mcgdb_bp_color_wait_update = tty_try_alloc_color_pair2 ("red", "yellow",  NULL, FALSE);
   mcgdb_bp_color_wait_remove = tty_try_alloc_color_pair2 ("red", "magenta", NULL, FALSE);
   option_line_state=1;
 }

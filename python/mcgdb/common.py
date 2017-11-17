@@ -945,29 +945,6 @@ class McgdbMain(object):
     if 'manually' in kwargs:
       pkg['manually']=kwargs['manually']
     pkgsend(self.gdb_wfd,pkg)
-  def __send_color(self,name,text_color,background_color,attrs):
-    pkg={
-      'cmd':'color',
-      name : {
-        'background_color':background_color,
-        'text_color': text_color,
-      },
-    }
-    if attrs!=None:
-      pkg[name]['attrs']=attrs
-    pkgsend(self.gdb_wfd,pkg)
-  def set_color_curline(self,text_color,background_color,attr):
-    self.__send_color ('color_curline',text_color,background_color,attr)
-  def set_color_bp_normal(self,text_color,background_color,attr):
-    self.__send_color ('color_bp_normal',text_color,background_color,attr)
-  def set_color_bp_disabled(self,text_color,background_color,attr):
-    self.__send_color ('color_bp_disabled',text_color,background_color,attr)
-  def set_color_bp_wait_remove(self,text_color,background_color,attr):
-    self.__send_color ('color_bp_wait_remove',text_color,background_color,attr)
-  def set_color_bp_wait_insert(self,text_color,background_color,attr):
-    self.__send_color ('color_bp_wait_insert',text_color,background_color,attr)
-
-
 
 class FrameFuncAddr(object):
   @exec_main

@@ -52,7 +52,6 @@ typedef enum gdb_cmd {
   MCGDB_SETTHREAD,
   MCGDB_BPSUPD,
   MCGDB_BPSDEL,
-  MCGDB_COLOR,
   MCGDB_SET_CURLINE,
   MCGDB_EXIT,
   MCGDB_INSERT_STR,
@@ -138,10 +137,6 @@ extern int      gdb_input_fd;
 void mcgdb_checkset_read_gdb_events(WDialog * h);
 
 int mcgdb_permissible_key(WEdit * e, int c);
-
-
-void
-mcgdb_set_color (struct json_t * pkg, WEdit * edit);
 
 gboolean mcgdb_available_key(int c);
 
