@@ -526,3 +526,41 @@ wblock_run (WBlock * wb, pos_callback_t calcpos) {
   return return_val;
 }
 
+
+int
+get_utf (const gchar * str, int *char_length)
+{
+    gchar *str = NULL;
+    gunichar res;
+    gunichar ch;
+    gchar *next_ch = NULL;
+
+    res = g_utf8_get_char_validated (str, -1);
+    if (res == (gunichar) (-2) || res == (gunichar) (-1))
+    {
+        /* Retry with explicit bytes to make sure it's not a buffer boundary */
+        size_t i;
+        gchar utf8_buf[UTF8_CHAR_LEN + 1];
+
+        for (i = 0; i < UTF8_CHAR_LEN; i++)
+            utf8_buf[i] = str [i];
+        utf8_buf[i] = '\0';
+        res = g_utf8_get_char_validated (utf8_buf, -1);
+    }
+
+    if (res == (gunichar) (-2) || res == (gunichar) (-1))
+    {
+        ch = *str;
+        *char_length = 0;
+    }
+    else
+    {
+        ch = res;
+        /* Calculate UTF-8 char length */
+        next_ch = g_utf8_next_char (str);
+        *char_length = next_ch - str;
+    }
+
+    return (int) ch;
+}
+

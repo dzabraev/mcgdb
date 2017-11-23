@@ -2,7 +2,6 @@
 #define __block_frame_h__
 
 #include "lib/global.h"
-#include "lib/skin.h" /*EDITOR_NORMAL_COLOR*/
 
 
 #define WBLOCK_FRAME_COLOR_NORMAL WBLOCK_COLOR_NORMAL

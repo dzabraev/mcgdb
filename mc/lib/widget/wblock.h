@@ -173,6 +173,8 @@ WBlock * wblock_nspace (int n);
 
 void wblock_shift_yx (WBlock *wb, int shift_y, int shift_x);
 
+int get_utf (const gchar * str, int *char_length);
+
 #include "wblock-checkbox.h"
 #include "wblock-frame.h"
 #include "wblock-label.h"

@@ -29,7 +29,8 @@ libmcwidget_la_SOURCES = \
 	wblock-checkbox.h wblock-checkbox.c \
 	wblock-label.h wblock-label.c \
 	wblock-button.h wblock-button.c \
-	wblock-frame.h wblock-frame.c
+	wblock-frame.h wblock-frame.c \
+	wblock-input.h wblock-input.c
 
 
 AM_CPPFLAGS = -I$(top_srcdir) $(GLIB_CFLAGS)

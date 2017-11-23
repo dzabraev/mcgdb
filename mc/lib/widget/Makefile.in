@@ -160,7 +160,7 @@ am_libmcwidget_la_OBJECTS = button.lo buttonbar.lo check.lo dialog.lo \
 	label.lo menu.lo mouse.lo quick.lo radio.lo widget-common.lo \
 	wtools.lo mcgdb_aux_widget.lo mcgdb_asm_widget.lo wtable.lo \
 	wblock.lo wblock-checkbox.lo wblock-label.lo wblock-button.lo \
-	wblock-frame.lo
+	wblock-frame.lo wblock-input.lo
 libmcwidget_la_OBJECTS = $(am_libmcwidget_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -490,7 +490,8 @@ libmcwidget_la_SOURCES = \
 	wblock-checkbox.h wblock-checkbox.c \
 	wblock-label.h wblock-label.c \
 	wblock-button.h wblock-button.c \
-	wblock-frame.h wblock-frame.c
+	wblock-frame.h wblock-frame.c \
+	wblock-input.h wblock-input.c
 
 AM_CPPFLAGS = -I$(top_srcdir) $(GLIB_CFLAGS)
 all: all-am
@@ -570,6 +571,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/wblock-button.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/wblock-checkbox.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/wblock-frame.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/wblock-input.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/wblock-label.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/wblock.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/widget-common.Plo@am__quote@
