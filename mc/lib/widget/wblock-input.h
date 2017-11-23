@@ -10,8 +10,7 @@
 #define WBLOCK_INPUT_DATA(p) ((WBlockInputData *)(p))
 
 typedef struct WBlockInputData {
-  char **buf;
-  int *size;
+  GArray *buf;
   int pos; /*cursor position in buf*/
   int offset_y;
   int offset_x;
@@ -19,6 +18,6 @@ typedef struct WBlockInputData {
   int cursor_x;
 } WBlockInputData;
 
-WBlock * wblock_input_new (char **buf, int *size);
+WBlock * wblock_input_new (char **buf);
 
 #endif

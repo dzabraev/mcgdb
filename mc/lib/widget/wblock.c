@@ -530,7 +530,6 @@ wblock_run (WBlock * wb, pos_callback_t calcpos) {
 int
 get_utf (const gchar * str, int *char_length)
 {
-    gchar *str = NULL;
     gunichar res;
     gunichar ch;
     gchar *next_ch = NULL;
