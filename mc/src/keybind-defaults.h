@@ -34,6 +34,7 @@ extern GArray *mcgdb_asm_keymap;
 extern GArray *mcgdb_aux_keymap;
 extern GArray *mcgdb_bpw_keymap;
 
+extern GArray *wblock_input_keymap;
 
 extern const global_keymap_t *main_map;
 extern const global_keymap_t *main_x_map;
@@ -55,6 +56,7 @@ extern const global_keymap_t *mcgdb_asm_map;
 extern const global_keymap_t *mcgdb_aux_map;
 extern const global_keymap_t *mcgdb_bpw_map;
 
+extern const global_keymap_t *wblock_input_map;
 
 /*** declarations of public functions ************************************************************/
 

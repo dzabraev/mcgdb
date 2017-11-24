@@ -1368,6 +1368,9 @@ load_keymap_defs (gboolean load_from_file)
         mcgdb_bpw_keymap = g_array_new (TRUE, FALSE, sizeof (global_keymap_t));
         load_keymap_from_section (KEYMAP_SECTION_MCGDB_BPW, mcgdb_bpw_keymap, mc_global_keymap);
 
+        wblock_input_keymap = g_array_new (TRUE, FALSE, sizeof (global_keymap_t));
+        load_keymap_from_section (KEYMAP_SECTION_WBLOCK_INPUT, wblock_input_keymap, mc_global_keymap);
+
         mc_config_deinit (mc_global_keymap);
     }
 
@@ -1391,6 +1394,7 @@ load_keymap_defs (gboolean load_from_file)
     mcgdb_aux_map = (global_keymap_t *) mcgdb_aux_keymap->data;
     mcgdb_asm_map = (global_keymap_t *) mcgdb_asm_keymap->data;
     mcgdb_bpw_map = (global_keymap_t *) mcgdb_bpw_keymap->data;
+    wblock_input_map = (global_keymap_t *) wblock_input_keymap->data;
 }
 
 /* --------------------------------------------------------------------------------------------- */
@@ -1434,7 +1438,8 @@ free_keymap_defs (void)
         g_array_free (mcgdb_asm_keymap, TRUE);
     if (mcgdb_bpw_keymap != NULL)
         g_array_free (mcgdb_bpw_keymap, TRUE);
-
+    if (wblock_input_keymap)
+        g_array_free (wblock_input_keymap, TRUE);
 
 }
 

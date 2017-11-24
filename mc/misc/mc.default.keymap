@@ -503,3 +503,16 @@ Down = down
 PageDown = pgdn
 PageUp = pgup
 
+[wblock_input]
+PageDown = pgdn
+PageUp = pgup
+Up = up
+Down = down
+Home = home
+End = end
+Backspace = backspace; ctrl-h
+Left = left
+Right = right
+Enter = enter
+Cancel = f10; esc; ctrl-g
+

@@ -11,27 +11,28 @@
 
 static void
 buf_insert_lines (GArray *buf, char *lines, int y) {
-  char *line = lines;
+  char *p = lines;
   if (y==-1)
     y=buf->len;
-  while (line) {
-    int len;
-    GArray *new_line = g_array_new (FALSE, FALSE, sizeof (int));
-    char *next_line = strchr (line, '\n');
-    len = next_line ? (int)(next_line - line) : (int)strlen (line);
-    g_array_append_vals (new_line, line, len);
-    if (y>=(int)buf->len)
-      g_array_append_val (buf, new_line);
-    else
-      g_array_insert_val (buf, y, new_line);
-    y++;
-
-    line = next_line;
-    if (line)
-      line++; //skip \n
-    else
-      break;
+  GArray *row = g_array_new (FALSE, FALSE, sizeof (int));
+  while (p && p[0]) {
+    if (*p=='\n') {
+      if (y>=(int)buf->len)
+        g_array_append_val (buf, row);
+      else
+        g_array_insert_val (buf, y, row);
+      y++;
+      p++;
+    }
+    else {
+      int ch = p[0];
+      g_array_append_val (row, ch);
+    }
   }
+  if (y>=(int)buf->len)
+    g_array_append_val (buf, row);
+  else
+    g_array_insert_val (buf, y, row);
 }
 
 static void
@@ -107,6 +108,8 @@ wblock_input_mouse (WBlock *wb, mouse_msg_t msg, mouse_event_t * event) {
     len = (int)wblock_input_current_line (wb)->len;
     wb->cursor_x = data->offset_x+event->x < len ?
                       event->x : len-data->offset_x;
+
+    wb->redraw = TRUE;
     return TRUE;
   }
   else {
@@ -115,11 +118,18 @@ wblock_input_mouse (WBlock *wb, mouse_msg_t msg, mouse_event_t * event) {
 }
 
 static void
+wblock_input_view_toleft (WBlock *wb) {
+  WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
+  data->offset_x=0;
+  wb->cursor_x=0;
+}
+
+static void
 wblock_input_view_toright (WBlock *wb) {
   WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
   int len = wblock_input_current_line (wb)->len;
-  data->offset_x = len - wb->cols;
-  wb->cursor_x = wb->cols-1;
+  data->offset_x = MAX (0, len - wb->cols);
+  wb->cursor_x = len - data->offset_x;
 }
 
 static void
@@ -135,15 +145,16 @@ wblock_input_decr_cursor_x (WBlock *wb) {
       wb->redraw=TRUE;
     }
     else if (wb->cursor_y>0 || data->offset_y>0) {
+      g_array_remove_index (data->buf,wb->cursor_y+data->offset_y);
+      wb->lines--;
       if (wb->cursor_y>0) {
         wb->cursor_y--;
-        wb->redraw=TRUE;
       }
       else if (data->offset_y>0) {
         data->offset_y--;
-        wb->redraw=TRUE;
       }
       wblock_input_view_toright (wb);
+      wb->redraw=TRUE;
     }
   }
 }
@@ -152,8 +163,11 @@ static void
 wblock_input_incr_cursor_x (WBlock *wb) {
   GArray *cur = wblock_input_current_line (wb);
   WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
-  if (wb->cursor_x<wb->cols-1) {
-    wb->cursor_x++;
+  if (wb->cursor_x+data->offset_x < (int)cur->len) {
+    if (wb->cursor_x < wb->cols)
+      wb->cursor_x++;
+    else
+      data->offset_x++;
     wb->redraw=TRUE;
   }
   else {
@@ -183,26 +197,25 @@ wblock_input_incr_cursor_x (WBlock *wb) {
 static void
 wblock_input_move_cursor_y (WBlock *wb, int offset) {
   WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
-  int pos_x = wb->cursor_x + data->offset_x;
-  int pos_y;
   GArray *row;
-  int add_cursor = offset > 0 ? MIN (offset, wb->lines - wb->cursor_y) : MAX (offset, - wb->cursor_y);
+  int add_cursor = offset > 0 ? MIN (offset, wb->lines - wb->cursor_y - 1) : MAX (offset, - wb->cursor_y);
   int r = offset - add_cursor;
   int add_offset = r > 0 ? MIN (r, (int)data->buf->len - wb->lines - data->offset_y) : MAX (r, -data->offset_y);
+  int len;
 
   data->offset_y+=add_offset;
   wb->cursor_y+=add_cursor;
 
   wb->redraw = wb->redraw || add_cursor!=0 || add_offset!=0;
 
-  pos_y = data->offset_y + wb->cursor_y;
-
   message_assert (data->offset_y>=0 && wb->cursor_y>=0);
-
-  row = buf_get_line (data->buf, pos_y);
-  if ((int)row->len < pos_x) {
-    data->offset_x = MAX (0,(int)row->len - wb->cols);
-    wb->cursor_x = wb->lines - 1;
+  row = wblock_input_current_line (wb);
+  len = (int)row->len;
+  if (data->offset_x > len) {
+    wblock_input_view_toright (wb);
+  }
+  else if (data->offset_x + wb->cursor_x > len) {
+    wb->cursor_x = len - data->offset_x;
   }
 }
 
@@ -223,40 +236,48 @@ wblock_input_backspace (WBlock *wb) {
   }
   else if (pos_y>0) {
     /*change current line*/
-    GArray *curline = wblock_input_current_line (wb);
-    if (wb->cursor_y>0)
-      wb->cursor_y--;
-    else
-      data->offset_y--;
-    g_array_remove_index (curline, curline->len-1);
-    wblock_input_view_toright (wb); /*move view to right*/
+    wblock_input_decr_cursor_x (wb);
+    wb->redraw=TRUE;
   }
 }
 
+static void
+wblock_input_enter (WBlock *wb) {
+  WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
+  int pos_y = data->offset_y + wb->cursor_y;
+  int pos_x = wb->cursor_x + data->offset_x;
+  GArray *row = wblock_input_current_line (wb);
+  char *insert_data = (int)row->len>pos_x ? ((int *)row->data) + pos_x : strdup("");
+  buf_insert_lines (data->buf, insert_data, pos_y+1); /*create new row*/
+  wb->lines = MIN (wb->lines+1, data->h_max);
+  g_array_remove_range (row, pos_x, row->len-pos_x); /*remove copied data*/
+  wb->cursor_x = 0;
+  data->offset_x = 0;
+  wblock_input_move_cursor_y (wb, 1);
+  wb->redraw=TRUE;
+}
+
+static void
+wblock_input_insert_char (WBlock *wb, int parm) {
+  WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
+  g_array_insert_val (
+    wblock_input_current_line (wb),
+    data->offset_x + wb->cursor_x,
+    parm);
+  wblock_input_incr_cursor_x (wb);
+  wb->redraw=TRUE;
+}
 
 static gboolean
 wblock_input_key (WBlock *wb, int parm) {
-  int command = keybind_lookup_keymap_command (editor_map, parm);
-  WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
-  GArray *buf = data->buf;
+  int command = keybind_lookup_keymap_command (wblock_input_map, parm);
 
   if (command == CK_IgnoreKey)
     command = CK_InsertChar;
 
   switch (command) {
     case CK_Enter:
-      {
-        int pos_y = data->offset_y + wb->cursor_y;
-        int pos_x = wb->cursor_x + data->offset_x;
-        GArray *row = wblock_input_current_line (wb);
-        char *insert_data = (int)row->len>pos_x ? ((char *)row->data) + pos_x : strdup("");
-        buf_insert_lines (buf, insert_data, pos_y+1); /*create new row*/
-        g_array_remove_range (row, pos_x, buf->len-pos_x); /*remove copied data*/
-        wb->cursor_x = 0;
-        data->offset_x = 0;
-        wblock_input_move_cursor_y (wb, 1);
-        wb->redraw=TRUE;
-      }
+      wblock_input_enter (wb);
       break;
     case CK_Up:
       wblock_input_move_cursor_y (wb, -1);
@@ -277,24 +298,18 @@ wblock_input_key (WBlock *wb, int parm) {
       wblock_input_incr_cursor_x (wb);
       break;
     case CK_Home:
-      data->offset_x=0;
-      wb->cursor_x=0;
+      wblock_input_view_toleft (wb);
       break;
     case CK_End:
-      data->offset_x=wblock_input_current_line (wb)->len - wb->cols;
-      wb->cursor_x=wb->lines-1;
+      wblock_input_view_toright (wb);
       break;
     case CK_BackSpace:
       wblock_input_backspace (wb);
       break;
     case CK_InsertChar:
-      g_array_insert_val (
-        wblock_input_current_line (wb),
-        data->offset_x + wb->cursor_x,
-        parm);
-      wblock_input_incr_cursor_x (wb);
-      wb->redraw=TRUE;
+      wblock_input_insert_char (wb, parm);
       break;
+    case CK_Cancel:
     default:
       return FALSE;
   }
