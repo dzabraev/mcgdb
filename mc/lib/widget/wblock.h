@@ -3,6 +3,7 @@
 
 #include "lib/global.h"
 #include "lib/widget.h"
+#include "lib/skin.h"
 
 //#include "lib/widget/mouse.h"
 
@@ -88,6 +89,9 @@ typedef struct WBlock {
   wblock_key_cb_t key;
   wblock_destroy_cb_t destroy;
   wblock_draw_cb_t draw;
+
+  int cursor_x;
+  int cursor_y;
 
   gboolean redraw;
 
@@ -179,6 +183,7 @@ int get_utf (const gchar * str, int *char_length);
 #include "wblock-frame.h"
 #include "wblock-label.h"
 #include "wblock-button.h"
+#include "wblock-input.h"
 
 
 #endif //__block_widget_h__

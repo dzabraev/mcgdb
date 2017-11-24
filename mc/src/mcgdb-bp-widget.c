@@ -245,6 +245,13 @@ bp_widget (BPWidget *bpw, bp_pair_t *bp_pair) {
       &bp_tmp->silent
   ));
 
+  wblock_add_widget (
+    widget_bp,
+    wblock_input_new (
+      &bp_tmp->condition, 1, 5
+  ));
+
+
   return top_widget;
 }
 

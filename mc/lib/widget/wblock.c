@@ -10,18 +10,10 @@
 
 #define WBMAIN(w) ((WBlockMain *)(w))
 
-#define WBM_WBLOCK_DRAW(wbm,do_draw) \
-  WBLOCK_DRAW ( \
-    wbm->wb, \
-    WIDGET(wbm)->y-wbm->offset, \
-    WIDGET(wbm)->x, \
-    WIDGET(wbm)->y, \
-    WIDGET(wbm)->x, \
-    WIDGET(wbm)->lines, \
-    WIDGET(wbm)->cols, \
-    do_draw);
 
-#define WBM_UPDATE_COORDS(wbm) WBM_WBLOCK_DRAW(wbm,FALSE)
+
+
+#define WBM_UPDATE_COORDS(wbm) wbm_wblock_draw(wbm,FALSE)
 
 #define WBM_REDRAW(wbm) \
   do { \
@@ -32,7 +24,7 @@
     MIN (wbm->wb->lines,WIDGET(wbm)->lines), \
     MIN (wbm->wb->cols,WIDGET(wbm)->cols), \
     ' '); \
-  WBM_WBLOCK_DRAW(wbm,TRUE); \
+  wbm_wblock_draw (wbm,TRUE); \
 } while (0)
 
 
@@ -44,6 +36,27 @@ typedef struct WBlockMain {
   WBlock *selected_widget;
   gboolean redraw;
 } WBlockMain;
+
+static void
+wbm_wblock_draw (WBlockMain *wbm, gboolean do_draw) {
+  WBLOCK_DRAW (
+    wbm->wb,
+    WIDGET(wbm)->y-wbm->offset,
+    WIDGET(wbm)->x,
+    WIDGET(wbm)->y,
+    WIDGET(wbm)->x,
+    WIDGET(wbm)->lines,
+    WIDGET(wbm)->cols,
+    do_draw);
+  if (wbm->selected_widget && wbm->selected_widget->cursor_y!=-1 && wbm->selected_widget->cursor_x!=-1) {
+    tty_gotoyx (
+      wbm->selected_widget->y + wbm->selected_widget->cursor_y,
+      wbm->selected_widget->x + wbm->selected_widget->cursor_x);
+  }
+  else {
+    tty_gotoyx (LINES,COLS);
+  }
+}
 
 static WBlockMain * wbm_new (WBlock *wb, pos_callback_t calcpos);
 static void wbm_cleanup (WBlockMain * wbm);
@@ -102,7 +115,6 @@ wbm_redraw_full (WBlockMain *wbm) {
     WBM_REDRAW (wbm);
   }
   wbm_erase_redraw (wbm);
-  tty_gotoyx (LINES,COLS);
 }
 
 static gboolean
@@ -196,6 +208,7 @@ wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
       {
         if (wbm->selected_widget->redraw) {
           wbm->selected_widget->redraw = FALSE;
+          handled = MSG_HANDLED;
           goto label_redraw;
         }
         else {
@@ -287,6 +300,9 @@ wblock_shift_yx (WBlock *wb, int shift_y, int shift_x) {
 
 void
 wblock_dfl_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw) {
+  /* From point (y0,x0) widget will be drawing. Rectangle y,x,lines,cols is area in which block will
+      will be drawing. Only points of block which intersect with rectangle will draw.
+  */
   int y_line_max=y0,
       x_line_max=x0;
   int y_widget=y0, x_widget=x0;
@@ -387,6 +403,8 @@ wblock_init (
   wb->key       = key;
   wb->mouse     = mouse;
   wb->wdata     = wdata;
+  wb->cursor_y = -1;
+  wb->cursor_x = -1;
 }
 
 WBlock *
