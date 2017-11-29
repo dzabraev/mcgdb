@@ -44,6 +44,7 @@ typedef gboolean (*wblock_mouse_cb_t) (WBlock *wb, mouse_msg_t msg, mouse_event_
 typedef gboolean (*wblock_key_cb_t) (WBlock *wb, int parm);
 typedef void (*wblock_destroy_cb_t) (WBlock *wb);
 typedef void (*wblock_draw_cb_t) (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw);
+typedef void (*wblock_save_cb_t) (WBlock *wb);
 
 #define WBLOCK(p) ((WBlock *)(p))
 #define WBLOCK_DATA(l) (l) ? ((WBlock *)((l)->data)) : NULL
@@ -55,6 +56,7 @@ typedef void (*wblock_draw_cb_t) (WBlock *wb, int y0, int x0, int y, int x, int 
 #define WBLOCK_KEY(wb,parm) wb->key(wb,parm)
 #define WBLOCK_MOUSE(wb,msg,event) (wb)->mouse(wb,msg,event)
 #define WBLOCK_DESTROY(wb) (wb)->destroy(wb)
+#define WBLOCK_SAVE(wb) (wb)->save(wb)
 
 #define IN_RECTANGLE(y0,x0,y,x,lines,cols) \
 ((y0)>=(y) && (y0)<(y)+(lines) && (x0)>=(x) && (x0)<(x)+(cols))
@@ -89,6 +91,7 @@ typedef struct WBlock {
   wblock_key_cb_t key;
   wblock_destroy_cb_t destroy;
   wblock_draw_cb_t draw;
+  wblock_save_cb_t save;
 
   int cursor_x;
   int cursor_y;
@@ -106,6 +109,7 @@ WBlock *wblock_new (
   wblock_key_cb_t     key,
   wblock_destroy_cb_t destroy,
   wblock_draw_cb_t    draw,
+  wblock_save_cb_t    save,
   gpointer wdata);
 
 void wblock_init (
@@ -114,6 +118,7 @@ void wblock_init (
   wblock_key_cb_t     key,
   wblock_destroy_cb_t destroy,
   wblock_draw_cb_t    draw,
+  wblock_save_cb_t    save,
   gpointer wdata);
 
 #define WBLOCK_EMPTY() wblock_new(NULL,NULL,NULL,NULL,NULL)
@@ -174,6 +179,7 @@ WBlock * set_margin (WBlock *wb, int left, int top, int right, int bottom);
 WBlock * wblock_newline (void);
 WBlock * wblock_nspace (int n);
 
+void wblock_save (WBlock *wb);
 
 void wblock_shift_yx (WBlock *wb, int shift_y, int shift_x);
 

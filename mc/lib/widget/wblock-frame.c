@@ -97,7 +97,7 @@ wblock_frame_new (char *label) {
   WBlockFrameData *data = g_new (WBlockFrameData, 1);
   data->label = label;
   data->color = WBLOCK_FRAME_COLOR_NORMAL;
-  wblock_init (wb, NULL, NULL, NULL, wblock_frame_draw, data);
+  wblock_init (wb, NULL, NULL, NULL, wblock_frame_draw, NULL, data);
   wb->style.width_type = WIDTH_MAX;
   return wb;
 

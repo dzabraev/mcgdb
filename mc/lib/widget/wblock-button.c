@@ -83,5 +83,6 @@ wblock_button_new (char *label, wblock_push_t push, gpointer user_data, GDestroy
     wblock_button_key,
     wblock_button_destroy,
     wblock_button_draw,
+    NULL,
     data);
 }

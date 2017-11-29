@@ -390,8 +390,8 @@ mcgdb_bp_copy_to (const mcgdb_bp * bp, mcgdb_bp * bp_new) {
   bp_new->hit_count     = bp->hit_count     ;
   bp_new->temporary     = bp->temporary     ;
   bp_new->thread        = bp->thread        ;
-  bp_new->condition     = bp->condition     ;
-  bp_new->commands      = bp->commands      ;
+  bp_new->condition     = g_strdup (bp->condition);
+  bp_new->commands      = g_strdup (bp->commands);
   bp_new->id            = bp->id            ;
   bp_new->wait_status   = bp->wait_status   ;
   //bp_new->locations     = g_list_copy_deep (bp->locations, gcopyfunc_bp_loc_copy, NULL);
@@ -424,9 +424,13 @@ mcgdb_bp_assign (mcgdb_bp *bp1, const mcgdb_bp *bp2) {
   bp1->silent       = bp2->silent        ;
   bp1->ignore_count = bp2->ignore_count  ;
   bp1->thread       = bp2->thread        ;
-  bp1->condition    = bp2->condition     ;
-  bp1->commands     = bp2->commands      ;
   bp1->wait_status  = bp2->wait_status   ;
+
+  g_free (bp1->condition);
+  bp1->condition = g_strdup (bp2->condition);
+
+  g_free (bp1->commands);
+  bp1->commands = g_strdup (bp2->commands);
 }
 
 

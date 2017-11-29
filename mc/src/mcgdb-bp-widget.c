@@ -33,7 +33,7 @@ calcpos (int *y, int *x, int *lines, int *cols) {
 static BPWidget *
 bpw_new (void) {
   BPWidget *bpw = g_new0 (BPWidget,1);
-  wblock_init (&bpw->wb,NULL,NULL,NULL,NULL,NULL);
+  wblock_init (&bpw->wb,NULL,NULL,NULL,NULL,NULL,NULL);
   return bpw;
 }
 
@@ -190,8 +190,8 @@ bp_widget (BPWidget *bpw, bp_pair_t *bp_pair) {
   int location_idx=1;
   mcgdb_bp *bp_tmp = bp_pair->temp;
   WBlock *widget_bp, *top_widget;
-  WBlock *widget_locs = wblock_new (NULL,NULL,NULL,NULL,NULL);
-  top_widget = wblock_new (NULL,NULL,NULL,NULL,NULL);
+  WBlock *widget_locs = wblock_new (NULL,NULL,NULL,NULL,NULL,NULL);
+  top_widget = wblock_new (NULL,NULL,NULL,NULL,NULL,NULL);
   widget_bp = wblock_frame_new (g_strdup_printf ("Breakpoint %d",bp_tmp->number));
   widget_bp->style.layout=LAYOUT_INLINE;
   wblock_add_widget (top_widget, widget_bp);

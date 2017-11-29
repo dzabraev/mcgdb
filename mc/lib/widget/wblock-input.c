@@ -10,11 +10,11 @@
 
 
 static void
-buf_insert_lines (GArray *buf, char *lines, int y) {
+buf_insert_lines (GArray *buf, gchar *lines, int y) {
   char *p = lines;
+  GArray *row = g_array_new (FALSE, FALSE, sizeof (gunichar));
   if (y==-1)
     y=buf->len;
-  GArray *row = g_array_new (FALSE, FALSE, sizeof (int));
   while (p && p[0]) {
     if (*p=='\n') {
       if (y>=(int)buf->len)
@@ -25,8 +25,9 @@ buf_insert_lines (GArray *buf, char *lines, int y) {
       p++;
     }
     else {
-      int ch = p[0];
+      gunichar ch = g_utf8_get_char (p);
       g_array_append_val (row, ch);
+      p = g_utf8_next_char (p);
     }
   }
   if (y>=(int)buf->len)
@@ -36,16 +37,22 @@ buf_insert_lines (GArray *buf, char *lines, int y) {
 }
 
 static void
-buf_append_lines (GArray *buf, char *lines) {
+buf_append_lines (GArray *buf, gchar *lines) {
   buf_insert_lines (buf, lines, -1);
 }
 
 static void
-buf_to_string (GArray *buf, char **string) {
+buf_to_string (GArray *buf, gchar **string) {
+  GArray *row = g_array_index (buf,GArray *, 0);
   g_free (string[0]);
-  string[0] = buf->len > 0 ? g_strdup (g_array_index (buf,GArray *, 0)->data) : NULL;
+  string[0] = buf->len > 0 ? g_ucs4_to_utf8 (
+    (gunichar *) row->data, row->len, NULL, NULL, NULL) : NULL;
   for (int idx=1,size=buf->len;idx<size;idx++) {
-    char *new_str = g_strdup_printf ("%s %s", string[0], g_array_index (buf,GArray *, idx)->data);
+    char *new_str;
+    row = g_array_index (buf,GArray *, idx);
+    new_str = g_strdup_printf ( "%s %s", string[0],
+          g_ucs4_to_utf8 (
+            (gunichar *) row->data, row->len, NULL, NULL, NULL));
     g_free (string[0]);
     string[0] = new_str;
   }
@@ -57,6 +64,11 @@ buf_get_line (GArray *buf, int y) {
   return g_array_index (buf, GArray *, y);
 }
 
+static GArray *
+wblock_input_get_line (WBlock *wb, int y) {
+  WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
+  return buf_get_line (data->buf, y);
+}
 
 
 static GArray *
@@ -66,12 +78,22 @@ wblock_input_current_line (WBlock *wb) {
   return g_array_index (data->buf, GArray *, pos_y);
 }
 
+static void
+wblock_input_decr_lines (WBlock *wb) {
+  WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
+  wb->lines = MAX (wb->lines-1, data->h_min);
+}
+
+static void
+wblock_input_incr_lines (WBlock *wb) {
+  WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
+  wb->lines = MIN (wb->lines+1, data->h_max);
+}
+
 
 static void
 wblock_input_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw) {
   WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
-  (void) y0;
-  (void) x0;
   if (!do_draw) {
     wb->y=y0;
     wb->x=x0;
@@ -84,7 +106,7 @@ wblock_input_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols
     for (int line_idx=0; line_idx < MIN(wb->lines,(int)data->buf->len); line_idx++) {
       GArray *row = buf_get_line (data->buf, data->offset_y + line_idx);
       for (int col_idx=0; col_idx < MIN (wb->cols,(int)row->len); col_idx++) {
-        int ch = g_array_index (row, int, data->offset_x+col_idx);
+        gunichar ch = g_array_index (row, gunichar, data->offset_x+col_idx);
         int draw_x = wb->x+col_idx,
             draw_y = wb->y+line_idx;
         if (IN_RECTANGLE (draw_y, draw_x, y, x, lines, cols)) {
@@ -93,7 +115,7 @@ wblock_input_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols
         }
       }
     }
-    /* blinkable cursor will setup in WBM_WBLOCK_DRAW */
+    /* blinkable cursor will be setup in WBM_WBLOCK_DRAW */
   }
 }
 
@@ -117,11 +139,13 @@ wblock_input_mouse (WBlock *wb, mouse_msg_t msg, mouse_event_t * event) {
   }
 }
 
+
 static void
 wblock_input_view_toleft (WBlock *wb) {
   WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
   data->offset_x=0;
   wb->cursor_x=0;
+  wb->redraw=TRUE;
 }
 
 static void
@@ -130,6 +154,7 @@ wblock_input_view_toright (WBlock *wb) {
   int len = wblock_input_current_line (wb)->len;
   data->offset_x = MAX (0, len - wb->cols);
   wb->cursor_x = len - data->offset_x;
+  wb->redraw=TRUE;
 }
 
 static void
@@ -145,8 +170,6 @@ wblock_input_decr_cursor_x (WBlock *wb) {
       wb->redraw=TRUE;
     }
     else if (wb->cursor_y>0 || data->offset_y>0) {
-      g_array_remove_index (data->buf,wb->cursor_y+data->offset_y);
-      wb->lines--;
       if (wb->cursor_y>0) {
         wb->cursor_y--;
       }
@@ -236,7 +259,41 @@ wblock_input_backspace (WBlock *wb) {
   }
   else if (pos_y>0) {
     /*change current line*/
+    GArray *row = wblock_input_get_line (wb, pos_y);
+    gboolean last_row = pos_y==(int)data->buf->len-1;
     wblock_input_decr_cursor_x (wb);
+    g_array_append_vals (
+      wblock_input_get_line (wb, pos_y-1),
+      row->data,
+      row->len
+    );
+    g_array_remove_index (data->buf,pos_y);
+    if (last_row) {
+      if (data->offset_y>0) {
+        data->offset_y--;
+        wb->cursor_y++;
+      }
+      else {
+        wblock_input_decr_lines (wb);
+      }
+    }
+    wb->redraw=TRUE;
+  }
+}
+
+
+static void
+wblock_input_delete_char (WBlock *wb) {
+  WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
+  size_t pos_x0=data->offset_x+wb->cursor_x,
+         pos_y0=data->offset_y+wb->cursor_y,
+         pos_x1,
+         pos_y1;
+  wblock_input_incr_cursor_x (wb);
+  pos_x1 = data->offset_x+wb->cursor_x;
+  pos_y1 = data->offset_y+wb->cursor_y;
+  if (pos_x0!=pos_x1 || pos_y0!=pos_y1) {
+    wblock_input_backspace (wb);
     wb->redraw=TRUE;
   }
 }
@@ -244,21 +301,33 @@ wblock_input_backspace (WBlock *wb) {
 static void
 wblock_input_enter (WBlock *wb) {
   WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
-  int pos_y = data->offset_y + wb->cursor_y;
-  int pos_x = wb->cursor_x + data->offset_x;
+  size_t pos_y = data->offset_y + wb->cursor_y;
+  size_t pos_x = wb->cursor_x + data->offset_x;
   GArray *row = wblock_input_current_line (wb);
-  char *insert_data = (int)row->len>pos_x ? ((int *)row->data) + pos_x : strdup("");
-  buf_insert_lines (data->buf, insert_data, pos_y+1); /*create new row*/
-  wb->lines = MIN (wb->lines+1, data->h_max);
-  g_array_remove_range (row, pos_x, row->len-pos_x); /*remove copied data*/
+  GArray *new_row = g_array_new (FALSE, FALSE, sizeof (gunichar));
+  gunichar *insert_data  = row->len>pos_x ? ((gunichar *)row->data) + pos_x : NULL;
+  size_t insert_data_len = row->len>pos_x ? row->len - pos_x                : 0;
+
+  if (data->buf->len<=pos_y+1) {
+    g_array_append_val (data->buf, new_row);
+  }
+  else {
+    g_array_insert_val (data->buf, pos_y+1, new_row);
+  }
+
+  g_array_append_vals (new_row, insert_data, insert_data_len);
+
+  wblock_input_incr_lines (wb);
+  g_array_remove_range (row, pos_x, insert_data_len); /*remove copied data*/
   wb->cursor_x = 0;
   data->offset_x = 0;
   wblock_input_move_cursor_y (wb, 1);
   wb->redraw=TRUE;
 }
 
+
 static void
-wblock_input_insert_char (WBlock *wb, int parm) {
+wblock_input_insert_char (WBlock *wb, gunichar parm) {
   WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
   g_array_insert_val (
     wblock_input_current_line (wb),
@@ -267,6 +336,36 @@ wblock_input_insert_char (WBlock *wb, int parm) {
   wblock_input_incr_cursor_x (wb);
   wb->redraw=TRUE;
 }
+
+
+static gboolean
+wait_ucs4 (gchar unit, gunichar *ch) {
+  static int len;
+  static gchar ubuf[6];
+  gunichar *uch;
+
+  ubuf[len++] = unit;
+
+  for (int i=0;i<len;i++) {
+    if (g_utf8_validate (ubuf+i, len-i, NULL)) {
+      uch = g_utf8_to_ucs4_fast (ubuf+i, len-i, NULL);
+      ch[0] = uch[0];
+      g_free (uch);
+      len=0;
+      return TRUE;
+    }
+  }
+
+  if (len==6) {
+    for(int i=0;i<5;i++) {
+      ubuf[i] = ubuf[i+1];
+    }
+    len--;
+  }
+
+  return FALSE;
+}
+
 
 static gboolean
 wblock_input_key (WBlock *wb, int parm) {
@@ -286,10 +385,10 @@ wblock_input_key (WBlock *wb, int parm) {
       wblock_input_move_cursor_y (wb, 1);
       break;
     case CK_PageUp:
-      wblock_input_move_cursor_y (wb, -wb->lines/3);
+      wblock_input_move_cursor_y (wb, -wb->lines);
       break;
     case CK_PageDown:
-      wblock_input_move_cursor_y (wb, wb->lines/3);
+      wblock_input_move_cursor_y (wb, wb->lines);
       break;
     case CK_Left:
       wblock_input_decr_cursor_x (wb);
@@ -307,7 +406,15 @@ wblock_input_key (WBlock *wb, int parm) {
       wblock_input_backspace (wb);
       break;
     case CK_InsertChar:
-      wblock_input_insert_char (wb, parm);
+      {
+        gunichar ucs4_char;
+        gboolean done = wait_ucs4 (parm, &ucs4_char);
+        if (done)
+          wblock_input_insert_char (wb, ucs4_char);
+      }
+      break;
+    case CK_Delete:
+      wblock_input_delete_char (wb);
       break;
     case CK_Cancel:
     default:
@@ -316,13 +423,16 @@ wblock_input_key (WBlock *wb, int parm) {
   return TRUE;
 }
 
-
+static void
+wblock_input_save (WBlock *wb) {
+  WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
+  buf_to_string (data->buf, data->result);
+}
 
 static void
 wblock_input_destroy (WBlock *wb) {
   WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
   GArray *buf = data->buf;
-  buf_to_string (buf, data->result);
   for (int idx=0,size=buf->len;idx<size;idx++) {
     g_array_free (g_array_index (buf,GArray *, idx), TRUE);
   }
@@ -340,8 +450,13 @@ wblock_input_new (char **initial, int h_min, int h_max) {
   data->h_min = h_min;
   data->h_max = h_max;
   buf_append_lines (data->buf, initial[0]);
-  if (data->buf->len==0)
-    buf_append_lines (data->buf, strdup("")); /*insert blank line*/
-  wblock_init (wb, wblock_input_mouse, wblock_input_key, wblock_input_destroy, wblock_input_draw, data);
+  g_free (initial[0]);
+  wblock_init (wb,
+    wblock_input_mouse,
+    wblock_input_key,
+    wblock_input_destroy,
+    wblock_input_draw,
+    wblock_input_save,
+    data);
   return wb;
 }

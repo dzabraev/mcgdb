@@ -57,13 +57,14 @@ wblock_checkbox_new (gboolean *flag) {
     wblock_checkbox_key,
     wblock_checkbox_destroy,
     wblock_checkbox_draw,
+    NULL,
     data);
 }
 
 
 WBlock *
 wblock_checkbox_labeled_new (char *label, gboolean *flag) {
-  WBlock *parent = wblock_new (NULL,NULL,NULL,NULL,NULL);
+  WBlock *parent = wblock_new (NULL,NULL,NULL,NULL,NULL,NULL);
   WBlock *checkbox = wblock_checkbox_new (flag);
   WBlock *checklabel = wblock_label_new (label, TRUE);
   checkbox->style.layout=LAYOUT_INLINE;

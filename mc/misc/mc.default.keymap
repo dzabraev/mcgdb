@@ -515,4 +515,5 @@ Left = left
 Right = right
 Enter = enter
 Cancel = f10; esc; ctrl-g
+Delete = delete; ctrl-d
 

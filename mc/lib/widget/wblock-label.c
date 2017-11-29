@@ -30,7 +30,7 @@ wblock_label_new (char *label, gboolean oneline) {
   WBlockLabelData *data = g_new (WBlockLabelData, 1);
   data->label = label;
   wblock_init (wb, NULL, NULL, NULL,
-    oneline ? wblock_label_oneline_draw : wblock_label_draw,
+    oneline ? wblock_label_oneline_draw : wblock_label_draw, NULL,
     data);
   return wb;
 }
@@ -76,6 +76,6 @@ wblock_multilabel_new (gboolean oneline, ...) {
     data->labels = g_list_append (data->labels, label);
   }
   wblock_init (wb, wblock_multilabel_mouse, NULL, NULL,
-    wblock_multilabel_draw, data);
+    wblock_multilabel_draw, NULL, data);
   return wb;
 }

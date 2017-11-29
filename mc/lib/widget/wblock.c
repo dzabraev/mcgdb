@@ -62,6 +62,7 @@ static WBlockMain * wbm_new (WBlock *wb, pos_callback_t calcpos);
 static void wbm_cleanup (WBlockMain * wbm);
 static gboolean wbm_exists_redraw (WBlockMain * wbm);
 
+
 static void
 wbm_normalize_offset (WBlockMain *wbm) {
   wbm->offset = MIN(MAX(wbm->offset,0),MAX(wbm->wb->lines - WIDGET(wbm)->lines,0));
@@ -395,6 +396,7 @@ wblock_init (
   wblock_key_cb_t     key,
   wblock_destroy_cb_t destroy,
   wblock_draw_cb_t    draw,
+  wblock_save_cb_t    save,
   gpointer wdata)
 {
   bzero (wb, sizeof (WBlock));
@@ -402,6 +404,7 @@ wblock_init (
   wb->draw      = draw      ? draw      : wblock_dfl_draw;
   wb->key       = key;
   wb->mouse     = mouse;
+  wb->save      = save;
   wb->wdata     = wdata;
   wb->cursor_y = -1;
   wb->cursor_x = -1;
@@ -413,10 +416,11 @@ wblock_new (
   wblock_key_cb_t     key,
   wblock_destroy_cb_t destroy,
   wblock_draw_cb_t    draw,
+  wblock_save_cb_t    save,
   gpointer wdata)
 {
   WBlock *wb = g_new0 (WBlock,1);
-  wblock_init (wb, mouse, key, destroy, draw, wdata);
+  wblock_init (wb, mouse, key, destroy, draw, save, wdata);
   return wb;
 }
 
@@ -500,7 +504,7 @@ layout_inline (WBlock *wb) {
 
 WBlock *
 wblock_empty (void) {
-  return wblock_new(NULL,NULL,NULL,NULL,NULL);
+  return wblock_new(NULL,NULL,NULL,NULL,NULL,NULL);
 }
 
 WBlock *
@@ -524,6 +528,15 @@ wblock_nspace (int n) {
             wblock_empty ()), n, 0, 0, 0);
 }
 
+void
+wblock_save (WBlock *wb) {
+  if (wb->save)
+    WBLOCK_SAVE (wb);
+  for (GList *l=wb->widgets;l;l=l->next) {
+    wblock_save (l->data);
+  }
+}
+
 
 int
 wblock_run (WBlock * wb, pos_callback_t calcpos) {
@@ -536,6 +549,8 @@ wblock_run (WBlock * wb, pos_callback_t calcpos) {
   wb->wbm = wbm;
   add_widget (dlg, wbm);
   return_val = dlg_run (dlg);
+
+  wblock_save (wb); /*recursive save data*/
 
   wbm_cleanup (wbm);
   dlg_destroy (dlg);
