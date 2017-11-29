@@ -107,8 +107,8 @@ wblock_input_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols
       GArray *row = buf_get_line (data->buf, data->offset_y + line_idx);
       for (int col_idx=0; col_idx < MIN (wb->cols,(int)row->len); col_idx++) {
         gunichar ch = g_array_index (row, gunichar, data->offset_x+col_idx);
-        int draw_x = wb->x+col_idx,
-            draw_y = wb->y+line_idx;
+        int draw_x = x0+col_idx,
+            draw_y = y0+line_idx;
         if (IN_RECTANGLE (draw_y, draw_x, y, x, lines, cols)) {
           tty_gotoyx (draw_y, draw_x);
           tty_print_anychar (g_unichar_isprint (ch) ? ch : '.');

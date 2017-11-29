@@ -15,17 +15,7 @@
 
 #define WBM_UPDATE_COORDS(wbm) wbm_wblock_draw(wbm,FALSE)
 
-#define WBM_REDRAW(wbm) \
-  do { \
-  tty_setcolor (WBLOCK_COLOR_NORMAL);\
-  tty_fill_region ( \
-    WIDGET(wbm)->y, \
-    WIDGET(wbm)->x, \
-    MIN (wbm->wb->lines,WIDGET(wbm)->lines), \
-    MIN (wbm->wb->cols,WIDGET(wbm)->cols), \
-    ' '); \
-  wbm_wblock_draw (wbm,TRUE); \
-} while (0)
+#define WBM_REDRAW(wbm) wbm_wblock_draw (wbm,TRUE);
 
 
 typedef struct WBlockMain {
@@ -35,19 +25,66 @@ typedef struct WBlockMain {
   int offset;
   WBlock *selected_widget;
   gboolean redraw;
+  gboolean with_frame;
 } WBlockMain;
 
 static void
 wbm_wblock_draw (WBlockMain *wbm, gboolean do_draw) {
+  int rect_x = WIDGET(wbm)->x,
+      rect_y = WIDGET(wbm)->y,
+      rect_lines = WIDGET(wbm)->lines,
+      rect_cols  = WIDGET(wbm)->cols;
+
+  if (wbm->with_frame) {
+    rect_x++;
+    rect_y++;
+    rect_lines-=2;
+    rect_cols-=2;
+  }
+
+  if (do_draw) {
+    tty_setcolor (WBLOCK_COLOR_NORMAL);
+    if (wbm->with_frame) {
+      tty_setcolor (WBLOCK_FRAME_COLOR_NORMAL);
+
+      tty_fill_region (
+        rect_y,
+        rect_x,
+        rect_lines,
+        rect_cols,
+        ' '
+      );
+
+      tty_draw_box (
+        rect_y-1,
+        rect_x-1,
+        MIN (rect_lines, wbm->wb->lines)+2,
+        MIN (rect_cols, wbm->wb->cols)+2,
+        FALSE
+      );
+    }
+    else {
+      tty_fill_region (
+        rect_y,
+        rect_x,
+        rect_lines,
+        rect_cols,
+        ' '
+      );
+    }
+  }
+
   WBLOCK_DRAW (
     wbm->wb,
-    WIDGET(wbm)->y-wbm->offset,
-    WIDGET(wbm)->x,
-    WIDGET(wbm)->y,
-    WIDGET(wbm)->x,
-    WIDGET(wbm)->lines,
-    WIDGET(wbm)->cols,
+    rect_y-wbm->offset, /*here block will being drawn*/
+    rect_x,             /*here block will being drawn*/
+    rect_y,
+    rect_x,
+    rect_lines,
+    rect_cols,
     do_draw);
+
+
   if (wbm->selected_widget && wbm->selected_widget->cursor_y!=-1 && wbm->selected_widget->cursor_x!=-1) {
     tty_gotoyx (
       wbm->selected_widget->y + wbm->selected_widget->cursor_y,
@@ -58,7 +95,7 @@ wbm_wblock_draw (WBlockMain *wbm, gboolean do_draw) {
   }
 }
 
-static WBlockMain * wbm_new (WBlock *wb, pos_callback_t calcpos);
+static WBlockMain * wbm_new (WBlock *wb, pos_callback_t calcpos, gboolean with_frame);
 static void wbm_cleanup (WBlockMain * wbm);
 static gboolean wbm_exists_redraw (WBlockMain * wbm);
 
@@ -258,12 +295,13 @@ wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
 }
 
 static WBlockMain *
-wbm_new (WBlock *wb, pos_callback_t calcpos) {
+wbm_new (WBlock *wb, pos_callback_t calcpos, gboolean with_frame) {
   WBlockMain *wbm = g_new0 (WBlockMain, 1);
   Widget *w;
 
   wbm->wb = wb;
   wbm->calcpos = calcpos;
+  wbm->with_frame = with_frame;
   w = WIDGET(wbm);
   widget_init (w, 1, 1, 1, 1, wbm_callback, wbm_mouse_callback);
   widget_set_options (w, WOP_SELECTABLE, TRUE);
@@ -541,7 +579,7 @@ wblock_save (WBlock *wb) {
 int
 wblock_run (WBlock * wb, pos_callback_t calcpos) {
   WDialog *dlg;
-  WBlockMain * wbm = wbm_new (wb, calcpos);
+  WBlockMain * wbm = wbm_new (wb, calcpos, TRUE);
   int return_val;
   dlg = dlg_create (TRUE, 0, 0, 0, 0, WPOS_KEEP_DEFAULT, FALSE, NULL, wblock_dlg_default_callback,
                     NULL, "[wblock]", NULL);
