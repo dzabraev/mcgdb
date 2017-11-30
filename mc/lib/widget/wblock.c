@@ -50,8 +50,8 @@ wbm_wblock_draw (WBlockMain *wbm, gboolean do_draw) {
       tty_fill_region (
         rect_y,
         rect_x,
-        rect_lines,
-        rect_cols,
+        MIN (rect_lines, wbm->wb->lines),
+        MIN (rect_cols, wbm->wb->cols),
         ' '
       );
 
@@ -102,7 +102,8 @@ static gboolean wbm_exists_redraw (WBlockMain * wbm);
 
 static void
 wbm_normalize_offset (WBlockMain *wbm) {
-  wbm->offset = MIN(MAX(wbm->offset,0),MAX(wbm->wb->lines - WIDGET(wbm)->lines,0));
+  int widget_lines_for_wb = WIDGET(wbm)->lines + (wbm->with_frame ? -2 : 0);
+  wbm->offset = MIN(MAX(wbm->offset,0),MAX(wbm->wb->lines - widget_lines_for_wb,0));
 }
 
 static gboolean
@@ -632,5 +633,10 @@ get_utf (const gchar * str, int *char_length)
     }
 
     return (int) ch;
+}
+
+WBlock *
+wblock_empty_new (void) {
+  return wblock_new (NULL,NULL,NULL,NULL,NULL,NULL);
 }
 

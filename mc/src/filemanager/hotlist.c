@@ -1053,7 +1053,7 @@ add_new_group_input (const char *header, const char *label, char **result)
     };
 
     quick_dialog_t qdlg = {
-        -1, -1, 64, -1,
+        -1, -1, 64,
         header, "[Hotlist]",
         quick_widgets, NULL, NULL
     };

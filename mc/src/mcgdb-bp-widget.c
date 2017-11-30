@@ -190,7 +190,8 @@ bp_widget (BPWidget *bpw, bp_pair_t *bp_pair) {
   int location_idx=1;
   mcgdb_bp *bp_tmp = bp_pair->temp;
   WBlock *widget_bp, *top_widget;
-  WBlock *widget_locs = wblock_new (NULL,NULL,NULL,NULL,NULL,NULL);
+  WBlock *widget_locs = wblock_empty_new ();
+  WBlock *widget_ign_count = wblock_empty_new ();
   top_widget = wblock_new (NULL,NULL,NULL,NULL,NULL,NULL);
   widget_bp = wblock_frame_new (g_strdup_printf ("Breakpoint %d",bp_tmp->number));
   widget_bp->style.layout=LAYOUT_INLINE;
@@ -213,6 +214,15 @@ bp_widget (BPWidget *bpw, bp_pair_t *bp_pair) {
   }
 
 
+
+  wblock_add_widget (
+    widget_bp,
+    wblock_label_new (
+      g_strdup_printf ("hit count: %d", bp_tmp->hit_count), TRUE
+    )
+  );
+
+
   wblock_add_widget (widget_bp,wblock_label_new (strdup("Locations:"),TRUE));
   widget_locs->style.margin.left=2;
 
@@ -231,6 +241,26 @@ bp_widget (BPWidget *bpw, bp_pair_t *bp_pair) {
 
   wblock_add_widget (widget_bp, widget_locs);
 
+  wblock_add_widget (widget_bp, wblock_newline ());
+
+
+  wblock_add_widget (
+    widget_ign_count,
+    layout_inline (wblock_label_new (
+      g_strdup ("ignore count: "), TRUE
+    ))
+  );
+
+  wblock_add_widget (
+    widget_ign_count,
+    layout_inline (wblock_input_integer_new (
+      &bp_tmp->ignore_count
+    ))
+  );
+
+  wblock_add_widget (widget_bp, widget_ign_count);
+
+
   wblock_add_widget (
     widget_bp,
     wblock_checkbox_labeled_new (
@@ -245,11 +275,36 @@ bp_widget (BPWidget *bpw, bp_pair_t *bp_pair) {
       &bp_tmp->silent
   ));
 
+  wblock_add_widget (widget_bp, wblock_newline ());
+
+  wblock_add_widget (
+    widget_bp,
+    wblock_label_new (
+      g_strdup ("condition:"), TRUE
+    )
+  );
+
   wblock_add_widget (
     widget_bp,
     wblock_input_new (
-      &bp_tmp->condition, 1, 5
+      &bp_tmp->condition, 2, 5, -1, -1
   ));
+
+  wblock_add_widget (widget_bp, wblock_newline ());
+
+  wblock_add_widget (
+    widget_bp,
+    wblock_label_new (
+      g_strdup ("commands:"), TRUE
+    )
+  );
+
+  wblock_add_widget (
+    widget_bp,
+    wblock_input_new (
+      &bp_tmp->commands, 2, 5, -1, -1
+  ));
+
 
 
   return top_widget;
@@ -323,12 +378,10 @@ breakpoints_edit_dialog (const char *filename, long line) {
     wblock_add_widget (widget_bps, bp_widget (bpw, bp_pair));
   }
 
-  wblock_add_widget (WBLOCK (bpw), wblock_newline ());
   wblock_add_widget (WBLOCK (bpw), bpw_prolog (bpw));
   wblock_add_widget (WBLOCK (bpw), wblock_newline ());
   wblock_add_widget (WBLOCK (bpw), widget_bps);
   wblock_add_widget (WBLOCK (bpw), bpw_epilog (bpw));
-  wblock_add_widget (WBLOCK (bpw), wblock_newline ());
 
   disable_gdb_events = TRUE;
   return_val = wblock_run (WBLOCK (bpw), calcpos);

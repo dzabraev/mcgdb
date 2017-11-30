@@ -15,9 +15,23 @@ typedef struct WBlockInputData {
   int offset_x;
   int h_min;
   int h_max;
+  int w_min;
+  int w_max;
   char **result;
 } WBlockInputData;
 
-WBlock * wblock_input_new (char **initial, int h_min, int h_max);
+
+#define WBLOCK_INPUT_DATA_INTEGER(p) ((WBlockInputDataInteger *)(p))
+
+typedef struct WBlockInputDataInteger {
+  WBlockInputData data;
+  int *val;
+  char *input;
+} WBlockInputDataInteger;
+
+
+WBlock * wblock_input_new (char **initial, int h_min, int h_max, int w_min, int w_max);
+WBlock * wblock_input_integer_new (int *val);
+
 
 #endif

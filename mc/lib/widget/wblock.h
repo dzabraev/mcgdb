@@ -121,7 +121,9 @@ void wblock_init (
   wblock_save_cb_t    save,
   gpointer wdata);
 
-#define WBLOCK_EMPTY() wblock_new(NULL,NULL,NULL,NULL,NULL)
+WBlock * wblock_empty_new (void);
+
+#define WBLOCK_EMPTY() wblock_new(NULL,NULL,NULL,NULL,NULL,NULL)
 
 #define WBLOCK_MARGIN(_left,_top,_right,_bottom) \
 ({\
