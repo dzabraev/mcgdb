@@ -124,7 +124,6 @@ def exec_on_gdb_stops(callback):
 import mcgdb.gdb2 as gdb2
 
 
-
 class MCGDB_VERSION(object):
   major=1
   minor=1

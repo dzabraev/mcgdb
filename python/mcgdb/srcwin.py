@@ -26,7 +26,7 @@ class SrcWin(BaseWin):
     rc=super(SrcWin,self).process_connection()
     if rc:
       self.update_current_frame()
-      self.update_thread()
+      self.send_pkg_update_threads()
       self.update_breakpoints()
     return rc
 
@@ -71,16 +71,11 @@ class SrcWin(BaseWin):
 
   def shellcmd_thread(self,pkg):
     self.update_current_frame()
+    self.send_pkg_update_threads()
 
   def mcgdbevt_thread(self,pkg):
     self.update_current_frame()
-    self.update_thread()
-
-  def update_thread(self):
-    th=gdb.selected_thread()
-    if th is not None:
-      self.send({'cmd':'setthread','id':th.num})
-
+    self.send_pkg_update_threads()
 
   def pkg_delete_bps(self,bps):
     valid_numbers=set([bp.number for bp in gdb.breakpoints() if bp.is_valid()])
@@ -132,6 +127,7 @@ class SrcWin(BaseWin):
 
     if len(bps_data)==0:
       return
+    sel_th = gdb.selected_thread()
     return {
       'cmd':'bpsupd',
       'bps_data':bps_data,

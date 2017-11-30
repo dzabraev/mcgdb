@@ -49,7 +49,7 @@ typedef enum gdb_cmd {
   MCGDB_FCLOSE,
   MCGDB_SET_WINDOW_TYPE,
   MCGDB_UNMARK_ALL,
-  MCGDB_SETTHREAD,
+  MCGDB_UPDATE_THREADS,
   MCGDB_BPSUPD,
   MCGDB_BPSDEL,
   MCGDB_SET_CURLINE,
@@ -90,7 +90,9 @@ struct mouse_event_t;
 struct json_t;
 extern enum window_type mcgdb_wtype;
 extern struct gdb_action * event_from_gdb;
-extern int mcgdb_current_thread_id;
+extern int selected_thread_global_num;
+extern GList *thread_list;
+
 
 typedef
 struct gdb_action {
@@ -171,6 +173,15 @@ typedef struct cbPair {
   void *succ;
   void *args;
 } cbPair;
+
+typedef struct {
+  char *name;
+  int num;
+  int global_num;
+  int pid;
+  int tid;
+  int lwp;
+} thread_entry_t;
 
 int data_ptr_register (void *data);
 

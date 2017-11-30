@@ -34,7 +34,7 @@ class StorageId(object):
   def id_update(self,key,new_data):
     (id,data)=self.id_exemplar_storage[key]
     self.id_exemplar_storage[key] = (id,new_data)
-    return id
+    return idc
 
 
 
@@ -80,22 +80,44 @@ class CommunicationMixin(object):
   def send_pkg_callback(self,*args,**kwargs):
     return self.send(self.pkg_callback(*args,**kwargs))
 
+class PkgMeta(ABCMeta):
+  def __new__(meta, name, bases, dct):
+    for name,val in dct.items():
+      if name.startswith('pkg_'):
+        fn = dct.pop(name)
+        dct['send_'+name] = lambda self,*args,**kwargs : self.send(fn(self,*args,**kwargs))
+    return super(PkgMeta, meta).__new__(meta,name,bases,dct)
+
 class TablePackages(CommunicationMixin):
-  __metaclass__ = ABCMeta
+  __metaclass__ = PkgMeta
 
   @abstractproperty
   def subentity_name(self): pass
 
-  def send_pkg_exemplar_set     (self,*args,**kwargs): self.send(self.pkg_exemplar_set      (*args,**kwargs))
-  def send_pkg_exemplar_create  (self,*args,**kwargs): self.send(self.pkg_exemplar_create   (*args,**kwargs))
-  def send_pkg_select_node      (self,*args,**kwargs): self.send(self.pkg_select_node       (*args,**kwargs))
-  def send_pkg_do_row_visible   (self,*args,**kwargs): self.send(self.pkg_do_row_visible    (*args,**kwargs))
-  def send_pkg_update_nodes     (self,*args,**kwargs): self.send(self.pkg_update_nodes      (*args,**kwargs))
-  def send_pkg_drop_nodes       (self,*args,**kwargs): self.send(self.pkg_drop_nodes        (*args,**kwargs))
-  def send_pkg_drop_rows        (self,*args,**kwargs): self.send(self.pkg_drop_rows         (*args,**kwargs))
-  def send_pkg_insert_rows      (self,*args,**kwargs): self.send(self.pkg_insert_rows       (*args,**kwargs))
-  def send_pkg_transaction      (self,*args,**kwargs): self.send(self.pkg_transaction       (*args,**kwargs))
-  def send_pkg_message_in_table (self,*args,**kwargs): self.send(self.pkg_message_in_table  (*args,**kwargs))
+  @exec_main
+  def get_thread_info(self):
+    threads=[]
+    for thread in gdb.selected_inferior().threads():
+      if not thread.is_valid():
+        continue
+      pid,lwp,tid = thread.ptid
+      threads.append({
+        'name'        : thread.name,
+        'num'         : thread.num,
+        'global_num'  : thread.global_num,
+        'pid'         : pid,
+        'lwp'         : lwp,
+        'tid'         : tid,
+      })
+    selected = gdb.selected_thread()
+    return {
+      'thread_list' : get_thread_list(),
+      'selected_thread': selected.global_num if selected is not None else -1,
+    }
+
+  def pkg_update_threads(self):
+    return {'cmd':'update_threads', 'info':self.get_thread_info()}
+
 
   def pkg_exemplar_set(self,id):
     return {'cmd':'exemplar_set','id':id,'table_name':self.subentity_name}
@@ -240,6 +262,7 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
 
   @abstractproperty
   def subentities_cls(self): pass
+
 
   @exec_main
   def init_subentities(self):

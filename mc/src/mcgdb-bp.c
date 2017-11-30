@@ -295,7 +295,7 @@ mcgdb_bp_color(const char * filename, long line) {
     return -1;
   for(GList *l=mcgdb_bps;l!=NULL;l=l->next) {
     mcgdb_bp * bp = MCGDB_BP(l);
-    if (mcgdb_current_thread_id!=-1 && bp->thread!=-1 && bp->thread!=mcgdb_current_thread_id)
+    if (selected_thread_global_num!=-1 && bp->thread!=-1 && bp->thread!=selected_thread_global_num)
       continue;
     if (!mcgdb_bp_has_location (bp,filename,line))
       continue;

@@ -41,7 +41,8 @@ gboolean mcgdb_wait_gdb;
 int mcgdb_listen_port;
 int gdb_input_fd;
 
-int mcgdb_current_thread_id=-1;
+int selected_thread_global_num=-1;
+GList *thread_list;
 
 gboolean read_gdb_events;
 gboolean mcgdb_exit_from_loop;
@@ -69,6 +70,11 @@ get_window_type(json_t * pkg);
 
 static gboolean
 evt_convertable_to_key(struct gdb_action * gdb_evt);
+
+static void
+thread_entry_destroy (thread_entry_t *entry) {
+  g_free (entry->name);
+}
 
 void
 mcgdb_error(void) {
@@ -264,7 +270,7 @@ get_command_num(json_t *pkg) {
     else if (compare_cmd("fopen") )             {return MCGDB_FOPEN;}
     else if (compare_cmd("fclose") )            {return MCGDB_FCLOSE;}
     else if (compare_cmd("insert_str"))         {return MCGDB_INSERT_STR;}
-    else if (compare_cmd("setthread"))          {return MCGDB_SETTHREAD;}
+    else if (compare_cmd("update_threads"))     {return MCGDB_UPDATE_THREADS;}
     else if (compare_cmd("bpsdel"))             {return MCGDB_BPSDEL;}
     else if (compare_cmd("bpsupd"))             {return MCGDB_BPSUPD;}
 
@@ -398,8 +404,28 @@ process_action_from_gdb_edit(WEdit * edit, struct gdb_action * act) {
     case MCGDB_UNMARK_ALL:
       pkg_unmark_all (edit);
       break;
-    case MCGDB_SETTHREAD:
-      mcgdb_current_thread_id = myjson_int (pkg,"id");
+    case MCGDB_UPDATE_THREADS:
+      {
+        json_t *info = json_object_get (pkg, "info");
+        json_t *json_thread_list = json_object_get (info, "thread_list");
+
+        g_list_free_full (thread_list, (GDestroyNotify)thread_entry_destroy);
+        thread_list = NULL;
+
+        selected_thread_global_num = myjson_int (info, "selected_thread");
+
+        for (int idx=0,l = json_array_size (json_thread_list); idx<l; idx++) {
+          json_t *th = json_array_get (json_thread_list, idx);
+          thread_entry_t *entry = g_new0 (thread_entry_t, 1);
+          entry->name           = g_strdup (myjson_str (th, "name"));
+          entry->num            = myjson_int (th, "num");
+          entry->global_num     = myjson_int (th, "global_num");
+          entry->pid            = myjson_int (th, "pid");
+          entry->lwp            = myjson_int (th, "lwp");
+          entry->tid            = myjson_int (th, "tid");
+          thread_list = g_list_append (thread_list, entry);
+        }
+      }
       break;
     case MCGDB_BPSDEL:
       pkg_bps_del (pkg);
@@ -719,5 +745,6 @@ mcgdb_src_dlg(void) {
   mcgdb_bp_module_free();
   return TRUE;
 }
+
 
 
