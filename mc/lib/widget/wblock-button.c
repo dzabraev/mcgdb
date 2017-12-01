@@ -10,6 +10,7 @@ wblock_button_destroy (WBlock *wb) {
   WBlockButtonData *data = WBLOCK_BUTTON_DATA (wb->wdata);
   if (data->destroy)
     data->destroy (data->data);
+  g_free (data->label);
   wblock_dfl_destroy (wb);
 }
 
@@ -70,6 +71,13 @@ wblock_button_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int col
   }
 }
 
+void
+wblock_button_setlabel (WBlock *wb, char *label) {
+  WBlockButtonData *data = WBLOCK_BUTTON_DATA (wb->wdata)->label;
+  g_free (data->label);
+  data->label = label;
+  wb->redraw = TRUE;
+}
 
 WBlock *
 wblock_button_new (char *label, wblock_push_t push, gpointer user_data, GDestroyNotify destroy) {

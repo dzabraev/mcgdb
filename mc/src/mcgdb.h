@@ -183,6 +183,9 @@ typedef struct {
   int lwp;
 } thread_entry_t;
 
+thread_entry_t * get_thread_by_global_num (int global_num);
+
+
 int data_ptr_register (void *data);
 
 gboolean mcgdb_src_dlg(void);

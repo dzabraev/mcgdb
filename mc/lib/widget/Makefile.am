@@ -30,7 +30,8 @@ libmcwidget_la_SOURCES = \
 	wblock-label.h wblock-label.c \
 	wblock-button.h wblock-button.c \
 	wblock-frame.h wblock-frame.c \
-	wblock-input.h wblock-input.c
+	wblock-input.h wblock-input.c \
+	wblock-select.h wblock-select.c
 
 
 AM_CPPFLAGS = -I$(top_srcdir) $(GLIB_CFLAGS)

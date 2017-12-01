@@ -111,6 +111,14 @@ typedef struct WBlock {
   gpointer wdata;
 } WBlock;
 
+
+void wblock_set_mouse   (WBlock *wb, wblock_mouse_cb_t mouse);
+void wblock_set_key     (WBlock *wb, wblock_key_cb_t key);
+void wblock_set_destroy (WBlock *wb, wblock_destroy_cb_t destroy);
+void wblock_set_draw    (WBlock *wb, wblock_draw_cb_t draw);
+void wblock_set_save    (WBlock *wb, wblock_save_cb_t save);
+void wblock_set_wdata   (WBlock *wb, gpointer wdata);
+
 int
 wblock_run (WBlock * wb, pos_callback_t calcpos, gpointer calcpos_data);
 
@@ -185,6 +193,7 @@ WDialog * wblock_get_dialog (WBlock *wb);
 
 WBlock * set_layout (WBlock *wb, layout_t layout);
 WBlock * layout_inline (WBlock *wb);
+WBlock * wblock_width_auto (WBlock *wb);
 
 WBlock * wblock_empty (void);
 WBlock * set_margin (WBlock *wb, int left, int top, int right, int bottom);
@@ -215,6 +224,7 @@ void default_calcpos_data (WBlockMain *wbm);
 #include "wblock-label.h"
 #include "wblock-button.h"
 #include "wblock-input.h"
+#include "wblock-select.h"
 
 
 #endif //__block_widget_h__

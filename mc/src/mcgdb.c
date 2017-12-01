@@ -743,5 +743,13 @@ mcgdb_src_dlg(void) {
   return TRUE;
 }
 
-
+thread_entry_t *
+get_thread_by_global_num (int global_num) {
+  for (GList *l=thread_list;l;l=l->next) {
+    thread_entry_t *t = (thread_entry_t *)l->data;
+    if (t->global_num==global_num)
+      return t;
+  }
+  return NULL;
+}
 

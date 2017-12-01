@@ -18,21 +18,11 @@ typedef struct BPWidget {
   gboolean redraw;
 } BPWidget;
 
-static void calcpos (WBlock *wb, gpointer data, int *y, int *x, int *lines, int *cols);
 static BPWidget * bpw_new (void);
 static void bpw_free (BPWidget *bpw);
 static bp_pair_t * bpw_add_bp (BPWidget *bpw, mcgdb_bp *bp);
 static void bpw_apply_changes (BPWidget *bpw);
 
-static void
-calcpos (WBlock *wb, gpointer data, int *y, int *x, int *lines, int *cols) {
-  (void) wb;
-  (void) data;
-  *y=5;
-  *x=9;
-  *lines=MAX (3,MIN (20,LINES-7));
-  *cols=40;
-}
 
 static BPWidget *
 bpw_new (void) {
@@ -56,6 +46,8 @@ bpw_delete_all (WBlock *wb, gpointer data) {
   }
   wblock_button_ok (wb, data);
 }
+
+
 
 static WBlock *
 buttons_widget (BPWidget *bpw) {
@@ -189,6 +181,75 @@ bpw_add_bp (BPWidget *bpw, mcgdb_bp *bp) {
   return bp_pair;
 }
 
+
+
+static WBlock *
+thread_widget_new (thread_entry_t *t) {
+  WBlock *wb = wblock_empty ();
+  wblock_add_widget (wb,
+    layout_inline (wblock_label_new (
+      g_strdup_printf ("#%d", t->global_num), FALSE
+  )));
+  wblock_add_widget (wb, wblock_nspace (1));
+  /*
+  wblock_add_widget (wb,
+    layout_inline (wblock_label_new (
+      g_strdup (t->name), FALSE
+  )));
+  */
+  wblock_add_widget (wb,
+    layout_inline (wblock_label_new (
+      g_strdup_printf ("%s pid=%d tid=%d lwp=%d", t->name, t->pid, t->tid, t->lwp), FALSE
+  )));
+  return wb;
+}
+
+
+static GList *
+get_setect_options_for_threads (int initial_id, gboolean add_none) {
+  GList *options = NULL;
+
+  if (add_none) {
+    //WBlock *wb_none = wblock_width_auto (wblock_frame_new (NULL));
+    //wblock_add_widget (wb_none,wblock_label_new (g_strdup ("No thread"), FALSE));
+    WBlock *wb_none = wblock_label_new (g_strdup ("#0 No thread"), FALSE);
+    options = g_list_append (options,select_option_new (-1, wb_none, -1));
+  }
+
+  for (GList *tl=thread_list;tl;tl=tl->next) {
+    gboolean selected;
+    //WBlock *row = wblock_frame_new (NULL);
+    WBlock *row = wblock_empty ();
+    thread_entry_t *t = (thread_entry_t *)tl->data;
+    wblock_add_widget (row, thread_widget_new (t));
+    selected = t->global_num==initial_id;
+    if (selected) {
+      //wblock_frame_setcolor (row, SELECTED_THREAD_COLOR);
+    }
+    options = g_list_append (options, select_option_new (t->global_num, row, selected));
+  }
+  return options;
+}
+
+
+static WBlock *
+wblock_button_select_thread (int *global_num, gboolean add_none) {
+  thread_entry_t *t=get_thread_by_global_num (global_num[0]);
+  char *label;
+  if (t) {
+    label = g_strdup_printf ("[ #%d %s ]", t->global_num, t->name);
+  }
+  else {
+    label = g_strdup ("[No thread selected]");
+  }
+
+  return wblock_button_select_new (
+    label,
+    global_num,
+    get_setect_options_for_threads (global_num[0], add_none));
+}
+
+
 static WBlock *
 bp_widget (BPWidget *bpw, bp_pair_t *bp_pair) {
   int location_idx=1;
@@ -278,6 +339,22 @@ bp_widget (BPWidget *bpw, bp_pair_t *bp_pair) {
       strdup ("silent  "),
       &bp_tmp->silent
   ));
+
+
+  {
+    WBlock *wb_th = wblock_empty ();
+    wblock_add_widget (
+      wb_th,
+      layout_inline (wblock_label_new (
+        g_strdup ("thread: "), TRUE
+      ))
+    );
+    wblock_add_widget (
+      wb_th,
+      layout_inline (wblock_button_select_thread (&bp_tmp->thread, TRUE))
+    );
+    wblock_add_widget (widget_bp, wb_th);
+  }
 
   wblock_add_widget (widget_bp, wblock_newline ());
 

@@ -463,20 +463,22 @@ draw_string (const char *p, int *draw_lines, int *draw_cols, int y0, int x0, int
   int x_line=x0;
   int x_line_max=x0;
   int y_line=y0;
-  while (*p) {
-    if (!do_draw || IN_RECTANGLE (y_line,x_line,y,x,lines,cols)) {
-      if (do_draw) {
-        tty_gotoyx (y_line, x_line);
-        tty_print_char (*p);
+  if (p) {
+    while (*p) {
+      if (!do_draw || IN_RECTANGLE (y_line,x_line,y,x,lines,cols)) {
+        if (do_draw) {
+          tty_gotoyx (y_line, x_line);
+          tty_print_char (*p);
+        }
+        x_line++;
       }
-      x_line++;
+      if (!oneline && x_line>=x+cols) {
+        x_line_max = MAX (x_line, x_line_max);
+        x_line = x0;
+        y_line ++;
+      }
+      p++;
     }
-    if (!oneline && x_line>=x+cols) {
-      x_line_max = MAX (x_line, x_line_max);
-      x_line = x0;
-      y_line ++;
-    }
-    p++;
   }
 
 
@@ -528,6 +530,13 @@ WBlock *
 layout_inline (WBlock *wb) {
   return set_layout (wb,LAYOUT_INLINE);
 }
+
+WBlock *
+wblock_width_auto (WBlock *wb) {
+  wb->style.width_type = WIDTH_AUTO;
+  return wb;
+}
+
 
 WBlock *
 wblock_empty (void) {
@@ -672,5 +681,32 @@ calcpos_data_new () {
 
 void calcpos_data_free (CalcposData *calcpos_data) {
   g_free (calcpos_data);
+}
+
+
+
+
+void wblock_set_mouse (WBlock *wb, wblock_mouse_cb_t mouse) {
+  wb->mouse = mouse;
+}
+
+void wblock_set_key (WBlock *wb, wblock_key_cb_t key) {
+  wb->key = key;
+}
+
+void wblock_set_destroy (WBlock *wb, wblock_destroy_cb_t destroy) {
+  wb->destroy = destroy;
+}
+
+void wblock_set_draw (WBlock *wb, wblock_draw_cb_t draw) {
+  wb->draw = draw;
+}
+
+void wblock_set_save (WBlock *wb, wblock_save_cb_t save) {
+  wb->save = save;
+}
+
+void wblock_set_wdata (WBlock *wb, gpointer wdata) {
+  wb->wdata = wdata;
 }
 

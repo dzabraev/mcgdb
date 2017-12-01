@@ -9,6 +9,7 @@ void
 wblock_frame_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw) {
   WBlockFrameData *data = WBLOCK_FRAME_DATA (wb->wdata);
   const char *label = data->label;
+  size_t label_len = label ? strlen(label) : 0;
   int lines0 = wb->lines,
       cols0 = wb->cols;
 
@@ -52,7 +53,7 @@ wblock_frame_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols
 
       if (draw_bound_UP) {
         int draw_cols=0;
-        int xc = x0+cols0/2-strlen(label)/2;
+        int xc = x0+cols0/2 - label_len/2;
         tty_draw_hline (y0, xl, ACS_HLINE, xr-xl);
         draw_string_oneline (label, &draw_cols, y0, xc, y, x, lines, cols, do_draw);
       }
@@ -83,7 +84,7 @@ wblock_frame_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols
   if (!do_draw) {
     wb->x-=1;
     wb->y-=1;
-    wb->cols = MAX (MAX (wb->cols,3), label ? strlen(label):0);
+    wb->cols = MAX (MAX (wb->cols,3), label_len);
     wb->cols+=2;
     wb->lines = MAX (wb->lines, 0);
     wb->lines+=2;
