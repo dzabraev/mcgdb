@@ -18,5 +18,5 @@ void
 wblock_frame_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw);
 
 WBlock * wblock_frame_new (char *label);
-
+void wblock_frame_setcolor (WBlock *wb, int color);
 #endif

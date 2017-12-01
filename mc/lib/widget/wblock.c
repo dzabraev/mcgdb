@@ -18,15 +18,6 @@
 #define WBM_REDRAW(wbm) wbm_wblock_draw (wbm,TRUE);
 
 
-typedef struct WBlockMain {
-  Widget w;
-  WBlock *wb;
-  pos_callback_t calcpos;
-  int offset;
-  WBlock *selected_widget;
-  gboolean redraw;
-  gboolean with_frame;
-} WBlockMain;
 
 static void
 wbm_wblock_draw (WBlockMain *wbm, gboolean do_draw) {
@@ -95,7 +86,7 @@ wbm_wblock_draw (WBlockMain *wbm, gboolean do_draw) {
   }
 }
 
-static WBlockMain * wbm_new (WBlock *wb, pos_callback_t calcpos, gboolean with_frame);
+static WBlockMain * wbm_new (WBlock *wb, pos_callback_t calcpos, gpointer data, gboolean with_frame);
 static void wbm_cleanup (WBlockMain * wbm);
 static gboolean wbm_exists_redraw (WBlockMain * wbm);
 
@@ -227,12 +218,7 @@ wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
     case MSG_RESIZE:
     case MSG_INIT:
       {
-        int y,x,lines,cols;
-        WBMAIN(w)->calcpos(&y,&x,&lines,&cols);
-        w->x=x;
-        w->y=y;
-        w->lines=lines;
-        w->cols=cols;
+        wbm->calcpos(wbm);
       }
       WBM_UPDATE_COORDS (wbm);
       wbm_normalize_offset (wbm);
@@ -296,12 +282,14 @@ wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
 }
 
 static WBlockMain *
-wbm_new (WBlock *wb, pos_callback_t calcpos, gboolean with_frame) {
+wbm_new (WBlock *wb, pos_callback_t calcpos, gpointer calcpos_data, gboolean with_frame) {
   WBlockMain *wbm = g_new0 (WBlockMain, 1);
   Widget *w;
 
   wbm->wb = wb;
-  wbm->calcpos = calcpos;
+  wbm->calcpos = calcpos ? calcpos : default_calcpos_data;
+  message_assert (calcpos || calcpos_data);
+  wbm->calcpos_data = calcpos_data;
   wbm->with_frame = with_frame;
   w = WIDGET(wbm);
   widget_init (w, 1, 1, 1, 1, wbm_callback, wbm_mouse_callback);
@@ -578,9 +566,9 @@ wblock_save (WBlock *wb) {
 
 
 int
-wblock_run (WBlock * wb, pos_callback_t calcpos) {
+wblock_run (WBlock * wb, pos_callback_t calcpos, gpointer calcpos_data) {
   WDialog *dlg;
-  WBlockMain * wbm = wbm_new (wb, calcpos, TRUE);
+  WBlockMain * wbm = wbm_new (wb, calcpos, calcpos_data, TRUE);
   int return_val;
   dlg = dlg_create (TRUE, 0, 0, 0, 0, WPOS_KEEP_DEFAULT, FALSE, NULL, wblock_dlg_default_callback,
                     NULL, "[wblock]", NULL);
@@ -638,5 +626,51 @@ get_utf (const gchar * str, int *char_length)
 WBlock *
 wblock_empty_new (void) {
   return wblock_new (NULL,NULL,NULL,NULL,NULL,NULL);
+}
+
+void
+default_calcpos_data (WBlockMain *wbm) {
+  Widget *w = WIDGET (wbm);
+  CalcposData *data = (CalcposData *)wbm->calcpos_data;
+  int LINES0 = LINES - 4;
+  int y0     = data->y>0     ? data->y     : 1;
+  int x0     = data->x>0     ? data->x     : 1;
+  int lines0 = data->lines>0 ? data->lines : LINES0;
+  int cols0  = data->cols>0  ? data->cols  : COLS;
+  int add_y  = wbm->with_frame ? 2 : 0;
+  int add_x  = wbm->with_frame ? 2 : 0;
+
+  w->y     = y0;
+  w->x     = x0;
+  w->lines = lines0;
+  w->cols  = cols0;
+
+  if (data->lines<=0 || data->cols<=0) {
+    wbm_wblock_draw (wbm, FALSE); /*recalculate coordinates*/
+  }
+
+  if (data->closest_to_y) {
+    int len = w->y + wbm->wb->lines + add_y - LINES0;
+    if (len > 0) {
+      w->y = MAX (2, w->y - len);
+    }
+    w->lines = MIN (LINES0, wbm->wb->lines + add_y);
+  }
+  else {
+    w->lines = data->lines>0 ? data->lines : MIN (LINES0 - w->y, wbm->wb->lines + add_y);
+  }
+
+  w->cols  = data->cols>0  ? data->cols  : MIN (COLS  - w->x, wbm->wb->cols  + add_x);
+
+}
+
+CalcposData *
+calcpos_data_new () {
+  CalcposData *calcpos_data = g_new0 (CalcposData, 1);
+  return calcpos_data;
+}
+
+void calcpos_data_free (CalcposData *calcpos_data) {
+  g_free (calcpos_data);
 }
 

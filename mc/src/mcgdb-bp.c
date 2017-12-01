@@ -10,6 +10,7 @@
 #include "src/mcgdb-bp.h"
 #include "src/mcgdb-bp-widget.h"
 
+#include "src/editor/edit-impl.h" // LINE_STATE_WIDTH
 
 GList * mcgdb_bps = NULL;
 static int id_counter=1;
@@ -256,27 +257,32 @@ count_bps (const char *filename, long line) {
 }
 
 
+void
+mcgdb_create_bp (const char *filename, long line) {
+  mcgdb_bp *bp = mcgdb_bp_new ();
+  mcgdb_bp_add_location (bp,filename,line);
+  bp->create_loc = g_strdup_printf ("%s:%lu",filename,line);
+  insert_bp_to_list (bp);
+  send_pkg_update_bp (bp);
+}
+
 gboolean
-mcgdb_bp_process_click (const char *filename, long line, gboolean open_menu) {
+mcgdb_bp_process_click (const char *filename, long line, int click_y, int click_x) {
   int nbps;
   gboolean need_redraw=FALSE;
+  gboolean open_menu = click_x<LINE_STATE_WIDTH;
   if (!filename)
     return need_redraw;
   nbps = count_bps (filename,line);
   if (nbps>0) {
-    need_redraw=breakpoints_edit_dialog (filename,line);
+    need_redraw=breakpoints_edit_dialog (filename, line, click_y, click_x);
   }
   else {
     if (open_menu) {
-      need_redraw=breakpoints_edit_dialog (filename,line);
+      need_redraw=breakpoints_edit_dialog (filename, line, click_y, click_x);
     }
     else {
-      mcgdb_bp *bp = mcgdb_bp_new ();
-      mcgdb_bp_add_location (bp,filename,line);
-      asprintf(&bp->create_loc,"%s:%lu",filename,line);
-      message_assert (bp->create_loc!=NULL);
-      insert_bp_to_list (bp);
-      send_pkg_update_bp (bp);
+      mcgdb_create_bp (filename, line);
       need_redraw=TRUE;
     }
   }

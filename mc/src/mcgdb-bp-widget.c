@@ -3,7 +3,9 @@
 #include "mcgdb-bp-widget.h"
 #include "mcgdb.h"
 #include "mcgdb-bp.h"
-#include "lib/tty/tty.h"        /* LINES */
+#include "lib/tty/tty.h"          /* LINES, COLS */
+#include "src/editor/edit-impl.h" /* LINE_STATE_WIDTH*/
+
 
 typedef struct bp_pair {
   mcgdb_bp *orig;
@@ -16,14 +18,16 @@ typedef struct BPWidget {
   gboolean redraw;
 } BPWidget;
 
-static void calcpos (int *y, int *x, int *lines, int *cols);
+static void calcpos (WBlock *wb, gpointer data, int *y, int *x, int *lines, int *cols);
 static BPWidget * bpw_new (void);
 static void bpw_free (BPWidget *bpw);
 static bp_pair_t * bpw_add_bp (BPWidget *bpw, mcgdb_bp *bp);
 static void bpw_apply_changes (BPWidget *bpw);
 
 static void
-calcpos (int *y, int *x, int *lines, int *cols) {
+calcpos (WBlock *wb, gpointer data, int *y, int *x, int *lines, int *cols) {
+  (void) wb;
+  (void) data;
   *y=5;
   *x=9;
   *lines=MAX (3,MIN (20,LINES-7));
@@ -363,11 +367,13 @@ bpw_apply_changes (BPWidget *bpw) {
 
 
 gboolean
-breakpoints_edit_dialog (const char *filename, long line) {
+breakpoints_edit_dialog (const char *filename, long line, int click_y, int click_x) {
   BPWidget *bpw = bpw_new ();
   WBlock    *widget_bps = wblock_empty ();
   gboolean redraw;
   int return_val;
+
+  (void) click_x;
 
   for ( GList *l=mcgdb_bp_find_bp_with_location (mcgdb_bps, filename, line);
         l!=0;
@@ -384,7 +390,14 @@ breakpoints_edit_dialog (const char *filename, long line) {
   wblock_add_widget (WBLOCK (bpw), bpw_epilog (bpw));
 
   disable_gdb_events = TRUE;
-  return_val = wblock_run (WBLOCK (bpw), calcpos);
+  {
+    CalcposData *calcpos_data = calcpos_data_new ();
+    calcpos_data->y = click_y;
+    calcpos_data->x = LINE_STATE_WIDTH + 2;
+    calcpos_data->closest_to_y = TRUE;
+    calcpos_data->cols = 40;
+    return_val = wblock_run (WBLOCK (bpw), NULL, calcpos_data);
+  }
   disable_gdb_events = FALSE;
 
   if (return_val!=B_CANCEL)

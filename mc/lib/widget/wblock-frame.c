@@ -90,6 +90,11 @@ wblock_frame_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols
   }
 }
 
+void wblock_frame_setcolor(WBlock *wb, int color) {
+  WBlockFrameData *data = WBLOCK_FRAME_DATA (wb->wdata);
+  data->color = color;
+}
+
 
 WBlock *
 wblock_frame_new (char *label) {

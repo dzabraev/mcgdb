@@ -60,7 +60,10 @@ mcgdb_bp*       mcgdb_bp_get    (const char *filename, long line); /*return mcgd
 int     mcgdb_bp_color  (const char *filename, long line); /*return color for drawing*/
 
 gboolean
-mcgdb_bp_process_click(const char *filename, long line, gboolean ask_cond);
+mcgdb_bp_process_click(const char *filename, long line, int click_y, int click_x);
+
+void mcgdb_create_bp (const char *filename, long line);
+
 
 void mcgdb_bp_insert (const char * filename, long line, bpwait wait, char * condition, gboolean disabled);
 void mcgdb_bp_toggle_disable (const char * filename, long line);

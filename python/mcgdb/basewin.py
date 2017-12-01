@@ -6,7 +6,7 @@ import gdb
 
 import mcgdb
 from mcgdb.common import  pkgsend,pkgrecv,gdb_print,exec_cmd_in_gdb,gdb_stopped,\
-                          error,get_prompt,debug,is_main_thread,exec_main,\
+                          error,get_prompt,debug,is_main_thread,exec_main, \
                           mcgdbBaseException, TABID_TMP, gdbprint, VALGRIND, COREDUMP, USETERM, WAITGDB
 
 
@@ -80,21 +80,9 @@ class CommunicationMixin(object):
   def send_pkg_callback(self,*args,**kwargs):
     return self.send(self.pkg_callback(*args,**kwargs))
 
-class PkgMeta(ABCMeta):
-  def __new__(meta, name, bases, dct):
-    for name,val in dct.items():
-      if name.startswith('pkg_'):
-        fn = dct.pop(name)
-        dct['send_'+name] = lambda self,*args,**kwargs : self.send(fn(self,*args,**kwargs))
-    return super(PkgMeta, meta).__new__(meta,name,bases,dct)
+class CommonPackages(CommunicationMixin):
+  def send_pkg_update_threads (self,*args,**kwargs): self.send(self.pkg_update_threads(*args,**kwargs))
 
-class TablePackages(CommunicationMixin):
-  __metaclass__ = PkgMeta
-
-  @abstractproperty
-  def subentity_name(self): pass
-
-  @exec_main
   def get_thread_info(self):
     threads=[]
     for thread in gdb.selected_inferior().threads():
@@ -111,12 +99,31 @@ class TablePackages(CommunicationMixin):
       })
     selected = gdb.selected_thread()
     return {
-      'thread_list' : get_thread_list(),
+      'thread_list' : threads,
       'selected_thread': selected.global_num if selected is not None else -1,
     }
 
   def pkg_update_threads(self):
     return {'cmd':'update_threads', 'info':self.get_thread_info()}
+
+
+class TablePackages(CommunicationMixin):
+  __metaclass__ = ABCMeta
+
+  @abstractproperty
+  def subentity_name(self): pass
+
+  def send_pkg_exemplar_set     (self,*args,**kwargs): self.send(self.pkg_exemplar_set      (*args,**kwargs))
+  def send_pkg_exemplar_create  (self,*args,**kwargs): self.send(self.pkg_exemplar_create   (*args,**kwargs))
+  def send_pkg_select_node      (self,*args,**kwargs): self.send(self.pkg_select_node       (*args,**kwargs))
+  def send_pkg_do_row_visible   (self,*args,**kwargs): self.send(self.pkg_do_row_visible    (*args,**kwargs))
+  def send_pkg_update_nodes     (self,*args,**kwargs): self.send(self.pkg_update_nodes      (*args,**kwargs))
+  def send_pkg_drop_nodes       (self,*args,**kwargs): self.send(self.pkg_drop_nodes        (*args,**kwargs))
+  def send_pkg_drop_rows        (self,*args,**kwargs): self.send(self.pkg_drop_rows         (*args,**kwargs))
+  def send_pkg_insert_rows      (self,*args,**kwargs): self.send(self.pkg_insert_rows       (*args,**kwargs))
+  def send_pkg_transaction      (self,*args,**kwargs): self.send(self.pkg_transaction       (*args,**kwargs))
+  def send_pkg_message_in_table (self,*args,**kwargs): self.send(self.pkg_message_in_table  (*args,**kwargs))
+
 
 
   def pkg_exemplar_set(self,id):
@@ -188,7 +195,7 @@ class TablePackages(CommunicationMixin):
 
 
 
-class BaseWin(CommunicationMixin,StorageId):
+class BaseWin(CommonPackages,StorageId):
   __metaclass__ = ABCMeta
 
   def __init__(self, **kwargs):

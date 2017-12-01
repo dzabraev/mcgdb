@@ -10,9 +10,9 @@
 #define WBLOCK_COLOR_NORMAL BUTTONBAR_BUTTON_COLOR
 
 typedef struct WBlock WBlock;
+typedef struct WBlockMain WBlockMain;
 
-
-typedef void (*pos_callback_t) (int *y, int *x, int *lines, int *cols);
+typedef void (*pos_callback_t) (WBlockMain *wbm);
 
 typedef enum {
   ALIGN_LEFT=0,
@@ -52,7 +52,8 @@ typedef void (*wblock_save_cb_t) (WBlock *wb);
 #define WBLOCK_DRAW(wb,y0,x0,y,x,lines,cols,do_draw) \
   wb->draw(wb,y0,x0,y,x,lines,cols,do_draw)
 
-#define WBLOCK_REDRAW(wb) wb->draw(wb,wb->y,wb->x,wb->y,wb->x,wb->lines,wb->cols,TRUE)
+#define WBLOCK_REDRAW(wb)        wb->draw(wb,wb->y,wb->x,wb->y,wb->x,wb->lines,wb->cols,TRUE)
+#define WBLOCK_UPDATE_COORDS(wb) wb->draw(wb,wb->y,wb->x,wb->y,wb->x,wb->lines,wb->cols,FALSE)
 #define WBLOCK_KEY(wb,parm) wb->key(wb,parm)
 #define WBLOCK_MOUSE(wb,msg,event) (wb)->mouse(wb,msg,event)
 #define WBLOCK_DESTROY(wb) (wb)->destroy(wb)
@@ -63,7 +64,16 @@ typedef void (*wblock_save_cb_t) (WBlock *wb);
 
 #define YX_IN_WIDGET(w,_y,_x) IN_RECTANGLE(_y,_x,(w)->y,(w)->x,(w)->lines,(w)->cols)
 
-typedef struct WBlockMain WBlockMain;
+typedef struct WBlockMain {
+  Widget w;
+  WBlock *wb;
+  pos_callback_t calcpos;
+  gpointer calcpos_data;
+  int offset;
+  WBlock *selected_widget;
+  gboolean redraw;
+  gboolean with_frame;
+} WBlockMain;
 
 typedef struct WBlock {
   WBlockMain *wbm;
@@ -102,7 +112,7 @@ typedef struct WBlock {
 } WBlock;
 
 int
-wblock_run (WBlock * wb, pos_callback_t calcpos);
+wblock_run (WBlock * wb, pos_callback_t calcpos, gpointer calcpos_data);
 
 WBlock *wblock_new (
   wblock_mouse_cb_t   mouse,
@@ -186,6 +196,19 @@ void wblock_save (WBlock *wb);
 void wblock_shift_yx (WBlock *wb, int shift_y, int shift_x);
 
 int get_utf (const gchar * str, int *char_length);
+
+typedef struct {
+  int y;
+  int x;
+  int lines;
+  int cols;
+  gboolean closest_to_y;
+} CalcposData;
+
+CalcposData * calcpos_data_new (void);
+void calcpos_data_free (CalcposData *calcpos_data);
+void default_calcpos_data (WBlockMain *wbm);
+
 
 #include "wblock-checkbox.h"
 #include "wblock-frame.h"

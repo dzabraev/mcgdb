@@ -9,6 +9,6 @@
 
 
 gboolean
-breakpoints_edit_dialog (const char *filename, long line);
+breakpoints_edit_dialog (const char *filename, long line, int click_y, int click_x);
 
 #endif
