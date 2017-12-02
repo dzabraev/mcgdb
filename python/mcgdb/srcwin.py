@@ -35,7 +35,7 @@ class SrcWin(BaseWin):
 
   def gdbevt_stop(self,pkg):
     self.update_current_frame()
-    #self.update_breakpoints()
+    self.send_pkg_update_threads()
 
   def gdbevt_new_objfile(self,pkg):
     self.update_current_frame()

@@ -71,5 +71,6 @@ wblock_checkbox_labeled_new (char *label, gboolean *flag) {
   checklabel->style.layout=LAYOUT_INLINE;
   wblock_add_widget (parent, checklabel);
   wblock_add_widget (parent, checkbox);
+  wblock_set_color (checkbox, tty_try_alloc_color_pair2 ("black", "white", "bold", FALSE));
   return parent;
 }

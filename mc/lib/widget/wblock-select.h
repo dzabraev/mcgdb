@@ -20,12 +20,16 @@ typedef struct {
   GList *options;
 } WblockButtonSelectData;
 
-select_option_t * select_option_new (int id, WBlock *wb, gboolean selected);
+select_option_t * select_option_new (int id, WBlock *wb, gboolean selected, char *short_name);
+void select_option_destroy (select_option_t *option);
+select_option_t *get_option_by_id (GList *options, int id);
+
 gboolean select_option_mouse (WBlock *wb, mouse_msg_t msg, mouse_event_t * event);
 int dialog_wblock_select (GList *options, int y, int x);
 void wblock_button_select_push (WBlock *wb, gpointer data);
-WBlock * wblock_button_select_new (char *label, int *option_id, GList *options);
+void wblock_button_select_user_data_free (gpointer user_data);
 
+WBlock * wblock_button_select_new (int *option_id, GList *options);
 
 
 #endif

@@ -278,13 +278,8 @@ mcgdb_bp_process_click (const char *filename, long line, int click_y, int click_
     need_redraw=breakpoints_edit_dialog (filename, line, click_y, click_x);
   }
   else {
-    if (open_menu) {
-      need_redraw=breakpoints_edit_dialog (filename, line, click_y, click_x);
-    }
-    else {
-      mcgdb_create_bp (filename, line);
-      need_redraw=TRUE;
-    }
+    mcgdb_create_bp (filename, line);
+    need_redraw=TRUE;
   }
   return need_redraw;
 }

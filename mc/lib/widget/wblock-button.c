@@ -58,14 +58,14 @@ wblock_button_cancel (WBlock *wb, gpointer data) {
 
 void
 wblock_button_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw) {
-  const char *label = WBLOCK_BUTTON_DATA (wb->wdata)->label;
+  WBlockButtonData *data = WBLOCK_BUTTON_DATA (wb->wdata);
   int draw_cols=0;
   if (!do_draw) {
     wb->lines=1;
     wb->cols=0;
   }
   draw_cols=0;
-  draw_string_oneline (label, &draw_cols,y0,x0+draw_cols,y,x,lines,cols,do_draw);
+  draw_string_oneline (data->label, &draw_cols,y0,x0+draw_cols,y,x,lines,cols,do_draw);
   if (!do_draw) {
     wb->cols+=draw_cols;
   }
@@ -73,24 +73,28 @@ wblock_button_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int col
 
 void
 wblock_button_setlabel (WBlock *wb, char *label) {
-  WBlockButtonData *data = WBLOCK_BUTTON_DATA (wb->wdata)->label;
+  WBlockButtonData *data = WBLOCK_BUTTON_DATA (wb->wdata);
   g_free (data->label);
   data->label = label;
   wb->redraw = TRUE;
 }
 
+
 WBlock *
 wblock_button_new (char *label, wblock_push_t push, gpointer user_data, GDestroyNotify destroy) {
+  WBlock *wb;
   WBlockButtonData *data = g_new0 (WBlockButtonData, 1);
   data->label = label;
   data->push = push;
   data->data = user_data;
   data->destroy = destroy;
-  return wblock_new (
+  wb = wblock_new (
     wblock_button_mouse,
     wblock_button_key,
     wblock_button_destroy,
     wblock_button_draw,
     NULL,
     data);
+  wblock_set_color (wb, WBLOCK_BUTTON_COLOR);
+  return wb;
 }

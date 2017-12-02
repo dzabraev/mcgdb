@@ -52,13 +52,16 @@ bpw_delete_all (WBlock *wb, gpointer data) {
 static WBlock *
 buttons_widget (BPWidget *bpw) {
   WBlock *top = wblock_empty ();
-
-  wblock_add_widget (top, layout_inline (wblock_button_new (
-    strdup ("[DeleteAll]"),
-    bpw_delete_all,
-    bpw->bps,
-    NULL
-  )));
+  {
+    WBlock *wb = layout_inline (
+      wblock_button_new (
+        strdup ("[DeleteAll]"),
+        bpw_delete_all,
+        bpw->bps,
+        NULL
+    ));
+    wblock_add_widget (top, wb);
+  }
 
   wblock_add_widget (top, wblock_nspace (1));
 
@@ -129,7 +132,6 @@ bpw_button_delete_cb (WBlock *wb, gpointer gdata) {
   ButtonDeleteData *data = (ButtonDeleteData *)gdata;
   mcgdb_bp *orig = data->bp_pair->orig,
            *temp = data->bp_pair->temp;
-  WBlockFrameData *frame_data;
   int new_frame_color;
   if (orig!=NULL) {
     if (temp->wait_status!=BP_WAIT_DELETE) {
@@ -145,7 +147,6 @@ bpw_button_delete_cb (WBlock *wb, gpointer gdata) {
     }
     frame_parent = data->parent; /*frame around breakpoint widget*/
     message_assert (frame_parent!=NULL);
-    frame_data = WBLOCK_FRAME_DATA (frame_parent->wdata);
     switch (temp->wait_status) {
       case BP_WAIT_DELETE:
         new_frame_color = COLOR_BP_FRAME_WAIT_DELETE;
@@ -157,10 +158,7 @@ bpw_button_delete_cb (WBlock *wb, gpointer gdata) {
         new_frame_color = WBLOCK_FRAME_COLOR_NORMAL;
         break;
     }
-    if (frame_data->color != new_frame_color) {
-      frame_data->color = new_frame_color;
-      wb->parent->redraw = TRUE;
-    }
+    wblock_set_color (wb, new_frame_color);
   }
   else {
     if (wb->parent) {
@@ -210,23 +208,22 @@ get_setect_options_for_threads (int initial_id, gboolean add_none) {
   GList *options = NULL;
 
   if (add_none) {
-    //WBlock *wb_none = wblock_width_auto (wblock_frame_new (NULL));
-    //wblock_add_widget (wb_none,wblock_label_new (g_strdup ("No thread"), FALSE));
     WBlock *wb_none = wblock_label_new (g_strdup ("#0 No thread"), FALSE);
-    options = g_list_append (options,select_option_new (-1, wb_none, -1));
+    options = g_list_append (options,select_option_new (-1, wb_none, -1, g_strdup ("[#0 No thread]")));
   }
 
   for (GList *tl=thread_list;tl;tl=tl->next) {
     gboolean selected;
-    //WBlock *row = wblock_frame_new (NULL);
     WBlock *row = wblock_empty ();
+    char *short_name;
     thread_entry_t *t = (thread_entry_t *)tl->data;
     wblock_add_widget (row, thread_widget_new (t));
     selected = t->global_num==initial_id;
+    short_name = g_strdup_printf ("[#%d %s]",t->global_num, t->name);
     if (selected) {
       //wblock_frame_setcolor (row, SELECTED_THREAD_COLOR);
     }
-    options = g_list_append (options, select_option_new (t->global_num, row, selected));
+    options = g_list_append (options, select_option_new (t->global_num, row, selected, short_name));
   }
   return options;
 }
@@ -234,19 +231,10 @@ get_setect_options_for_threads (int initial_id, gboolean add_none) {
 
 static WBlock *
 wblock_button_select_thread (int *global_num, gboolean add_none) {
-  thread_entry_t *t=get_thread_by_global_num (global_num[0]);
-  char *label;
-  if (t) {
-    label = g_strdup_printf ("[ #%d %s ]", t->global_num, t->name);
-  }
-  else {
-    label = g_strdup ("[No thread selected]");
-  }
-
   return wblock_button_select_new (
-    label,
     global_num,
-    get_setect_options_for_threads (global_num[0], add_none));
+    get_setect_options_for_threads 
+      (global_num[0], add_none));
 }
 
 
@@ -283,7 +271,7 @@ bp_widget (BPWidget *bpw, bp_pair_t *bp_pair) {
   wblock_add_widget (
     widget_bp,
     wblock_label_new (
-      g_strdup_printf ("hit count: %d", bp_tmp->hit_count), TRUE
+      g_strdup_printf ("Hit count: %d", bp_tmp->hit_count), TRUE
     )
   );
 
@@ -312,7 +300,7 @@ bp_widget (BPWidget *bpw, bp_pair_t *bp_pair) {
   wblock_add_widget (
     widget_ign_count,
     layout_inline (wblock_label_new (
-      g_strdup ("ignore count: "), TRUE
+      g_strdup ("Ignore count "), TRUE
     ))
   );
 
@@ -329,14 +317,14 @@ bp_widget (BPWidget *bpw, bp_pair_t *bp_pair) {
   wblock_add_widget (
     widget_bp,
     wblock_checkbox_labeled_new (
-      strdup ("enabled "),
+      strdup ("Enabled "),
       &bp_tmp->enabled
   ));
 
   wblock_add_widget (
     widget_bp,
     wblock_checkbox_labeled_new (
-      strdup ("silent  "),
+      strdup ("Silent  "),
       &bp_tmp->silent
   ));
 
@@ -346,7 +334,7 @@ bp_widget (BPWidget *bpw, bp_pair_t *bp_pair) {
     wblock_add_widget (
       wb_th,
       layout_inline (wblock_label_new (
-        g_strdup ("thread: "), TRUE
+        g_strdup ("Thread  "), TRUE
       ))
     );
     wblock_add_widget (
@@ -361,7 +349,7 @@ bp_widget (BPWidget *bpw, bp_pair_t *bp_pair) {
   wblock_add_widget (
     widget_bp,
     wblock_label_new (
-      g_strdup ("condition:"), TRUE
+      g_strdup ("Condition"), TRUE
     )
   );
 
@@ -376,16 +364,17 @@ bp_widget (BPWidget *bpw, bp_pair_t *bp_pair) {
   wblock_add_widget (
     widget_bp,
     wblock_label_new (
-      g_strdup ("commands:"), TRUE
+      g_strdup ("Commands (read-only)"), TRUE
     )
   );
 
-  wblock_add_widget (
-    widget_bp,
-    wblock_input_new (
+  {
+    WBlock *wb = wblock_input_new (
       &bp_tmp->commands, 2, 5, -1, -1
-  ));
-
+    );
+    wblock_input_set_readonly (wb, TRUE);
+    wblock_add_widget (widget_bp,wb);
+  }
 
 
   return top_widget;

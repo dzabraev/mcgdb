@@ -5,6 +5,7 @@ struct WBlock;
 
 typedef void (*wblock_push_t) (WBlock *wb, gpointer data);
 
+#define WBLOCK_BUTTON_COLOR tty_try_alloc_color_pair2 ("black", "white", "bold", FALSE)
 
 #define WBLOCK_BUTTON_DATA(p) ((WBlockButtonData *)(p))
 
@@ -23,6 +24,7 @@ gboolean wblock_button_key (WBlock *wb, int parm);
 void wblock_button_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw);
 WBlock *wblock_button_new (char *label, wblock_push_t push, gpointer data, GDestroyNotify destroy);
 void wblock_button_setlabel (WBlock *wb, char *label);
+
 
 
 void wblock_button_code     (WBlock *wb, int code);

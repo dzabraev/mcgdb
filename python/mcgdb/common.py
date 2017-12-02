@@ -579,9 +579,9 @@ class BpModif(object):
         thread=None
       if bp.thread != thread:
         bp.thread=thread
-      if condition is not None and bp.condition!=condition:
+      if bp.condition!=condition:
         bp.condition=condition
-      if commands is not None and bp.commands!=commands:
+      if bp.commands!=commands:
         gdb.write('WARNING: parameter commands is not supported by front-end.\nYou can set him manually:\ncommands {number}\n{commands}\n'.format(
           number=bp.number,commands=commands))
     self.need_update={}

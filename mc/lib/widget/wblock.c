@@ -353,7 +353,7 @@ wblock_dfl_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, 
       c->cols=-1;
     }
     else {
-      tty_setcolor (WBLOCK_COLOR_NORMAL);
+      tty_setcolor (c->style.color);
     }
 
     WBLOCK_DRAW (c, c->y, c->x, y, x, lines, cols, do_draw);
@@ -435,6 +435,7 @@ wblock_init (
   wb->wdata     = wdata;
   wb->cursor_y = -1;
   wb->cursor_x = -1;
+  wblock_set_color (wb, WBLOCK_COLOR_NORMAL);
 }
 
 WBlock *
@@ -710,3 +711,36 @@ void wblock_set_wdata (WBlock *wb, gpointer wdata) {
   wb->wdata = wdata;
 }
 
+char *
+strstrip (char *str) {
+  char *p1,*p2;
+  size_t len;
+
+  if (!str)
+    return NULL;
+
+  len = strlen (str);
+
+  if (!len)
+    return NULL;
+
+  p1 = str;
+  p2 = p1 + len - 1;
+
+  while (p2-p1>0 && isspace (*p1)) {p1++;}
+
+  if (p2-p1==0 && isspace(*p2))
+    return NULL;
+
+  while (isspace (*p2)) {p2--;}
+
+  return g_strndup (p1, p2-p1+1);
+}
+
+void
+wblock_set_color (WBlock *wb, int color) {
+  if (wb->style.color != color) {
+    wb->style.color = color;
+    wb->redraw = TRUE;
+  }
+}

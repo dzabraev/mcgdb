@@ -76,7 +76,7 @@ wblock_button_select_push (WBlock *wb, gpointer user_data) {
   WblockButtonSelectData *data = (WblockButtonSelectData *) user_data;
   int ret = dialog_wblock_select (data->options, wb->y, wb->x+2);
   if (ret != WBLOCK_CANCEL) {
-    select_option_id *opt = get_option_by_id (options, ret);
+    select_option_t *opt = get_option_by_id (data->options, ret);
     wblock_button_setlabel (wb, g_strdup (opt->short_name));
     data->option_id[0] = ret;
   }
@@ -88,15 +88,15 @@ get_option_by_id (GList *options, int id) {
   for (GList *l=options; l;l=l->next) {
     select_option_t *option = (select_option_t *)(l->data);
     if (option->id==id)
-      return option
+      return option;
   }
-  return NULL
+  return NULL;
 }
 
 void
 wblock_button_select_user_data_free (gpointer user_data) {
   WblockButtonSelectData *data = (WblockButtonSelectData *) user_data;
-  g_list_free_full (data->options, (GNotifDestroy) select_option_destroy);
+  g_list_free_full (data->options, (GDestroyNotify) select_option_destroy);
   g_free (data);
 }
 
@@ -104,7 +104,7 @@ WBlock *
 wblock_button_select_new (int *option_id, GList *options) {
   WBlock *wb;
   WblockButtonSelectData *user_data = g_new0 (WblockButtonSelectData,1);
-  select_option_id *initial_opt = get_option_by_id (options, option_id[0]);
+  select_option_t *initial_opt = get_option_by_id (options, option_id[0]);
   user_data->option_id = option_id;
   user_data->options = options;
   wb = wblock_button_new (

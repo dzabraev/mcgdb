@@ -25,8 +25,6 @@ wblock_frame_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols
                 draw_bound_LE = x0>=x && x0<=x+lines-1 && draw_Y,
                 draw_bound_RI = x0+cols0-1>=x && x0+cols0-1<=x+cols-1 && draw_Y;
 
-    tty_setcolor (data->color);
-
     if (draw_UL) {
       tty_gotoyx (y0,x0);
       tty_print_alt_char (ACS_ULCORNER, FALSE);
@@ -91,18 +89,12 @@ wblock_frame_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols
   }
 }
 
-void wblock_frame_setcolor(WBlock *wb, int color) {
-  WBlockFrameData *data = WBLOCK_FRAME_DATA (wb->wdata);
-  data->color = color;
-}
-
 
 WBlock *
 wblock_frame_new (char *label) {
   WBlock *wb = g_new0 (WBlock, 1);
   WBlockFrameData *data = g_new (WBlockFrameData, 1);
   data->label = label;
-  data->color = WBLOCK_FRAME_COLOR_NORMAL;
   wblock_init (wb, NULL, NULL, NULL, wblock_frame_draw, NULL, data);
   wb->style.width_type = WIDTH_MAX;
   return wb;

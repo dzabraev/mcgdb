@@ -7,7 +7,7 @@
 
 //#include "lib/widget/mouse.h"
 
-#define WBLOCK_COLOR_NORMAL BUTTONBAR_BUTTON_COLOR
+#define WBLOCK_COLOR_NORMAL tty_try_alloc_color_pair2 ("black", "white", NULL, FALSE)
 
 typedef struct WBlock WBlock;
 typedef struct WBlockMain WBlockMain;
@@ -95,6 +95,7 @@ typedef struct WBlock {
     } margin;
     width_compute_t width_type;
     int width;
+    int color;
   } style;
 
   wblock_mouse_cb_t mouse;
@@ -118,6 +119,7 @@ void wblock_set_destroy (WBlock *wb, wblock_destroy_cb_t destroy);
 void wblock_set_draw    (WBlock *wb, wblock_draw_cb_t draw);
 void wblock_set_save    (WBlock *wb, wblock_save_cb_t save);
 void wblock_set_wdata   (WBlock *wb, gpointer wdata);
+void wblock_set_color   (WBlock *wb, int color);
 
 int
 wblock_run (WBlock * wb, pos_callback_t calcpos, gpointer calcpos_data);
@@ -218,6 +220,7 @@ CalcposData * calcpos_data_new (void);
 void calcpos_data_free (CalcposData *calcpos_data);
 void default_calcpos_data (WBlockMain *wbm);
 
+char * strstrip (char *str);
 
 #include "wblock-checkbox.h"
 #include "wblock-frame.h"

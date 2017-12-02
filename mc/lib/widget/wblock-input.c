@@ -1,4 +1,7 @@
 #include <config.h>
+
+#include <ctype.h>
+
 #include "lib/global.h"
 #include "lib/tty/tty.h"
 
@@ -408,10 +411,23 @@ wblock_input_goto_begin (WBlock *wb) {
 
 static gboolean
 wblock_input_key (WBlock *wb, int parm) {
+  WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
   int command = keybind_lookup_keymap_command (wblock_input_map, parm);
 
   if (command == CK_IgnoreKey)
     command = CK_InsertChar;
+
+  if (data->readonly) {
+    switch (command) {
+      case CK_InsertChar:
+      case CK_Enter:
+      case CK_BackSpace:
+      case CK_Delete:
+        return FALSE;
+      default:
+        break;
+    }
+  }
 
   switch (command) {
     case CK_Enter:
@@ -465,7 +481,11 @@ wblock_input_key (WBlock *wb, int parm) {
 static void
 wblock_input_save (WBlock *wb) {
   WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
+  char *tmp;
   buf_to_string (data->buf, data->result);
+  tmp = strstrip (data->result[0]);
+  g_free (data->result[0]);
+  data->result[0] = tmp;
 }
 
 static void
@@ -558,6 +578,11 @@ wblock_input_push_decr (WBlock *wb, gpointer data) {
   wblock_input_push_delta (wb, data, -1);
 }
 
+void
+wblock_input_set_readonly (WBlock *wb, gboolean ro) {
+  WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
+  data->readonly = ro;
+}
 
 
 WBlock *
