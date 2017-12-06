@@ -68,7 +68,7 @@ class CommunicationMixin(object):
     return {'cmd':'error_message','message':message}
 
   def send_error(self,message):
-    '''Вывести пользователю ошибку в граф. окне.'''
+    '''Show error message in gui win'''
     try:
       self.send(self.pkg_send_error(message))
     except:
@@ -270,6 +270,9 @@ stdout=`{stdout}`\nstderr=`{stderr}`'''.format(
   @abstractproperty
   def subentities_cls(self): pass
 
+
+  def get_key(self):
+    return id(self)
 
   @exec_main
   def init_subentities(self):

@@ -35,7 +35,9 @@ WIN_LIST    = os.environ.get('WIN_LIST',"aux src").split()
 COVERAGE    = os.environ.get('COVERAGE')
 COREDUMP    = os.environ.get('COREDUMP')
 USETERM     = os.environ.get('USETERM')
-WAITGDB	    = os.environ.get('WAITGDB')
+WAITGDB     = os.environ.get('WAITGDB')
+
+pending_errors={}
 
 def setup_logging(DEBUG):       # pragma: no cover
   global debug_messages         # pragma: no cover
@@ -497,6 +499,10 @@ def get_bp_locations(bp):
       locations.append( (filename,line) )
   return locations
 
+def touch_breakpoint(bp):
+  'generate modification event without bp modification'
+  bp.enabled = bp.enabled
+
 class BpModif(object):
   def __init__(self):
     self.need_delete=[]
@@ -525,7 +531,7 @@ class BpModif(object):
       self.need_delete.append(gdb_bpid)
       return gdb_bpid
     else:
-      return None #bp not exists
+      return None #bp does not exist
 
   def update(self,win_id,external_id,enabled=None,silent=None,
                   ignore_count=None,temporary=None,thread=None,
@@ -535,7 +541,7 @@ class BpModif(object):
     key=(win_id,external_id)
     if key in self.need_delete:
       self.need_delete.remove(key)
-    self.need_update[key] = (enabled,silent,ignore_count,temporary,thread,condition,commands,create_loc,number,after_create)
+    self.need_update[key] = (win_id,enabled,silent,ignore_count,temporary,thread,condition,commands,create_loc,number,after_create)
     if number is not None:
       self.key_to_bpid[key]=number
 
@@ -548,11 +554,11 @@ class BpModif(object):
           del self.bpid_to_bp[bpid]
     self.need_delete=[]
     for key,values in self.need_update.items():
-      enabled,silent,ignore_count,temporary,thread,condition,commands,create_loc,number,after_create = values
+      win_id,enabled,silent,ignore_count,temporary,thread,condition,commands,create_loc,number,after_create = values
       bpid = number if number is not None else self.key_to_bpid.get(key)
       if bpid is not None and bpid in self.bpid_to_bp:
         #bp exists
-        #bpid can be not None, but breakpoint may deleted
+        #bpid can't be None, but breakpoint may be deleted
         bp=self.bpid_to_bp[bpid]
       else:
         #not exists, create
@@ -580,7 +586,11 @@ class BpModif(object):
       if bp.thread != thread:
         bp.thread=thread
       if bp.condition!=condition:
-        bp.condition=condition
+        try:
+          bp.condition=condition
+        except gdb.error as e:
+          pending_errors[win_id].append(str(e))
+          touch_breakpoint(bp)
       if bp.commands!=commands:
         gdb.write('WARNING: parameter commands is not supported by front-end.\nYou can set him manually:\ncommands {number}\n{commands}\n'.format(
           number=bp.number,commands=commands))
@@ -740,6 +750,12 @@ class GEThread(object):
     if ok:
       self.fte[entity.fd]=entity
 
+  def send_pending_errors(self):
+    for entity in self.fte.values():
+      errors=pending_errors.get(entity.get_key())
+      while errors:
+        entity.send_error(errors.pop(0))
+
   def __call__(self):
     assert not self.WasCalled
     self.WasCalled=True
@@ -749,6 +765,7 @@ class GEThread(object):
     # 'exited' или 'stop'
     while True:
       if_gdbstopped_else(stopped=bpModif.process)
+      self.send_pending_errors()
       rfds=self.fte.keys()
       rfds+=self.wait_connection.keys()
       rfds.append(self.gdb_rfd)
@@ -765,8 +782,15 @@ class GEThread(object):
       for fd in ready_rfds:
         if fd in self.wait_connection.keys():
           entity=self.wait_connection.pop(fd)
-          onstop,onrun=(lambda entity:(lambda callback: (callback,lambda *args,**kwargs: exec_on_gdb_stops(callback)) )(lambda *args,**kwargs: self._process_connection(entity)))(entity)
+          onstop,onrun=(lambda entity:
+                          (lambda callback:
+                            (callback,lambda *args,**kwargs:
+                              exec_on_gdb_stops(callback)) )(lambda *args,**kwargs:
+                                self._process_connection(entity)))(entity)
+          #if gdb stopped execute process_connection at this time, else register process_connection
+          #execute when gdb will be stopped
           if_gdbstopped_else(stopped=onstop,running=onrun)
+          pending_errors[entity.get_key()] = []
           continue
         else:
           entity_key,pkg=None,None
