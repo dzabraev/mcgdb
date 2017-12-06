@@ -64,16 +64,42 @@ typedef void (*wblock_save_cb_t) (WBlock *wb);
 
 #define YX_IN_WIDGET(w,_y,_x) IN_RECTANGLE(_y,_x,(w)->y,(w)->x,(w)->lines,(w)->cols)
 
-typedef struct WBlockMain {
-  Widget w;
+typedef struct {
   WBlock *wb;
   pos_callback_t calcpos;
   gpointer calcpos_data;
+  gboolean with_frame;
   int offset;
+  GDestroyNotify free;
+  int y;
+  int x;
+  int lines;
+  int cols;
+} WbmWidgetEntry;
+
+#define WIDGET_ENTRY(l) ((WbmWidgetEntry *)(l->data))
+
+typedef struct WBlockMain {
+  Widget w;
   WBlock *selected_widget;
   gboolean redraw;
-  gboolean with_frame;
+  GList *widget_entries;
 } WBlockMain;
+
+WBlockMain *wblock_main_new (void);
+
+void wblock_main_add_widget (
+  WBlockMain *wbm,
+  WBlock *wb,
+  GDestroyNotify free,
+  pos_callback_t calcpos,
+  gpointer calcpos_data,
+  gboolean with_frame,
+);
+
+int  wblock_main_run  (WBlockMain *wbm);
+void wblock_main_free (WBlockMain *wbm);
+void wblock_main_save (WBlockMain *wbm);
 
 typedef struct WBlock {
   WBlockMain *wbm;
@@ -206,8 +232,6 @@ void wblock_save (WBlock *wb);
 
 void wblock_shift_yx (WBlock *wb, int shift_y, int shift_x);
 
-int get_utf (const gchar * str, int *char_length);
-
 typedef struct {
   int y;
   int x;
@@ -218,7 +242,7 @@ typedef struct {
 
 CalcposData * calcpos_data_new (void);
 void calcpos_data_free (CalcposData *calcpos_data);
-void default_calcpos_data (WBlockMain *wbm);
+void default_calcpos (WBlockMain *wbm);
 
 char * strstrip (char *str);
 

@@ -47,7 +47,16 @@ bpw_delete_all (WBlock *wb, gpointer data) {
   wblock_button_ok (wb, data);
 }
 
-
+static WBlock *
+bprm_widget (BPWidget *bpw) {
+  WBlock *wb = wblock_button_new (
+      strdup ("[DelAll]"),
+      bpw_delete_all,
+      bpw->bps,
+      NULL
+  ));
+  return wb;
+}
 
 static WBlock *
 buttons_widget (BPWidget *bpw) {
@@ -438,6 +447,8 @@ breakpoints_edit_dialog (const char *filename, long line, int click_y, int click
   WBlock    *widget_bps = wblock_empty ();
   gboolean redraw;
   int return_val;
+  WblockMain *wbm;
+  CalcposData *calcpos_data_bpw, *calcpos_data_bprm;
 
   (void) click_x;
 
@@ -456,21 +467,32 @@ breakpoints_edit_dialog (const char *filename, long line, int click_y, int click
   wblock_add_widget (WBLOCK (bpw), bpw_epilog (bpw));
 
   disable_gdb_events = TRUE;
-  {
-    CalcposData *calcpos_data = calcpos_data_new ();
-    calcpos_data->y = click_y;
-    calcpos_data->x = LINE_STATE_WIDTH + 2;
-    calcpos_data->closest_to_y = TRUE;
-    calcpos_data->cols = 40;
-    return_val = wblock_run (WBLOCK (bpw), NULL, calcpos_data);
-  }
+  wbm = wblock_main_new ();
+
+  calcpos_data_bpw = calcpos_data_new ();
+  calcpos_data_bpw->y = click_y;
+  calcpos_data_bpw->x = LINE_STATE_WIDTH + 2;
+  calcpos_data_bpw->closest_to_y = TRUE;
+  calcpos_data_bpw->cols = 40;
+  wblock_main_add_widget (wbm, WBLOCK (bpw), bpw_free, NULL, calcpos_data_bpw, TRUE);
+
+
+  calcpos_data_bprm = calcpos_data_new ();
+  calcpos_data_bprm->y = click_y;
+  calcpos_data_bprm->closest_to_y = FALSE;
+  calcpos_data_bprm->cols = LINE_STATE_WIDTH;
+  calcpos_data_bprm->lines = 1;
+  wblock_main_add_widget (wbm, bprm_widget (bpw), NULL, NULL, calcpos_data_bprm, TRUE);
+
+  wblock_main_run (wbm);
   disable_gdb_events = FALSE;
 
   if (return_val!=B_CANCEL)
     bpw_apply_changes (bpw);
 
   redraw = bpw->redraw;
-  bpw_free (bpw);
+
+  wblock_main_free (wbm);
 
   return redraw;
 }

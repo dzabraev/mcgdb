@@ -17,97 +17,109 @@
 
 #define WBM_REDRAW(wbm) wbm_wblock_draw (wbm,TRUE);
 
-
-
-static void
-wbm_wblock_draw (WBlockMain *wbm, gboolean do_draw) {
-  int rect_x = WIDGET(wbm)->x,
-      rect_y = WIDGET(wbm)->y,
-      rect_lines = WIDGET(wbm)->lines,
-      rect_cols  = WIDGET(wbm)->cols;
-
-  if (wbm->with_frame) {
-    rect_x++;
-    rect_y++;
-    rect_lines-=2;
-    rect_cols-=2;
-  }
-
-  if (do_draw) {
-    tty_setcolor (WBLOCK_COLOR_NORMAL);
-    if (wbm->with_frame) {
-      tty_setcolor (WBLOCK_FRAME_COLOR_NORMAL);
-
-      tty_fill_region (
-        rect_y,
-        rect_x,
-        MIN (rect_lines, wbm->wb->lines),
-        MIN (rect_cols, wbm->wb->cols),
-        ' '
-      );
-
-      tty_draw_box (
-        rect_y-1,
-        rect_x-1,
-        MIN (rect_lines, wbm->wb->lines)+2,
-        MIN (rect_cols, wbm->wb->cols)+2,
-        FALSE
-      );
-    }
-    else {
-      tty_fill_region (
-        rect_y,
-        rect_x,
-        rect_lines,
-        rect_cols,
-        ' '
-      );
-    }
-  }
-
-  WBLOCK_DRAW (
-    wbm->wb,
-    rect_y-wbm->offset, /*here block will being drawn*/
-    rect_x,             /*here block will being drawn*/
-    rect_y,
-    rect_x,
-    rect_lines,
-    rect_cols,
-    do_draw);
-
-
-  if (wbm->selected_widget && wbm->selected_widget->cursor_y!=-1 && wbm->selected_widget->cursor_x!=-1) {
-    tty_gotoyx (
-      wbm->selected_widget->y + wbm->selected_widget->cursor_y,
-      wbm->selected_widget->x + wbm->selected_widget->cursor_x);
-  }
-  else {
-    tty_gotoyx (LINES,COLS);
-  }
-}
-
-static WBlockMain * wbm_new (WBlock *wb, pos_callback_t calcpos, gpointer data, gboolean with_frame);
-static void wbm_cleanup (WBlockMain * wbm);
 static gboolean wbm_exists_redraw (WBlockMain * wbm);
 
 
-static void
-wbm_normalize_offset (WBlockMain *wbm) {
-  int widget_lines_for_wb = WIDGET(wbm)->lines + (wbm->with_frame ? -2 : 0);
-  wbm->offset = MIN(MAX(wbm->offset,0),MAX(wbm->wb->lines - widget_lines_for_wb,0));
-}
 
 static gboolean
-wbm_mouse (WBlockMain *wbm, mouse_msg_t msg, mouse_event_t * event) {
-  WBlock *c = wblock_get_widget_yx (wbm->wb, event->y, event->x); //most depth widget
+wbm_wblock_draw (WBlockMain *wbm, gboolean do_draw) {
+  gboolean redraw_dialog_stack = FALSE;
+  for (GList *l=wbm->widget_entries;l;l=l->next) {
+    WbmWidgetEntry * entry = WIDGET_ENTRY (l);
+    int rect_x     = entry->x,
+        rect_y     = entry->y,
+        rect_lines = entry->lines,
+        rect_cols  = entry->cols;
+    int saved_lines = entry->wb->lines,
+        saved_cols  = entry->wb->cols;
+
+    if (entry->with_frame) {
+      rect_x++;
+      rect_y++;
+      rect_lines-=2;
+      rect_cols-=2;
+    }
+
+    if (do_draw) {
+      tty_setcolor (WBLOCK_COLOR_NORMAL);
+      if (entry->with_frame) {
+        tty_setcolor (WBLOCK_FRAME_COLOR_NORMAL);
+
+        tty_fill_region (
+          rect_y,
+          rect_x,
+          MIN (rect_lines, entry->wb->lines),
+          MIN (rect_cols, entry->wb->cols),
+          ' '
+        );
+
+        tty_draw_box (
+          rect_y-1,
+          rect_x-1,
+          MIN (rect_lines, entry->wb->lines)+2,
+          MIN (rect_cols, entry->wb->cols)+2,
+          FALSE
+        );
+      }
+      else {
+        tty_fill_region (
+          rect_y,
+          rect_x,
+          rect_lines,
+          rect_cols,
+          ' '
+        );
+      }
+    }
+
+    WBLOCK_DRAW (
+      entry->wb,
+      rect_y-entry->offset, /*here block will being drawn*/
+      rect_x,             /*here block will being drawn*/
+      rect_y,
+      rect_x,
+      rect_lines,
+      rect_cols,
+      do_draw);
+
+
+    if (wbm->selected_widget && wbm->selected_widget->cursor_y!=-1 && wbm->selected_widget->cursor_x!=-1) {
+      tty_gotoyx (
+        wbm->selected_widget->y + wbm->selected_widget->cursor_y,
+        wbm->selected_widget->x + wbm->selected_widget->cursor_x);
+    }
+    else {
+      tty_gotoyx (LINES,COLS);
+    }
+
+    redraw_dialog_stack = redraw_dialog_stack | (entry->wb->lines<saved_lines || entry->wb->cols<saved_cols);
+  }
+  return redraw_dialog_stack;
+}
+
+
+
+static void
+wbm_normalize_offset (WbmWidgetEntry *entry) {
+  int widget_lines_for_wb = entry->lines + (entry->with_frame ? -2 : 0);
+  entry->offset = MIN(MAX(entry->offset,0),MAX(entry->wb->lines - widget_lines_for_wb,0));
+}
+
+
+static gboolean
+wbm_entry_mouse (WbmWidgetEntry * entry, mouse_msg_t msg, mouse_event_t * event) {
+  WBlockMain *wbm = entry->wbm;
+  WBlock *c = wblock_get_widget_yx (entry->wb, event->y, event->x); //most depth widget
   while (c) {
     if (c->mouse) {
       gboolean res;
-      event->x-=c->x;
-      event->y-=c->y;
+      int delta_x = c->x + entry->x + WIDGET(wbm)->x,
+          delta_y = c->y + entry->y + WIDGET(wbm)->y;
+      event->x -= delta_x;
+      event->y -= delta_y;
       res = WBLOCK_MOUSE (c, msg, event);
-      event->x+=c->x;
-      event->y+=c->y;
+      event->x += delta_x;
+      event->y += delta_y;
       if (res) {
         wbm->selected_widget = c;
         return TRUE;
@@ -119,6 +131,7 @@ wbm_mouse (WBlockMain *wbm, mouse_msg_t msg, mouse_event_t * event) {
   return FALSE;
 }
 
+
 static void
 wbm_erase_redraw_1 (WBlock *wb) {
   wb->redraw = FALSE;
@@ -127,18 +140,20 @@ wbm_erase_redraw_1 (WBlock *wb) {
   }
 }
 
+
 static void
 wbm_erase_redraw (WBlockMain * wbm) {
-  WBlock *wb = wbm->wb;
-  return wbm_erase_redraw_1 (wb);
+  for (GList *l=wbm->widget_entries; l; l=l->next) {
+    WbmWidgetEntry * entry = WIDGET_ENTRY (l);
+    wbm_erase_redraw_1 (entry->wb);
+  }
 }
+
 
 static void
 wbm_redraw_full (WBlockMain *wbm) {
-  int saved_lines = wbm->wb->lines;
-  WBM_UPDATE_COORDS (wbm);
-  if (saved_lines>wbm->wb->lines) {
-    /*redraw all dialogs*/
+  gboolean redraw_dialog_stack = WBM_UPDATE_COORDS (wbm);
+  if (redraw_dialog_stack) {
     dialog_change_screen_size ();
   }
   else {
@@ -146,6 +161,7 @@ wbm_redraw_full (WBlockMain *wbm) {
   }
   wbm_erase_redraw (wbm);
 }
+
 
 static gboolean
 wbm_exists_redraw_1 (WBlock *wb) {
@@ -158,49 +174,49 @@ wbm_exists_redraw_1 (WBlock *wb) {
   return FALSE;
 }
 
+
 static gboolean
 wbm_exists_redraw (WBlockMain * wbm) {
-  WBlock *wb = wbm->wb;
-  return wbm_exists_redraw_1 (wb);
+  for (GList *l=wbm->widget_entries; l; l=l->next) {
+    WbmWidgetEntry * entry = WIDGET_ENTRY (l);
+    if (wbm_exists_redraw_1 (entry->wb))
+      return TRUE;
+  }
+  return FALSE;
 }
-
-
-
 
 
 static void
 wbm_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
   WBlockMain *wbm = WBMAIN(w);
-  int saved_offset = wbm->offset;
-  int y_saved=w->y, x_saved=w->x;
-  gboolean res, redraw;
-  event->y+=y_saved;
-  event->x+=x_saved;
-  res = wbm_mouse (wbm, msg, event);
-  event->y-=y_saved;
-  event->x-=x_saved;
+  gboolean redraw = FALSE;
+  gboolean handled = FALSE;
+
+  for (GList *l = g_list_last (wbm->widget_entries); l; l=l->prev) {
+    WbmWidgetEntry * entry = WIDGET_ENTRY (l);
+    if (!IN_RECTANGLE (event->y, event->x, entry->y, entry->x, entry->lines, entry->cols)) {
+      continue;
+    }
+    else {
+      if (!wbm_entry_mouse (entry, msg, event)) {
+        switch (msg) {
+          case MSG_MOUSE_SCROLL_UP:
+              entry->offset-=2;
+              entry_normalize_offset (entry);
+              break;
+          case MSG_MOUSE_SCROLL_DOWN:
+              entry->offset+=2;
+              entry_normalize_offset (entry);
+              break;
+          default:
+              break;
+        }
+      }
+    }
+  }
+
   if (wbm_exists_redraw (wbm))
-    goto label_redraw;
-  else if (res)
-    return;
-
-  switch (msg) {
-    case MSG_MOUSE_SCROLL_UP:
-        wbm->offset-=2;
-        wbm_normalize_offset (wbm);
-        break;
-    case MSG_MOUSE_SCROLL_DOWN:
-        wbm->offset+=2;
-        wbm_normalize_offset (wbm);
-        break;
-    default:
-        break;
-  }
-
-  redraw = saved_offset!=wbm->offset;
-  if (redraw) {
-    label_redraw: wbm_redraw_full (wbm);
-  }
+    wbm_redraw_full (wbm);
 }
 
 static cb_ret_t
@@ -219,6 +235,10 @@ wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
     case MSG_INIT:
       {
         wbm->calcpos(wbm);
+        WIDGET (wbm)->x=1;
+        WIDGET (wbm)->y=1;
+        WIDGET (wbm)->lines=LINES;
+        WIDGET (wbm)->cols=COLS;
       }
       WBM_UPDATE_COORDS (wbm);
       wbm_normalize_offset (wbm);
@@ -281,26 +301,6 @@ wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
   return handled;
 }
 
-static WBlockMain *
-wbm_new (WBlock *wb, pos_callback_t calcpos, gpointer calcpos_data, gboolean with_frame) {
-  WBlockMain *wbm = g_new0 (WBlockMain, 1);
-  Widget *w;
-
-  wbm->wb = wb;
-  wbm->calcpos = calcpos ? calcpos : default_calcpos_data;
-  message_assert (calcpos || calcpos_data);
-  wbm->calcpos_data = calcpos_data;
-  wbm->with_frame = with_frame;
-  w = WIDGET(wbm);
-  widget_init (w, 1, 1, 1, 1, wbm_callback, wbm_mouse_callback);
-  widget_set_options (w, WOP_SELECTABLE, TRUE);
-  return wbm;
-}
-
-static void
-wbm_cleanup (WBlockMain * wbm) {
-  (void) wbm;
-}
 
 WBlock *
 wblock_get_widget_yx (WBlock *wb, int y, int x) {
@@ -575,63 +575,75 @@ wblock_save (WBlock *wb) {
 }
 
 
+WBlockMain *wblock_main_new (void) {
+  WBlockMain *wbm = g_new0 (WBlockMain, 1);
+  Widget *w = WIDGET(wbm);
+  widget_init (w, 1, 1, LINES, COLS, wbm_callback, wbm_mouse_callback);
+  widget_set_options (w, WOP_SELECTABLE, TRUE);
+  return wbm;
+
+}
+
+void
+wblock_main_save (WBlockMain *wbm) {
+  for (GList *l=wbm->widget_entries;l;l=l->next) {
+    WbmWidgetEntry * entry = (WbmWidgetEntry *)(l->data);
+    wblock_save (entry->wb);
+  }
+}
+
+void
+wblock_main_add_widget (
+  WBlockMain *wbm,
+  WBlock *wb,
+  GDestroyNotify free,
+  pos_callback_t calcpos,
+  gpointer calcpos_data,
+  gboolean with_frame
+)
+{
+  WbmWidgetEntry * entry = g_new0 (WbmWidgetEntry, 1);
+
+  message_assert (calcpos || calcpos_data);
+  wb->wbm = wbm;
+  entry->wb=wb;
+  entry->calcpos        = calcpos ? calcpos : default_calcpos;
+  entry->calcpos_data   = calcpos_data;
+  entry->width_frame    = width_frame;
+  entry->free           = free;
+  wbm->widget_entries   = g_list_append (wbm->widget_entries, entry);
+}
+
+
+void wblock_main_free (WBlockMain * wbm) {
+  for (GList *l=wbm->widget_entries;l;l=l->next) {
+    WbmWidgetEntry * entry = (WbmWidgetEntry *)(l->data);
+    entry->free (entry->wb);
+    calcpos_data_free (entry->calcpos_data);
+  }
+
+  g_list_free_full (wbm->widget_entries, g_free);
+
+  dlg_destroy (WIDGET(wbm)->owner); /*in this function wbm will be cleaned up*/
+}
+
+
 int
-wblock_run (WBlock * wb, pos_callback_t calcpos, gpointer calcpos_data) {
+wblock_main_run (WBlockMain * wbm) {
   WDialog *dlg;
-  WBlockMain * wbm = wbm_new (wb, calcpos, calcpos_data, TRUE);
   int return_val;
-  dlg = dlg_create (TRUE, 0, 0, 0, 0, WPOS_KEEP_DEFAULT, FALSE, NULL, wblock_dlg_default_callback,
+  dlg = dlg_create (TRUE, 1, 1, LINES, COLS, WPOS_KEEP_DEFAULT, FALSE, NULL, wblock_dlg_default_callback,
                     NULL, "[wblock]", NULL);
 
-  wb->wbm = wbm;
   add_widget (dlg, wbm);
   return_val = dlg_run (dlg);
 
-  wblock_save (wb); /*recursive save data*/
-
-  wbm_cleanup (wbm);
-  dlg_destroy (dlg);
-
+  wblock_main_save (wbm); //recursive save data
 
   return return_val;
 }
 
 
-int
-get_utf (const gchar * str, int *char_length)
-{
-    gunichar res;
-    gunichar ch;
-    gchar *next_ch = NULL;
-
-    res = g_utf8_get_char_validated (str, -1);
-    if (res == (gunichar) (-2) || res == (gunichar) (-1))
-    {
-        /* Retry with explicit bytes to make sure it's not a buffer boundary */
-        size_t i;
-        gchar utf8_buf[UTF8_CHAR_LEN + 1];
-
-        for (i = 0; i < UTF8_CHAR_LEN; i++)
-            utf8_buf[i] = str [i];
-        utf8_buf[i] = '\0';
-        res = g_utf8_get_char_validated (utf8_buf, -1);
-    }
-
-    if (res == (gunichar) (-2) || res == (gunichar) (-1))
-    {
-        ch = *str;
-        *char_length = 0;
-    }
-    else
-    {
-        ch = res;
-        /* Calculate UTF-8 char length */
-        next_ch = g_utf8_next_char (str);
-        *char_length = next_ch - str;
-    }
-
-    return (int) ch;
-}
 
 WBlock *
 wblock_empty_new (void) {
@@ -639,8 +651,8 @@ wblock_empty_new (void) {
 }
 
 void
-default_calcpos_data (WBlockMain *wbm) {
-  Widget *w = WIDGET (wbm);
+default_calcpos (WBlockMain *wbm) {
+  //Widget *w = WIDGET (wbm);
   CalcposData *data = (CalcposData *)wbm->calcpos_data;
   int LINES0 = LINES - 4;
   int y0     = data->y>0     ? data->y     : 1;
@@ -650,27 +662,27 @@ default_calcpos_data (WBlockMain *wbm) {
   int add_y  = wbm->with_frame ? 2 : 0;
   int add_x  = wbm->with_frame ? 2 : 0;
 
-  w->y     = y0;
-  w->x     = x0;
-  w->lines = lines0;
-  w->cols  = cols0;
+  wbm->y     = y0;
+  wbm->x     = x0;
+  wbm->lines = lines0;
+  wbm->cols  = cols0;
 
   if (data->lines<=0 || data->cols<=0) {
     wbm_wblock_draw (wbm, FALSE); /*recalculate coordinates*/
   }
 
   if (data->closest_to_y) {
-    int len = w->y + wbm->wb->lines + add_y - LINES0;
+    int len = wbm->y + wbm->wb->lines + add_y - LINES0;
     if (len > 0) {
-      w->y = MAX (2, w->y - len);
+      wbm->y = MAX (2, wbm->y - len);
     }
-    w->lines = MIN (LINES0, wbm->wb->lines + add_y);
+    wbm->lines = MIN (LINES0, wbm->wb->lines + add_y);
   }
   else {
-    w->lines = data->lines>0 ? data->lines : MIN (LINES0 - w->y, wbm->wb->lines + add_y);
+    wbm->lines = data->lines>0 ? data->lines : MIN (LINES0 - wbm->y, wbm->wb->lines + add_y);
   }
 
-  w->cols  = data->cols>0  ? data->cols  : MIN (COLS  - w->x, wbm->wb->cols  + add_x);
+  wbm->cols  = data->cols>0  ? data->cols  : MIN (COLS  - wbm->x, wbm->wb->cols  + add_x);
 
 }
 
