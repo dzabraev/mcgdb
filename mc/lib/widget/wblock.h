@@ -126,27 +126,6 @@ void wblock_init (
   wblock_save_cb_t    save,
   gpointer wdata);
 
-WBlock * wblock_empty_new (void);
-
-#define WBLOCK_EMPTY() wblock_new(NULL,NULL,NULL,NULL,NULL,NULL)
-
-#define WBLOCK_MARGIN(_left,_top,_right,_bottom) \
-({\
-  WBlock *wb = WBLOCK_EMPTY ();\
-  wb->style.margin.left=_left;\
-  wb->style.margin.top=_top;\
-  wb->style.margin.right=_right;\
-  wb->style.margin.bottom=_bottom;\
-  wb;\
-})
-
-#define WBLOCK_NEWLINE WBLOCK_MARGIN(0,1,0,0)
-
-#define WBLOCK_NSPACE(_n) ({\
-  WBlock *__wb = WBLOCK_MARGIN(_n,0,0,0);\
-  __wb->style.layout = LAYOUT_INLINE;\
-  __wb;\
-})
 
 void wblock_add_widget (WBlock * wb, WBlock * widget);
 

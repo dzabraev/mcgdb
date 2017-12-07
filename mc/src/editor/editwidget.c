@@ -990,7 +990,7 @@ edit_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event)
 
     if (event->x < LINE_STATE_WIDTH ) {
       if (msg==MSG_MOUSE_CLICK) {
-        gboolean need_redraw = mcgdb_bp_process_click(edit->filename, event->y + 1 + edit->start_line, event->y, event->x);
+        gboolean need_redraw = mcgdb_bp_process_click(edit->filename, event->y + 1 + edit->start_line, w->y+event->y, w->x+event->x);
         if (need_redraw)
           edit->force |= REDRAW_PAGE;
           edit_update_screen (edit);

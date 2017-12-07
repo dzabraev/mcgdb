@@ -496,6 +496,7 @@ wblock_input_destroy (WBlock *wb) {
     g_array_free (g_array_index (buf,GArray *, idx), TRUE);
   }
   g_array_free (buf, TRUE);
+  g_free (wb->wdata);
   wblock_dfl_destroy (wb);
 }
 
@@ -587,7 +588,7 @@ wblock_input_set_readonly (WBlock *wb, gboolean ro) {
 
 WBlock *
 wblock_input_integer_new (int *val) {
-  WBlock *wb_main = wblock_empty_new ();
+  WBlock *wb_main = wblock_empty ();
   WBlockInputDataInteger *data = g_new0 (WBlockInputDataInteger, 1);
   WBlock *wb_input;
 

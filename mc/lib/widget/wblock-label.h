@@ -16,6 +16,7 @@ typedef struct WBlockMultiLabelData {
 } WBlockMultilabelData;
 
 void wblock_label_destroy (WBlock *wb);
+void wblock_multilabel_destroy (WBlock *wb);
 
 void
 wblock_label_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw);

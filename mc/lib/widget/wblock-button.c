@@ -11,6 +11,7 @@ wblock_button_destroy (WBlock *wb) {
   if (data->destroy)
     data->destroy (data->data);
   g_free (data->label);
+  g_free (wb->wdata);
   wblock_dfl_destroy (wb);
 }
 

@@ -4,8 +4,18 @@
 
 void
 wblock_label_destroy (WBlock *wb) {
-  g_free (WBLOCK_LABEL_DATA (wb->wdata)->label);
+  WBlockLabelData *data = WBLOCK_LABEL_DATA (wb->wdata);
+  g_free (data->label);
+  g_free (data);
 }
+
+void
+wblock_multilabel_destroy (WBlock *wb) {
+  WBlockMultilabelData *data = WBLOCK_MULTILABEL_DATA (wb->wdata);
+  g_list_free_full (data->labels, g_free);
+  g_free (data);
+}
+
 
 void
 wblock_label_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw) {
@@ -26,13 +36,16 @@ wblock_label_oneline_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, 
 
 WBlock *
 wblock_label_new (char *label, gboolean oneline) {
-  WBlock *wb = g_new0 (WBlock, 1);
   WBlockLabelData *data = g_new (WBlockLabelData, 1);
   data->label = label;
-  wblock_init (wb, NULL, NULL, NULL,
-    oneline ? wblock_label_oneline_draw : wblock_label_draw, NULL,
-    data);
-  return wb;
+  return wblock_new(
+    NULL,
+    NULL,
+    wblock_label_destroy,
+    oneline ? wblock_label_oneline_draw : wblock_label_draw,
+    NULL,
+    data
+  );
 }
 
 
@@ -63,7 +76,7 @@ wblock_multilabel_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int
 
 WBlock *
 wblock_multilabel_new (gboolean oneline, ...) {
-  WBlock *wb = g_new0 (WBlock, 1);
+  WBlock *wb;
   WBlockMultilabelData *data = g_new0 (WBlockMultilabelData, 1);
   va_list labels;
   va_start(labels,oneline);
@@ -75,7 +88,12 @@ wblock_multilabel_new (gboolean oneline, ...) {
       break;
     data->labels = g_list_append (data->labels, label);
   }
-  wblock_init (wb, wblock_multilabel_mouse, NULL, NULL,
-    wblock_multilabel_draw, NULL, data);
+  wb = wblock_new (
+    wblock_multilabel_mouse,
+    NULL,
+    wblock_multilabel_destroy,
+    wblock_multilabel_draw,
+    NULL,
+    data);
   return wb;
 }

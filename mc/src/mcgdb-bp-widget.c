@@ -18,6 +18,10 @@ typedef struct BPWidget {
   gboolean redraw;
 } BPWidget;
 
+typedef struct BpwData {
+  GList *pairs;
+} BpwData
+
 static BPWidget * bpw_new (void);
 static void bpw_free (BPWidget *bpw);
 static bp_pair_t * bpw_add_bp (BPWidget *bpw, mcgdb_bp *bp);
@@ -29,6 +33,11 @@ bpw_new (void) {
   BPWidget *bpw = g_new0 (BPWidget,1);
   wblock_init (&bpw->wb,NULL,NULL,NULL,NULL,NULL,NULL);
   return bpw;
+}
+
+static void
+bpw_destroy (BPWidget *bpw) {
+  
 }
 
 static void
@@ -48,31 +57,19 @@ bpw_delete_all (WBlock *wb, gpointer data) {
 }
 
 static WBlock *
-bprm_widget (BPWidget *bpw) {
+bprm_widget (GList *pairs) {
   WBlock *wb = wblock_button_new (
       strdup ("[DelAll]"),
       bpw_delete_all,
-      bpw->bps,
+      pairs,
       NULL
   );
   return wb;
 }
 
 static WBlock *
-buttons_widget (BPWidget *bpw) {
+buttons_widget (void) {
   WBlock *top = wblock_empty ();
-  {
-    WBlock *wb = layout_inline (
-      wblock_button_new (
-        strdup ("[DeleteAll]"),
-        bpw_delete_all,
-        bpw->bps,
-        NULL
-    ));
-    wblock_add_widget (top, wb);
-  }
-
-  wblock_add_widget (top, wblock_nspace (1));
 
   wblock_add_widget (top, layout_inline (wblock_button_new (
     strdup ("[Save]"),
@@ -95,14 +92,14 @@ buttons_widget (BPWidget *bpw) {
 }
 
 static WBlock *
-bpw_epilog (BPWidget *bpw) {
-  WBlock *buttons = buttons_widget (bpw);
+bpw_epilog (void) {
+  WBlock *buttons = buttons_widget ();
   return buttons;
 }
 
 static WBlock *
-bpw_prolog (BPWidget *bpw) {
-  WBlock *buttons = buttons_widget (bpw);
+bpw_prolog (void) {
+  WBlock *buttons = buttons_widget ();
   return buttons;
 }
 
@@ -130,8 +127,9 @@ last_slash (int n, const char *str) {
 }
 
 typedef struct {
-  BPWidget *bpw;
-  bp_pair_t *bp_pair;
+  GList *pairs;
+  mcgdb_bp *bp;
+  //bp_pair_t *bp_pair;
   WBlock *parent;
 } ButtonDeleteData;
 
@@ -198,12 +196,6 @@ thread_widget_new (thread_entry_t *t) {
       g_strdup_printf ("#%d", t->global_num), FALSE
   )));
   wblock_add_widget (wb, wblock_nspace (1));
-  /*
-  wblock_add_widget (wb,
-    layout_inline (wblock_label_new (
-      g_strdup (t->name), FALSE
-  )));
-  */
   wblock_add_widget (wb,
     layout_inline (wblock_label_new (
       g_strdup_printf ("%s pid=%d tid=%d lwp=%d", t->name, t->pid, t->tid, t->lwp), FALSE
@@ -229,9 +221,6 @@ get_setect_options_for_threads (int initial_id, gboolean add_none) {
     wblock_add_widget (row, thread_widget_new (t));
     selected = t->global_num==initial_id;
     short_name = g_strdup_printf ("[#%d %s]",t->global_num, t->name);
-    if (selected) {
-      //wblock_frame_setcolor (row, SELECTED_THREAD_COLOR);
-    }
     options = g_list_append (options, select_option_new (t->global_num, row, selected, short_name));
   }
   return options;
@@ -248,13 +237,12 @@ wblock_button_select_thread (int *global_num, gboolean add_none) {
 
 
 static WBlock *
-bp_widget (BPWidget *bpw, bp_pair_t *bp_pair) {
+bp_widget (GList *pairs, mcgdb_bp *bp_tmp) {
   int location_idx=1;
-  mcgdb_bp *bp_tmp = bp_pair->temp;
   WBlock *widget_bp, *top_widget;
-  WBlock *widget_locs = wblock_empty_new ();
-  WBlock *widget_ign_count = wblock_empty_new ();
-  top_widget = wblock_new (NULL,NULL,NULL,NULL,NULL,NULL);
+  WBlock *widget_locs = wblock_empty ();
+  WBlock *widget_ign_count = wblock_empty ();
+  top_widget = wblock_empty ();
   widget_bp = wblock_frame_new (g_strdup_printf ("Breakpoint %d",bp_tmp->number));
   widget_bp->style.layout=LAYOUT_INLINE;
   wblock_add_widget (top_widget, widget_bp);
@@ -262,8 +250,8 @@ bp_widget (BPWidget *bpw, bp_pair_t *bp_pair) {
   {
     ButtonDeleteData *data = g_new0 (ButtonDeleteData,1);
     WBlock *delbtn;
-    data->bpw=bpw;
-    data->bp_pair = bp_pair;
+    data->pairs=pairs;
+    data->bp = bp_tmp;
     data->parent = widget_bp;
     delbtn = wblock_button_new (
           strdup ("[DEL]"),
@@ -440,15 +428,24 @@ bpw_apply_changes (BPWidget *bpw) {
   }
 }
 
+bp_pair_t *
+bp_pair_new (mcgdb_bp *bp) {
+
+}
+
+void
+bp_pair_free (bp_pair_t *) {
+
+}
 
 gboolean
 breakpoints_edit_dialog (const char *filename, long line, int click_y, int click_x) {
-  BPWidget *bpw = bpw_new ();
-  WBlock    *widget_bps = wblock_empty ();
-  gboolean redraw;
+  WBlock *bpw        = wblock_empty ();
+  WBlock *widget_bps = wblock_empty ();
   int return_val;
   WBlockMain *wbm;
   CalcposData *calcpos_data_bpw, *calcpos_data_bprm;
+  GList *pairs = NULL;
 
   (void) click_x;
 
@@ -456,15 +453,15 @@ breakpoints_edit_dialog (const char *filename, long line, int click_y, int click
         l!=0;
         l = mcgdb_bp_find_bp_with_location (l->next, filename, line))
   {
-    mcgdb_bp *bp = MCGDB_BP (l);
-    bp_pair_t *bp_pair = bpw_add_bp (bpw, bp);
-    wblock_add_widget (widget_bps, bp_widget (bpw, bp_pair));
+    bp_pair_t *pair = bp_pair_new (MCGDB_BP (l));
+    pairs = g_list_append (pairs, pair);
+    wblock_add_widget (widget_bps, bp_widget (&bpw_d, pair->tmp));
   }
 
-  wblock_add_widget (WBLOCK (bpw), bpw_prolog (bpw));
-  wblock_add_widget (WBLOCK (bpw), wblock_newline ());
-  wblock_add_widget (WBLOCK (bpw), widget_bps);
-  wblock_add_widget (WBLOCK (bpw), bpw_epilog (bpw));
+  wblock_add_widget (bpw, bpw_prolog (bpw));
+  wblock_add_widget (bpw, wblock_newline ());
+  wblock_add_widget (bpw, widget_bps);
+  wblock_add_widget (bpw, bpw_epilog (bpw));
 
   disable_gdb_events = TRUE;
   wbm = wblock_main_new ();
@@ -474,25 +471,25 @@ breakpoints_edit_dialog (const char *filename, long line, int click_y, int click
   calcpos_data_bpw->x = LINE_STATE_WIDTH + 2;
   calcpos_data_bpw->closest_to_y = TRUE;
   calcpos_data_bpw->cols = 40;
-  wblock_main_add_widget (wbm, WBLOCK (bpw), (GDestroyNotify) bpw_free, NULL, calcpos_data_bpw, TRUE);
+  wblock_main_add_widget (wbm, bpw, NULL, NULL, calcpos_data_bpw, TRUE);
 
 
   calcpos_data_bprm = calcpos_data_new ();
   calcpos_data_bprm->y = click_y;
+  calcpos_data_bprm->x = 0;
   calcpos_data_bprm->closest_to_y = FALSE;
   calcpos_data_bprm->cols = LINE_STATE_WIDTH;
   calcpos_data_bprm->lines = 1;
-  wblock_main_add_widget (wbm, bprm_widget (bpw), NULL, NULL, calcpos_data_bprm, TRUE);
+  wblock_main_add_widget (wbm, bprm_widget (&bpw_data), NULL, NULL, calcpos_data_bprm, FALSE);
 
   return_val = wblock_main_run (wbm);
   disable_gdb_events = FALSE;
 
   if (return_val!=B_CANCEL)
-    bpw_apply_changes (bpw);
-
-  redraw = bpw->redraw;
+    bpw_apply_changes (pairs);
 
   wblock_main_free (wbm);
+  g_list_free_full (pairs, bpw_pair_free);
 
-  return redraw;
+  return TRUE;
 }

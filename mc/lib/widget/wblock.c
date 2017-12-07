@@ -120,8 +120,7 @@ wblock_dfl_destroy (WBlock *wb) {
   for (GList *l=wb->widgets;l!=NULL;l=l->next) {
     WBLOCK_DESTROY (WBLOCK (l->data));
   }
-  g_list_free (wb->widgets);
-  g_free (wb->wdata);
+  g_list_free_full (wb->widgets, g_free);
 }
 
 void
@@ -273,14 +272,6 @@ wblock_save (WBlock *wb) {
   for (GList *l=wb->widgets;l;l=l->next) {
     wblock_save (l->data);
   }
-}
-
-
-
-
-WBlock *
-wblock_empty_new (void) {
-  return wblock_new (NULL,NULL,NULL,NULL,NULL,NULL);
 }
 
 

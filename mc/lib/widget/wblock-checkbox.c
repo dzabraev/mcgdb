@@ -29,6 +29,7 @@ wblock_checkbox_key (WBlock *wb, int parm) {
 
 void
 wblock_checkbox_destroy (WBlock *wb) {
+  g_free (wb->wdata);
   wblock_dfl_destroy (wb);
 }
 

@@ -58,6 +58,10 @@ widget_entry_draw (WbmWidgetEntry * entry, gboolean do_draw) {
       );
     }
   }
+  else {
+    entry->wb->y = rect_y;
+    entry->wb->x = rect_x;
+  }
 
   WBLOCK_DRAW (
     entry->wb,
@@ -70,6 +74,13 @@ widget_entry_draw (WbmWidgetEntry * entry, gboolean do_draw) {
     do_draw);
 
 
+
+  return entry->wb->lines<saved_lines || entry->wb->cols<saved_cols;
+}
+
+static void
+wbm_move_cursor (WBlockMain *wbm) {
+  WbmWidgetEntry * entry = wbm->selected_entry;
   if (entry->selected_widget &&
       entry->selected_widget->cursor_y!=-1 &&
       entry->selected_widget->cursor_x!=-1)
@@ -81,8 +92,6 @@ widget_entry_draw (WbmWidgetEntry * entry, gboolean do_draw) {
   else {
     tty_gotoyx (LINES,COLS);
   }
-
-  return entry->wb->lines<saved_lines || entry->wb->cols<saved_cols;
 }
 
 static gboolean
@@ -92,6 +101,7 @@ wbm_wblock_draw (WBlockMain *wbm, gboolean do_draw) {
     WbmWidgetEntry * entry = WIDGET_ENTRY (l);
     redraw_dialog_stack |= widget_entry_draw (entry, do_draw);
   }
+  wbm_move_cursor (wbm);
   return redraw_dialog_stack;
 }
 
@@ -115,13 +125,12 @@ wbm_normalize_offset (WBlockMain *wbm) {
 
 static gboolean
 wbm_entry_mouse (WbmWidgetEntry * entry, mouse_msg_t msg, mouse_event_t * event) {
-  WBlockMain *wbm = entry->wbm;
   WBlock *c = wblock_get_widget_yx (entry->wb, event->y, event->x); //most depth widget
   while (c) {
     if (c->mouse) {
       gboolean res;
-      int delta_x = c->x + entry->x + WIDGET(wbm)->x,
-          delta_y = c->y + entry->y + WIDGET(wbm)->y;
+      int delta_x = c->x,
+          delta_y = c->y;
       event->x -= delta_x;
       event->y -= delta_y;
       res = WBLOCK_MOUSE (c, msg, event);
@@ -171,6 +180,7 @@ wbm_redraw_full (WBlockMain *wbm) {
     WBM_REDRAW (wbm);
   }
   wbm_erase_redraw (wbm);
+  wbm_move_cursor (wbm);
 }
 
 static void
@@ -229,13 +239,22 @@ static void
 wbm_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
   WBlockMain *wbm = WBMAIN(w);
   gboolean handled = FALSE;
-  WbmWidgetEntry * entry = wbm_get_entry_yx (wbm, event->y, event->x);
+  int delta_x = w->x,
+      delta_y = w->y;
+  WbmWidgetEntry * entry = wbm_get_entry_yx (wbm, event->y+delta_y, event->x+delta_x);
 
   if (!entry)
     return;
 
+
   wbm->selected_entry = entry;
+
+  event->y+=delta_y;
+  event->x+=delta_x;
   handled = wbm_entry_mouse (entry, msg, event);
+  event->y-=delta_y;
+  event->x-=delta_x;
+
   if (!handled) {
     int saved_offset = entry->offset;
     switch (msg) {
@@ -393,16 +412,19 @@ wblock_main_add_widget (
 
 
 void wblock_main_free (WBlockMain * wbm) {
-  for (GList *l=wbm->widget_entries;l;l=l->next) {
+  GList *entries = wbm->widget_entries;
+
+  dlg_destroy (WIDGET(wbm)->owner); /*free (wbm)*/
+
+  for (GList *l=entries;l;l=l->next) {
     WbmWidgetEntry * entry = (WbmWidgetEntry *)(l->data);
-    entry->free (entry->wb);
     if (entry->calcpos_data)
       calcpos_data_free (entry->calcpos_data);
+    entry->free (entry->wb);
+    g_free (entry->wb);
   }
 
-  g_list_free_full (wbm->widget_entries, g_free);
-
-  dlg_destroy (WIDGET(wbm)->owner); /*in this function wbm will be cleaned up*/
+  g_list_free_full (entries, g_free);
 }
 
 
@@ -437,11 +459,11 @@ wblock_main_run (WBlockMain * wbm) {
 void
 default_calcpos (WbmWidgetEntry *entry) {
   CalcposData *data = (CalcposData *)entry->calcpos_data;
-  int LINES0 = LINES - 4;
-  int y0     = data->y>0     ? data->y     : 1;
-  int x0     = data->x>0     ? data->x     : 1;
-  int lines0 = data->lines>0 ? data->lines : LINES0;
-  int cols0  = data->cols>0  ? data->cols  : COLS;
+  int LINES0 = MAX (0, LINES - 4);
+  int y0     = data->y>=0     ? data->y     : 0;
+  int x0     = data->x>=0     ? data->x     : 0;
+  int lines0 = data->lines>=0 ? data->lines : LINES0;
+  int cols0  = data->cols>=0  ? data->cols  : COLS;
   int add_y  = entry->with_frame ? 2 : 0;
   int add_x  = entry->with_frame ? 2 : 0;
 
@@ -466,7 +488,7 @@ default_calcpos (WbmWidgetEntry *entry) {
   }
 
   entry->cols  = data->cols>0  ? data->cols  : MIN (COLS  - entry->x, entry->wb->cols  + add_x);
-
+  entry_update_coord (entry);
 }
 
 CalcposData *
