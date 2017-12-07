@@ -11,8 +11,7 @@
 
 typedef struct WBlock WBlock;
 typedef struct WBlockMain WBlockMain;
-
-typedef void (*pos_callback_t) (WBlockMain *wbm);
+typedef struct WbmWidgetEntry WbmWidgetEntry;
 
 typedef enum {
   ALIGN_LEFT=0,
@@ -64,45 +63,8 @@ typedef void (*wblock_save_cb_t) (WBlock *wb);
 
 #define YX_IN_WIDGET(w,_y,_x) IN_RECTANGLE(_y,_x,(w)->y,(w)->x,(w)->lines,(w)->cols)
 
-typedef struct {
-  WBlock *wb;
-  pos_callback_t calcpos;
-  gpointer calcpos_data;
-  gboolean with_frame;
-  int offset;
-  GDestroyNotify free;
-  int y;
-  int x;
-  int lines;
-  int cols;
-} WbmWidgetEntry;
-
-#define WIDGET_ENTRY(l) ((WbmWidgetEntry *)(l->data))
-
-typedef struct WBlockMain {
-  Widget w;
-  WBlock *selected_widget;
-  gboolean redraw;
-  GList *widget_entries;
-} WBlockMain;
-
-WBlockMain *wblock_main_new (void);
-
-void wblock_main_add_widget (
-  WBlockMain *wbm,
-  WBlock *wb,
-  GDestroyNotify free,
-  pos_callback_t calcpos,
-  gpointer calcpos_data,
-  gboolean with_frame,
-);
-
-int  wblock_main_run  (WBlockMain *wbm);
-void wblock_main_free (WBlockMain *wbm);
-void wblock_main_save (WBlockMain *wbm);
-
 typedef struct WBlock {
-  WBlockMain *wbm;
+  WbmWidgetEntry *entry;
   GList *widgets;
   //Garray *coord; /* triplets (xl,xr,y) */
   int y;
@@ -146,9 +108,6 @@ void wblock_set_draw    (WBlock *wb, wblock_draw_cb_t draw);
 void wblock_set_save    (WBlock *wb, wblock_save_cb_t save);
 void wblock_set_wdata   (WBlock *wb, gpointer wdata);
 void wblock_set_color   (WBlock *wb, int color);
-
-int
-wblock_run (WBlock * wb, pos_callback_t calcpos, gpointer calcpos_data);
 
 WBlock *wblock_new (
   wblock_mouse_cb_t   mouse,
@@ -232,19 +191,7 @@ void wblock_save (WBlock *wb);
 
 void wblock_shift_yx (WBlock *wb, int shift_y, int shift_x);
 
-typedef struct {
-  int y;
-  int x;
-  int lines;
-  int cols;
-  gboolean closest_to_y;
-} CalcposData;
-
-CalcposData * calcpos_data_new (void);
-void calcpos_data_free (CalcposData *calcpos_data);
-void default_calcpos (WBlockMain *wbm);
-
-char * strstrip (char *str);
+char * strstrip (const char *str);
 
 #include "wblock-checkbox.h"
 #include "wblock-frame.h"
@@ -253,5 +200,6 @@ char * strstrip (char *str);
 #include "wblock-input.h"
 #include "wblock-select.h"
 
+#include "wblock-main.h"
 
 #endif //__block_widget_h__

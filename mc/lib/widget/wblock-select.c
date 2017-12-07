@@ -44,6 +44,9 @@ dialog_wblock_select (GList *options, int y, int x) {
   WBlock *wb = wblock_empty ();
   int selected_id = WBLOCK_CANCEL;
   wblock_set_wdata (wb, &selected_id);
+  CalcposData *calcpos_data;
+  WBlockMain *wbm;
+
   for (GList *l = options; l; l=l->next) {
     select_option_t *option = (select_option_t *)(l->data);
     WBlock *row = wblock_empty ();
@@ -57,16 +60,21 @@ dialog_wblock_select (GList *options, int y, int x) {
     wblock_add_widget (wb, row);
   }
 
+
+  wbm = wblock_main_new ();
+
+  calcpos_data = calcpos_data_new (); /*it will be freed in wblock_main_free*/
+  calcpos_data->y = y;
+  calcpos_data->x = x;
+  calcpos_data->closest_to_y = TRUE;
+  wblock_main_add_widget (wbm, wb, NULL, NULL, calcpos_data, TRUE);
+
+
   disable_gdb_events = TRUE;
-  {
-    CalcposData *calcpos_data = calcpos_data_new ();
-    calcpos_data->y = y;
-    calcpos_data->x = x;
-    calcpos_data->closest_to_y = TRUE;
-    wblock_run (wb, NULL, calcpos_data);
-    calcpos_data_free (calcpos_data);
-  }
+  wblock_main_run (wbm);
   disable_gdb_events = FALSE;
+
+  wblock_main_free (wbm);
 
   return selected_id;
 }

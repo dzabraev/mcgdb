@@ -54,7 +54,7 @@ bprm_widget (BPWidget *bpw) {
       bpw_delete_all,
       bpw->bps,
       NULL
-  ));
+  );
   return wb;
 }
 
@@ -447,7 +447,7 @@ breakpoints_edit_dialog (const char *filename, long line, int click_y, int click
   WBlock    *widget_bps = wblock_empty ();
   gboolean redraw;
   int return_val;
-  WblockMain *wbm;
+  WBlockMain *wbm;
   CalcposData *calcpos_data_bpw, *calcpos_data_bprm;
 
   (void) click_x;
@@ -474,7 +474,7 @@ breakpoints_edit_dialog (const char *filename, long line, int click_y, int click
   calcpos_data_bpw->x = LINE_STATE_WIDTH + 2;
   calcpos_data_bpw->closest_to_y = TRUE;
   calcpos_data_bpw->cols = 40;
-  wblock_main_add_widget (wbm, WBLOCK (bpw), bpw_free, NULL, calcpos_data_bpw, TRUE);
+  wblock_main_add_widget (wbm, WBLOCK (bpw), (GDestroyNotify) bpw_free, NULL, calcpos_data_bpw, TRUE);
 
 
   calcpos_data_bprm = calcpos_data_new ();
@@ -484,7 +484,7 @@ breakpoints_edit_dialog (const char *filename, long line, int click_y, int click
   calcpos_data_bprm->lines = 1;
   wblock_main_add_widget (wbm, bprm_widget (bpw), NULL, NULL, calcpos_data_bprm, TRUE);
 
-  wblock_main_run (wbm);
+  return_val = wblock_main_run (wbm);
   disable_gdb_events = FALSE;
 
   if (return_val!=B_CANCEL)

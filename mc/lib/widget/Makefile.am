@@ -26,6 +26,7 @@ libmcwidget_la_SOURCES = \
 	mcgdb_asm_widget.c mcgdb_asm_widget.h \
 	wtable.c wtable.h \
 	wblock.c wblock.h \
+	wblock-main.c wblock-main.h \
 	wblock-checkbox.h wblock-checkbox.c \
 	wblock-label.h wblock-label.c \
 	wblock-button.h wblock-button.c \
