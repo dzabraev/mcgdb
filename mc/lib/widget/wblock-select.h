@@ -26,7 +26,7 @@ select_option_t *get_option_by_id (GList *options, int id);
 
 gboolean select_option_mouse (WBlock *wb, mouse_msg_t msg, mouse_event_t * event);
 int dialog_wblock_select (GList *options, int y, int x);
-void wblock_button_select_push (WBlock *wb, gpointer data);
+void wblock_button_select_push (WBlock *wb, WBlockButtonData *data);
 void wblock_button_select_user_data_free (gpointer user_data);
 
 WBlock * wblock_button_select_new (int *option_id, GList *options);

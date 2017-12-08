@@ -70,10 +70,9 @@ dialog_wblock_select (GList *options, int y, int x) {
   calcpos_data->closest_to_y = TRUE;
   wblock_main_add_widget (wbm, wb, NULL, calcpos_data, TRUE);
 
-
-  disable_gdb_events = TRUE;
+  disable_gdb_events_enter ();
   wblock_main_run (wbm);
-  disable_gdb_events = FALSE;
+  disable_gdb_events_exit ();
 
   wblock_main_free (wbm);
 
@@ -81,13 +80,13 @@ dialog_wblock_select (GList *options, int y, int x) {
 }
 
 void
-wblock_button_select_push (WBlock *wb, gpointer user_data) {
-  WblockButtonSelectData *data = (WblockButtonSelectData *) user_data;
-  int ret = dialog_wblock_select (data->options, wb->y, wb->x+2);
+wblock_button_select_push (WBlock *wb, WBlockButtonData *data) {
+  WblockButtonSelectData *user_data = (WblockButtonSelectData *) data->user_data;
+  int ret = dialog_wblock_select (user_data->options, wb->y, wb->x+2);
   if (ret != WBLOCK_CANCEL) {
-    select_option_t *opt = get_option_by_id (data->options, ret);
+    select_option_t *opt = get_option_by_id (user_data->options, ret);
     wblock_button_setlabel (wb, g_strdup (opt->short_name));
-    data->option_id[0] = ret;
+    user_data->option_id[0] = ret;
   }
 }
 

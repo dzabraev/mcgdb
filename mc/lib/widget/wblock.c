@@ -12,17 +12,18 @@
 
 WBlock *
 wblock_get_widget_yx (WBlock *wb, int y, int x) {
-  if (!YX_IN_WIDGET (wb,y,x))
-    return NULL;
-
   for (GList *l=g_list_last (wb->widgets);l;l=l->prev) {
     WBlock *c = WBLOCK (l->data);
-    if (YX_IN_WIDGET (c,y,x)) {
-      return wblock_get_widget_yx (c, y, x);
-    }
+    /*We should fall into most depth widgets becuse coordinates of
+      child elements may doesn't belong to parent's coordinate rectangle*/
+    WBlock *most_depth = wblock_get_widget_yx (c, y, x);
+    if (most_depth)
+      return most_depth;
   }
-
-  return wb;
+  if (YX_IN_WIDGET (wb,y,x))
+    return wb;
+  else
+    return NULL;
 }
 
 void
@@ -121,6 +122,7 @@ wblock_dfl_destroy (WBlock *wb) {
     wblock_destroy (WBLOCK (l->data));
   }
   g_list_free_full (wb->widgets, g_free);
+  g_free (wb->name);
 }
 
 void
@@ -345,4 +347,30 @@ void
 wblock_destroy (WBlock *wb) {
   if (wb->destroy)
     wb->destroy (wb);
+}
+
+void
+wblock_unlink (WBlock *wb) {
+  if (!wb->parent)
+    return;
+  wb->parent->widgets = g_list_remove (wb->parent->widgets, wb);
+  wb->parent = NULL;
+}
+
+WBlock *
+wblock_set_name (WBlock *wb, char *name) {
+  wb->name = name;
+  return wb;
+}
+
+WBlock *
+find_closest_by_name (WBlock *wb, const char *name) {
+  /*currently search only in parents*/
+  WBlock *p = wb->parent;
+  while (p) {
+    if (p->name && !strcmp (p->name,name)) {
+      return p;
+    }
+  }
+  return NULL;
 }

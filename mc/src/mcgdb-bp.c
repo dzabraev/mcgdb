@@ -42,7 +42,6 @@ static void send_pkg (json_t *pkg);
 static bp_loc_t *bp_loc_new (const char *filename, int line);
 static void bp_loc_free (bp_loc_t *loc);
 static bp_loc_t * bp_loc_copy (const bp_loc_t * loc);
-static gpointer gcopyfunc_bp_loc_copy (gconstpointer src, gpointer data);
 static gboolean bp_locs_compare (const bp_loc_t *loc1, const bp_loc_t *loc2);
 
 gboolean mcgdb_bp_has_location (const mcgdb_bp *bp, const char *filename, int line);
@@ -270,7 +269,6 @@ gboolean
 mcgdb_bp_process_click (const char *filename, long line, int click_y, int click_x) {
   int nbps;
   gboolean need_redraw=FALSE;
-  gboolean open_menu = click_x<LINE_STATE_WIDTH;
   if (!filename)
     return need_redraw;
   nbps = count_bps (filename,line);
@@ -354,6 +352,8 @@ mcgdb_bp_clear_locations (mcgdb_bp *bp) {
 
 void
 mcgdb_bp_free (mcgdb_bp * bp) {
+  if (!bp)
+    return;
   mcgdb_bp_clear_locations (bp);
   if (bp->condition)
     g_free (bp->condition);

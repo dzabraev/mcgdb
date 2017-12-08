@@ -549,10 +549,10 @@ wblock_input_integer_key (WBlock *wb, int parm) {
 }
 
 static void
-wblock_input_push_delta (WBlock *wb, gpointer data, int delta) {
+wblock_input_push_delta (WBlock *wb, WBlockButtonData *data, int delta) {
   int val;
   char *sval;
-  WBlock *wb_input = (WBlock *)data;
+  WBlock *wb_input = (WBlock *)data->user_data;
   WBlockInputDataInteger *wdata = (WBlockInputDataInteger *)(wb_input->wdata);
 
   (void) wb;
@@ -570,12 +570,12 @@ wblock_input_push_delta (WBlock *wb, gpointer data, int delta) {
 }
 
 static void
-wblock_input_push_incr (WBlock *wb, gpointer data) {
+wblock_input_push_incr (WBlock *wb, WBlockButtonData * data) {
   wblock_input_push_delta (wb, data, 1);
 }
 
 static void
-wblock_input_push_decr (WBlock *wb, gpointer data) {
+wblock_input_push_decr (WBlock *wb, WBlockButtonData * data) {
   wblock_input_push_delta (wb, data, -1);
 }
 

@@ -190,5 +190,9 @@ int data_ptr_register (void *data);
 
 gboolean mcgdb_src_dlg(void);
 
+void disable_gdb_events_exit (void);
+void disable_gdb_events_enter (void);
+
+
 #endif /*__mcgdb_h_*/
 

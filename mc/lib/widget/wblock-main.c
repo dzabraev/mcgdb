@@ -495,9 +495,16 @@ default_calcpos (WbmWidgetEntry *entry) {
   entry_update_coord (entry);
 }
 
+void
+calcpos_data_init (CalcposData *calcpos_data) {
+  bzero (calcpos_data, sizeof (CalcposData));
+}
+
+
 CalcposData *
 calcpos_data_new () {
-  CalcposData *calcpos_data = g_new0 (CalcposData, 1);
+  CalcposData *calcpos_data = g_new (CalcposData, 1);
+  calcpos_data_init (calcpos_data);
   return calcpos_data;
 }
 

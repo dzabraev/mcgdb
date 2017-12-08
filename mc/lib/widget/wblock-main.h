@@ -58,8 +58,9 @@ void wblock_main_save (WBlockMain *wbm);
 
 
 CalcposData * calcpos_data_new (void);
+void calcpos_data_init (CalcposData *calcpos_data);
 void calcpos_data_free (CalcposData *calcpos_data);
-void default_calcpos (WbmWidgetEntry *wbm);
+void default_calcpos (WbmWidgetEntry *entry);
 
 
 #endif

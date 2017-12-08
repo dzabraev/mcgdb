@@ -36,7 +36,7 @@
 
 
 #define STREQ(s1,s2) (!strncmp(s1,s2,strlen(s2)))
-gboolean disable_gdb_events=FALSE; /*turn off delivering gdb events to widgets*/
+int disable_gdb_events=0; /*turn off delivering gdb events to widgets*/
 gboolean mcgdb_wait_gdb;
 int mcgdb_listen_port;
 int gdb_input_fd;
@@ -55,6 +55,17 @@ enum window_type mcgdb_wtype;
 struct gdb_action * event_from_gdb=NULL;
 
 jmp_buf mcgdb_jump_buf;
+
+void
+disable_gdb_events_exit (void) {
+  disable_gdb_events--;
+}
+
+void
+disable_gdb_events_enter (void) {
+  disable_gdb_events++;
+}
+
 
 
 static void

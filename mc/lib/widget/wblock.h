@@ -65,6 +65,7 @@ typedef void (*wblock_save_cb_t) (WBlock *wb);
 typedef struct WBlock {
   WbmWidgetEntry *entry;
   GList *widgets;
+  char *name;
   //Garray *coord; /* triplets (xl,xr,y) */
   int y;
   int x;
@@ -127,6 +128,8 @@ void wblock_init (
 
 
 void wblock_add_widget (WBlock * wb, WBlock * widget);
+void wblock_add_const_widget (WBlock * wb, WBlock * widget);
+
 
 void
 wblock_dfl_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw);
@@ -172,6 +175,12 @@ void wblock_shift_yx (WBlock *wb, int shift_y, int shift_x);
 char * strstrip (const char *str);
 
 void wblock_destroy (WBlock *wb);
+
+WBlock * wblock_set_name (WBlock *wb, char *name);
+void wblock_unlink (WBlock *wb);
+
+WBlock * find_closest_by_name (WBlock *wb, const char *name);
+
 
 #include "wblock-checkbox.h"
 #include "wblock-frame.h"
