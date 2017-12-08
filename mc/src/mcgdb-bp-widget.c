@@ -257,20 +257,20 @@ bpw_button_delete_cb (WBlock *wb, WBlockButtonData * data) {
     wblock_set_color (wb, new_frame_color);
   }
   else {
+    WBlockMain *wbm;
     WBlock * wb_del;
     bp_pair_t *pair = user_data->pair;
-    if (wb->parent) {
-      wb->parent->widgets = g_list_remove (wb->parent->widgets, wb);
-      wb->parent->redraw = TRUE;
-    }
     user_data->pairs[0] = g_list_remove (user_data->pairs[0],pair);
     bp_pair_free (pair);
     wb_del = find_closest_by_name (wb, BP_WIDGET_NAME);
+    wbm = wblock_get_wbm (wb_del);
     if (wb_del->parent)
-      wb_del->parent->parent->redraw = TRUE;
+      wb_del->parent->redraw = TRUE;
     wblock_unlink (wb_del);
     wblock_destroy (wb_del);
     g_free (wb_del);
+    wbm_recalc_position (wbm);
+    wbm_redraw_full (wbm);
   }
 }
 

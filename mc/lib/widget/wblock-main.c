@@ -170,9 +170,11 @@ wbm_erase_redraw (WBlockMain * wbm) {
 }
 
 
-static void
+void
 wbm_redraw_full (WBlockMain *wbm) {
-  gboolean redraw_dialog_stack = WBM_UPDATE_COORDS (wbm);
+  gboolean redraw_dialog_stack;
+  wbm_normalize_offset (wbm);
+  redraw_dialog_stack = WBM_UPDATE_COORDS (wbm);
   if (redraw_dialog_stack) {
     dialog_change_screen_size ();
   }
@@ -285,7 +287,7 @@ wbm_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
   }
 }
 
-static void
+void
 wbm_recalc_position (WBlockMain *wbm) {
   for (GList *l = wbm->widget_entries; l; l=l->next) {
     WbmWidgetEntry * entry = WIDGET_ENTRY (l);

@@ -56,6 +56,8 @@ int  wblock_main_run  (WBlockMain *wbm);
 void wblock_main_free (WBlockMain *wbm);
 void wblock_main_save (WBlockMain *wbm);
 
+void wbm_redraw_full (WBlockMain *wbm);
+void wbm_recalc_position (WBlockMain *wbm);
 
 CalcposData * calcpos_data_new (void);
 void calcpos_data_init (CalcposData *calcpos_data);
