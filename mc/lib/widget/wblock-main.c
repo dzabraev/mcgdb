@@ -244,9 +244,11 @@ wbm_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
   WbmWidgetEntry * entry = wbm_get_entry_yx (wbm, event->y+delta_y, event->x+delta_x);
 
   if (!entry) {
-    WDialog *h = w->owner;
-    h->ret_value = B_CANCEL;
-    dlg_stop (h);
+    if (msg==MSG_MOUSE_CLICK) {
+      WDialog *h = w->owner;
+      h->ret_value = B_CANCEL;
+      dlg_stop (h);
+    }
     return;
   }
 
