@@ -34,7 +34,7 @@ class StorageId(object):
   def id_update(self,key,new_data):
     (id,data)=self.id_exemplar_storage[key]
     self.id_exemplar_storage[key] = (id,new_data)
-    return idc
+    return id
 
 
 

@@ -823,7 +823,7 @@ cell_data_makecolor(cell_data_t *data) {
       break;
     case CHUNKNAME_VARVALUE:
     case CHUNKNAME_REGVALUE:
-      data->color = tty_try_alloc_color_pair2 ("green", "blue", NULL, FALSE);
+      data->color = tty_try_alloc_color_pair2 ("green", "blue", "bold", FALSE);
       break;
     case CHUNKNAME_FRAME_FUNC_NAME:
       data->color = tty_try_alloc_color_pair2 ("cyan", "blue", NULL, FALSE);
