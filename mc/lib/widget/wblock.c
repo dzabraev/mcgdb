@@ -118,7 +118,7 @@ wblock_dfl_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, 
 void
 wblock_dfl_destroy (WBlock *wb) {
   for (GList *l=wb->widgets;l!=NULL;l=l->next) {
-    WBLOCK_DESTROY (WBLOCK (l->data));
+    wblock_destroy (WBLOCK (l->data));
   }
   g_list_free_full (wb->widgets, g_free);
 }
@@ -159,10 +159,18 @@ wblock_new (
   return wb;
 }
 
-
 void
 wblock_add_widget (WBlock * wb, WBlock * widget) {
   wb->widgets = g_list_append (wb->widgets, widget);
+  widget->parent = wb;
+}
+
+void
+wblock_add_const_widget (WBlock * wb, WBlock * widget) {
+  WBlock *parent = wblock_empty ();
+  wblock_set_destroy (parent, NULL); /*disable clear childs*/
+  wblock_add_widget (parent, widget);
+  wb->widgets = g_list_append (wb->widgets, parent);
   widget->parent = wb;
 }
 
@@ -331,4 +339,10 @@ wblock_set_color (WBlock *wb, int color) {
     wb->style.color = color;
     wb->redraw = TRUE;
   }
+}
+
+void
+wblock_destroy (WBlock *wb) {
+  if (wb->destroy)
+    wb->destroy (wb);
 }

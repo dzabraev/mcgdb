@@ -243,8 +243,12 @@ wbm_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
       delta_y = w->y;
   WbmWidgetEntry * entry = wbm_get_entry_yx (wbm, event->y+delta_y, event->x+delta_x);
 
-  if (!entry)
+  if (!entry) {
+    WDialog *h = w->owner;
+    h->ret_value = B_CANCEL;
+    dlg_stop (h);
     return;
+  }
 
 
   wbm->selected_entry = entry;
@@ -389,7 +393,6 @@ void
 wblock_main_add_widget (
   WBlockMain *wbm,
   WBlock *wb,
-  GDestroyNotify free,
   pos_callback_t calcpos,
   gpointer calcpos_data,
   gboolean with_frame
@@ -404,7 +407,6 @@ wblock_main_add_widget (
   entry->calcpos        = calcpos ? calcpos : default_calcpos;
   entry->calcpos_data   = calcpos_data;
   entry->with_frame     = with_frame;
-  entry->free           = free ? free : (GDestroyNotify) wblock_dfl_destroy;
   wbm->widget_entries   = g_list_append (wbm->widget_entries, entry);
 
   wbm->selected_entry = entry;
@@ -420,7 +422,7 @@ void wblock_main_free (WBlockMain * wbm) {
     WbmWidgetEntry * entry = (WbmWidgetEntry *)(l->data);
     if (entry->calcpos_data)
       calcpos_data_free (entry->calcpos_data);
-    entry->free (entry->wb);
+    wblock_destroy (entry->wb);
     g_free (entry->wb);
   }
 
@@ -462,8 +464,8 @@ default_calcpos (WbmWidgetEntry *entry) {
   int LINES0 = MAX (0, LINES - 4);
   int y0     = data->y>=0     ? data->y     : 0;
   int x0     = data->x>=0     ? data->x     : 0;
-  int lines0 = data->lines>=0 ? data->lines : LINES0;
-  int cols0  = data->cols>=0  ? data->cols  : COLS;
+  int lines0 = data->lines>0 ? data->lines : LINES0;
+  int cols0  = data->cols>0  ? data->cols  : COLS;
   int add_y  = entry->with_frame ? 2 : 0;
   int add_x  = entry->with_frame ? 2 : 0;
 

@@ -20,7 +20,6 @@ typedef struct WbmWidgetEntry {
   gpointer calcpos_data;
   gboolean with_frame;
   int offset;
-  GDestroyNotify free;
   int y;
   int x;
   int lines;
@@ -48,7 +47,6 @@ WBlockMain *wblock_main_new (void);
 void wblock_main_add_widget (
   WBlockMain *wbm,
   WBlock *wb,
-  GDestroyNotify free,
   pos_callback_t calcpos,
   gpointer calcpos_data,
   gboolean with_frame

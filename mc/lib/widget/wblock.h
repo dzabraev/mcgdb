@@ -55,7 +55,6 @@ typedef void (*wblock_save_cb_t) (WBlock *wb);
 #define WBLOCK_UPDATE_COORDS(wb) wb->draw(wb,wb->y,wb->x,wb->y,wb->x,wb->lines,wb->cols,FALSE)
 #define WBLOCK_KEY(wb,parm) wb->key(wb,parm)
 #define WBLOCK_MOUSE(wb,msg,event) (wb)->mouse(wb,msg,event)
-#define WBLOCK_DESTROY(wb) (wb)->destroy(wb)
 #define WBLOCK_SAVE(wb) (wb)->save(wb)
 
 #define IN_RECTANGLE(y0,x0,y,x,lines,cols) \
@@ -171,6 +170,8 @@ void wblock_save (WBlock *wb);
 void wblock_shift_yx (WBlock *wb, int shift_y, int shift_x);
 
 char * strstrip (const char *str);
+
+void wblock_destroy (WBlock *wb);
 
 #include "wblock-checkbox.h"
 #include "wblock-frame.h"
