@@ -185,7 +185,7 @@ wbm_redraw_full (WBlockMain *wbm) {
   wbm_move_cursor (wbm);
 }
 
-static void
+void
 entry_redraw_full (WbmWidgetEntry * entry) {
   gboolean redraw_dlg = widget_entry_draw (entry, FALSE);
   if (redraw_dlg)
@@ -195,7 +195,7 @@ entry_redraw_full (WbmWidgetEntry * entry) {
   entry_erase_redraw (entry);
 }
 
-static void
+void
 entry_update_coord (WbmWidgetEntry * entry) {
   widget_entry_draw (entry, FALSE);
 }
@@ -515,6 +515,12 @@ void calcpos_data_free (CalcposData *calcpos_data) {
 }
 
 
+void
+wbm_scroll_to_bottom (WbmWidgetEntry *entry) {
+  int widget_lines_for_wb = entry->lines + (entry->with_frame ? -2 : 0);
+  int off = MAX(entry->wb->lines - widget_lines_for_wb,0);
+  entry->offset = off;
+}
 
 
 

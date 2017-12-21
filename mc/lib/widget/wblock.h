@@ -155,7 +155,7 @@ draw_string_oneline (
   int y0, int x0, int y, int x, int lines, int cols, gboolean do_draw);
 
 
-
+WbmWidgetEntry * wblock_get_entry (WBlock *wb);
 WBlockMain * wblock_get_wbm (WBlock *wb);
 WDialog * wblock_get_dialog (WBlock *wb);
 

@@ -77,6 +77,7 @@ button_bp_new_cb (WBlock *wb, WBlockButtonData * data) {
   WBlock * wb_create_bp = wblock_empty ();
   WBlock * buttons = wblock_empty ();
   WBlockMain *wbm = wblock_main_new ();
+  WbmWidgetEntry *entry = wblock_get_entry (wb);
 
   char *location = g_strdup (user_data->location);
   gboolean temporary = FALSE;
@@ -114,6 +115,7 @@ button_bp_new_cb (WBlock *wb, WBlockButtonData * data) {
     mcgdb_bp *bp = mcgdb_bp_new ();
     bp_pair_t *pair = g_new0 (bp_pair_t, 1);
     bp->create_loc = location;
+    bp->temporary = temporary;
     pair->orig = NULL;
     pair->temp = bp;
     user_data->pairs[0] = g_list_append (user_data->pairs[0], pair);
@@ -122,6 +124,9 @@ button_bp_new_cb (WBlock *wb, WBlockButtonData * data) {
   }
 
   wblock_main_free (wbm);
+
+  entry_update_coord (entry);
+  wbm_scroll_to_bottom (entry);
 }
 
 
@@ -333,7 +338,9 @@ bp_widget (GList **pairs, bp_pair_t *pair) {
   WBlock *widget_locs = wblock_empty ();
   WBlock *widget_ign_count = wblock_empty ();
 
-  widget_bp = wblock_frame_new (g_strdup_printf ("Breakpoint %d",bp_tmp->number));
+  widget_bp = wblock_frame_new (g_strdup_printf ("Breakpoint %d%s",
+      bp_tmp->number,
+      bp_tmp->temporary ? " (temp)" : "" ));
   widget_bp->style.layout=LAYOUT_INLINE;
   wblock_add_widget (top_widget, widget_bp);
 

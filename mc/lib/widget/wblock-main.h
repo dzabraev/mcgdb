@@ -58,11 +58,17 @@ void wblock_main_save (WBlockMain *wbm);
 
 void wbm_redraw_full (WBlockMain *wbm);
 void wbm_recalc_position (WBlockMain *wbm);
+void entry_redraw_full (WbmWidgetEntry * entry);
+void entry_update_coord (WbmWidgetEntry * entry);
+
 
 CalcposData * calcpos_data_new (void);
 void calcpos_data_init (CalcposData *calcpos_data);
 void calcpos_data_free (CalcposData *calcpos_data);
 void default_calcpos (WbmWidgetEntry *entry);
+
+void wbm_scroll_to_bottom (WbmWidgetEntry *entry);
+
 
 
 #endif

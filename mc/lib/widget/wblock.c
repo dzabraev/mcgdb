@@ -217,13 +217,19 @@ draw_string_oneline (const char *p, int *draw_cols, int y0, int x0, int y, int x
 
 WBlockMain *
 wblock_get_wbm (WBlock *wb) {
+  return wblock_get_entry(wb)->wbm;
+}
+
+WbmWidgetEntry *
+wblock_get_entry (WBlock *wb) {
   WBlock *p = wb->parent, *q=wb;
   while (p) {
     q=p;
     p=p->parent;
   }
-  return q->entry->wbm;
+  return q->entry;
 }
+
 
 WDialog *
 wblock_get_dialog (WBlock *wb) {

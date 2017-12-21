@@ -122,7 +122,7 @@ class SrcWin(BaseWin):
         bp_data['external_id']=external_id
       else:
         self.bp_gdb_mc[bp.number] = None
-        bp_data['locations'] = map(lambda fl:{'filename':fl[0],'line':fl[1]},get_bp_locations(bp))
+      bp_data['locations'] = map(lambda fl:{'filename':fl[0],'line':fl[1]},get_bp_locations(bp))
       bps_data.append(bp_data)
 
     if len(bps_data)==0:
