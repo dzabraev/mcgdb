@@ -5,7 +5,7 @@
 
 #define COLOR_BP_WAIT_UPDATE mcgdb_bp_color_wait_update
 #define COLOR_BP_WAIT_DELETE mcgdb_bp_color_wait_remove
-#define COLOR_BP_FRAME_WAIT_DELETE mcgdb_bp_frame_color_wait_delete
+#define COLOR_BP_FRAME_WAIT_DELETE tty_try_alloc_color_pair2 ("red", "white", NULL, FALSE)
 
 
 gboolean

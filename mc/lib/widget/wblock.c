@@ -61,9 +61,6 @@ wblock_dfl_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols, 
       c->lines=-1;
       c->cols=-1;
     }
-    else {
-      tty_setcolor (c->style.color);
-    }
 
     WBLOCK_DRAW (c, c->y, c->x, y, x, lines, cols, do_draw);
 
@@ -370,13 +367,40 @@ wblock_set_name (WBlock *wb, char *name) {
 }
 
 WBlock *
+find_child_by_name (WBlock *wb, const char *name) {
+  for (GList *l=wb->widgets;l;l=l->next) {
+    WBlock *child = WBLOCK_DATA(l);
+    WBlock *child1;
+    if (child->name && !strcmp (child->name,name))
+      return child;
+    child1 = find_child_by_name (child, name);
+    if (child1)
+      return child1;
+  }
+  return NULL;
+}
+
+WBlock *
 find_closest_by_name (WBlock *wb, const char *name) {
   /*currently search only in parents*/
-  WBlock *p = wb->parent;
+  WBlock *p = wb->parent, *q=wb;
   while (p) {
     if (p->name && !strcmp (p->name,name)) {
       return p;
     }
+    for (GList *l=p->widgets;l;l=l->next) {
+      WBlock *child = WBLOCK_DATA(l);
+      WBlock *child1;
+      if (child==q)
+        continue;
+      if (child->name && !strcmp (child->name,name))
+        return child;
+      child1 = find_child_by_name (child, name);
+      if (child1)
+        return child1;
+    }
+    q=p;
+    p=p->parent;
   }
   return NULL;
 }

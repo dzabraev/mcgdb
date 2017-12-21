@@ -8,6 +8,7 @@
 
 #define BP_WIDGET_NAME "bp-widget"
 
+
 typedef struct bp_pair {
   mcgdb_bp *orig;
   mcgdb_bp *temp;
@@ -230,7 +231,7 @@ typedef struct {
 
 static void
 bpw_button_delete_cb (WBlock *wb, WBlockButtonData * data) {
-  WBlock *frame_parent;
+  //WBlock *frame_parent;
   ButtonDeleteData *user_data = (ButtonDeleteData *)data->user_data;
   mcgdb_bp *orig = user_data->pair->orig,
            *temp = user_data->pair->temp;
@@ -247,8 +248,8 @@ bpw_button_delete_cb (WBlock *wb, WBlockButtonData * data) {
         temp->wait_status = orig->wait_status;
       }
     }
-    frame_parent = user_data->parent; /*frame around breakpoint widget*/
-    message_assert (frame_parent!=NULL);
+    //frame_parent = find_closest_by_name (wb, BP_WIDGET_NAME); /*frame around breakpoint widget*/
+    //message_assert (frame_parent!=NULL);
     switch (temp->wait_status) {
       case BP_WAIT_DELETE:
         new_frame_color = COLOR_BP_FRAME_WAIT_DELETE;
@@ -261,6 +262,7 @@ bpw_button_delete_cb (WBlock *wb, WBlockButtonData * data) {
         break;
     }
     wblock_set_color (wb, new_frame_color);
+    wblock_set_color (user_data->parent, new_frame_color);
   }
   else {
     WBlockMain *wbm;
@@ -406,7 +408,7 @@ bp_widget (GList **pairs, bp_pair_t *pair) {
   wblock_add_widget (
     widget_ign_count,
     layout_inline (wblock_input_integer_new (
-      &bp_tmp->ignore_count
+      &bp_tmp->ignore_count, TRUE
     ))
   );
 

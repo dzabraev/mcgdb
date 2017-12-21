@@ -28,6 +28,7 @@ typedef struct WBlockInputDataInteger {
   WBlockInputData data;
   int *val;
   char *input;
+  gboolean non_negative;
 } WBlockInputDataInteger;
 
 
@@ -35,7 +36,7 @@ typedef struct WBlockInputDataInteger {
 void wblock_input_set_readonly (WBlock *wb, gboolean ro);
 
 WBlock * wblock_input_new (char **initial, int h_min, int h_max, int w_min, int w_max);
-WBlock * wblock_input_integer_new (int *val);
+WBlock * wblock_input_integer_new (int *val, gboolean non_negative);
 
 
 #endif

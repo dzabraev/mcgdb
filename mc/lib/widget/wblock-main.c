@@ -277,9 +277,10 @@ wbm_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
       default:
           break;
     }
-    if (saved_offset!=entry->offset)
+    if (saved_offset!=entry->offset) {
       entry_update_coord (entry);
       entry_redraw (entry);
+    }
   }
   else {
     if (wbm_exists_redraw (wbm))

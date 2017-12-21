@@ -49,7 +49,11 @@ typedef void (*wblock_save_cb_t) (WBlock *wb);
 #define WBLOCK_DATA(l) (l) ? ((WBlock *)((l)->data)) : NULL
 
 #define WBLOCK_DRAW(wb,y0,x0,y,x,lines,cols,do_draw) \
-  wb->draw(wb,y0,x0,y,x,lines,cols,do_draw)
+do { \
+  if (do_draw) \
+    tty_setcolor (wb->style.color); \
+  wb->draw(wb,y0,x0,y,x,lines,cols,do_draw); \
+} while(0)
 
 #define WBLOCK_REDRAW(wb)        wb->draw(wb,wb->y,wb->x,wb->y,wb->x,wb->lines,wb->cols,TRUE)
 #define WBLOCK_UPDATE_COORDS(wb) wb->draw(wb,wb->y,wb->x,wb->y,wb->x,wb->lines,wb->cols,FALSE)
@@ -180,6 +184,7 @@ WBlock * wblock_set_name (WBlock *wb, char *name);
 void wblock_unlink (WBlock *wb);
 
 WBlock * find_closest_by_name (WBlock *wb, const char *name);
+WBlock * find_child_by_name (WBlock *wb, const char *name);
 
 
 #include "wblock-checkbox.h"

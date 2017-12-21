@@ -561,13 +561,19 @@ wblock_input_push_delta (WBlock *wb, WBlockButtonData *data, int delta) {
   char *sval;
   WBlock *wb_input = (WBlock *)data->user_data;
   WBlockInputDataInteger *wdata = (WBlockInputDataInteger *)(wb_input->wdata);
+  gboolean non_negative = (WBlockInputDataInteger *)(wb_input->wdata);
 
   (void) wb;
 
   WBLOCK_SAVE (wb_input); /*store user input into data->input*/
-  wblock_input_clear (wb_input); /*clear text in input field*/
   val = atoi (wdata->input);
   val+=delta;
+
+  if (non_negative && val<0 && delta<=0)
+    return;
+
+  wblock_input_clear (wb_input); /*clear text in input field*/
+
   sval = g_strdup_printf ("%d", val);
   wblock_input_goto_begin (wb_input);
   for (int i=0,l=strlen(sval);i<l;i++) {
@@ -601,12 +607,13 @@ wblock_input_set_readonly (WBlock *wb, gboolean ro) {
 
 
 WBlock *
-wblock_input_integer_new (int *val) {
+wblock_input_integer_new (int *val, gboolean non_negative) {
   WBlock *wb_main = wblock_empty ();
   WBlockInputDataInteger *data = g_new0 (WBlockInputDataInteger, 1);
   WBlock *wb_input;
 
   data->val = val;
+  data->non_negative = non_negative;
   data->input = g_strdup_printf("%d", val[0]);
   wb_input = wblock_input_new (&data->input, 1, 1, 5, 5);
 
