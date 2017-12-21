@@ -66,6 +66,7 @@ calcpos_new_bp (WbmWidgetEntry *entry) {
   CalcposData *calcpos_data = (CalcposData *)entry->calcpos_data;
   calcpos_data->y = data->wb->y+1; /*Coordinates of button [NewBp]*/
   calcpos_data->x = 5;
+  calcpos_data->cols = MAX (20, COLS-5-calcpos_data->x);
   default_calcpos (entry);
 }
 

@@ -12,6 +12,7 @@
 #include "src/mcgdb.h"
 
 static GArray *wblock_input_get_line (WBlock *wb, int y);
+static void wblock_input_move_cursor_y (WBlock *wb, int offset);
 
 
 static void
@@ -109,6 +110,8 @@ wblock_input_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols
       wb->lines = MAX (data->h_min, wb->lines);
     if (data->h_max>0)
       wb->lines = MIN (data->h_max, wb->lines);
+
+    wb->cursor_x = MIN (wb->cursor_x, wb->cols-1);
   }
   else {
     int draw_y, draw_x;
@@ -124,7 +127,11 @@ wblock_input_draw (WBlock *wb, int y0, int x0, int y, int x, int lines, int cols
     for (int line_idx=0; line_idx < MIN(wb->lines,(int)data->buf->len); line_idx++) {
       GArray *row = buf_get_line (data->buf, data->offset_y + line_idx);
       for (int col_idx=0; col_idx < MIN (wb->cols,(int)row->len); col_idx++) {
-        gunichar ch = g_array_index (row, gunichar, data->offset_x+col_idx);
+        gunichar ch;
+        if (data->offset_x+col_idx < (int)row->len)
+          ch = g_array_index (row, gunichar, data->offset_x+col_idx);
+        else
+          ch = ' ';
         draw_x = x0+col_idx;
         draw_y = y0+line_idx;
         if (IN_RECTANGLE (draw_y, draw_x, y, x, lines, cols)) {
@@ -170,7 +177,7 @@ static void
 wblock_input_view_toright (WBlock *wb) {
   WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
   int len = wblock_input_current_line (wb)->len;
-  data->offset_x = MAX (0, len - wb->cols);
+  data->offset_x = MAX (0, len - wb->cols + (len>0?1:0));
   wb->cursor_x = len - data->offset_x;
   wb->redraw=TRUE;
 }
@@ -205,7 +212,7 @@ wblock_input_incr_cursor_x (WBlock *wb) {
   GArray *cur = wblock_input_current_line (wb);
   WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
   if (wb->cursor_x+data->offset_x < (int)cur->len) {
-    if (wb->cursor_x < wb->cols)
+    if (wb->cursor_x < wb->cols-1) /*keep extra space for cursor*/
       wb->cursor_x++;
     else
       data->offset_x++;
@@ -345,10 +352,14 @@ wblock_input_enter (WBlock *wb) {
 static void
 wblock_input_insert_char (WBlock *wb, gunichar parm) {
   WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
-  g_array_insert_val (
-    wblock_input_current_line (wb),
-    data->offset_x + wb->cursor_x,
-    parm);
+  GArray *row = wblock_input_current_line (wb);
+  if (data->offset_x + wb->cursor_x < (int)row->len)
+    g_array_insert_val (
+      row,
+      data->offset_x + wb->cursor_x,
+      parm);
+  else
+    g_array_append_val (row,parm);
   wblock_input_incr_cursor_x (wb);
   wb->redraw=TRUE;
 }
