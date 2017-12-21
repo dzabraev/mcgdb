@@ -11,6 +11,8 @@
 #include "wblock.h"
 #include "src/mcgdb.h"
 
+static GArray *wblock_input_get_line (WBlock *wb, int y);
+
 
 static void
 buf_insert_lines (GArray *buf, gchar *lines, int y) {
@@ -62,16 +64,12 @@ buf_to_string (GArray *buf, gchar **string) {
 }
 
 
+
 static GArray *
 buf_get_line (GArray *buf, int y) {
   return g_array_index (buf, GArray *, y);
 }
 
-static GArray *
-wblock_input_get_line (WBlock *wb, int y) {
-  WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
-  return buf_get_line (data->buf, y);
-}
 
 
 static GArray *
@@ -215,12 +213,8 @@ wblock_input_incr_cursor_x (WBlock *wb) {
   }
   else {
     int inc_curs = wb->cursor_y<wb->lines-1,
-        inc_off = data->offset_y < (int)data->buf->len - wb->lines - 1;
-    if (data->offset_x < (int)cur->len - wb->lines-1) {
-      data->offset_x++;
-      wb->redraw=TRUE;
-    }
-    else if (inc_curs || inc_off) {
+        inc_off = data->offset_y + wb->lines < (int)data->buf->len;
+    if (inc_curs || inc_off) {
       if (inc_curs) {
         wb->cursor_y++;
         wb->redraw=TRUE;
@@ -277,26 +271,28 @@ wblock_input_backspace (WBlock *wb) {
     }
     wb->redraw=TRUE;
   }
-  else if (pos_y>data->h_min) {
+  else {
     /*change current line*/
-    GArray *row = wblock_input_get_line (wb, pos_y);
-    gboolean last_row = pos_y==(int)data->buf->len-1;
+    GArray *row;
+
+    if (pos_y==0)
+      return;
+
+    row = wblock_input_get_line (wb, pos_y);
     wblock_input_decr_cursor_x (wb);
     g_array_append_vals (
       wblock_input_get_line (wb, pos_y-1),
       row->data,
       row->len
     );
-    g_array_remove_index (data->buf,pos_y);
-    if (last_row) {
-      if (data->offset_y>0) {
-        data->offset_y--;
-        wb->cursor_y++;
-      }
-      else {
-        wblock_input_decr_lines (wb);
-      }
+    if ((int)data->buf->len > data->h_min) {
+      g_array_remove_index (data->buf,pos_y);
+      wblock_input_decr_lines (wb);
     }
+    else {
+      g_array_remove_range (row, 0, row->len);
+    }
+
     wb->redraw=TRUE;
   }
 }
@@ -568,6 +564,13 @@ wblock_input_push_delta (WBlock *wb, WBlockButtonData *data, int delta) {
   }
   g_free (sval);
 }
+
+static GArray *
+wblock_input_get_line (WBlock *wb, int y) {
+  WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
+  return buf_get_line (data->buf, y);
+}
+
 
 static void
 wblock_input_push_incr (WBlock *wb, WBlockButtonData * data) {

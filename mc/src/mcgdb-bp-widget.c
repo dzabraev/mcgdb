@@ -121,12 +121,12 @@ button_bp_new_cb (WBlock *wb, WBlockButtonData * data) {
     user_data->pairs[0] = g_list_append (user_data->pairs[0], pair);
     wblock_add_widget (user_data->wb, bp_widget (user_data->pairs, pair));
     user_data->wb->redraw = TRUE;
+    entry_update_coord (entry);
+    wbm_scroll_to_bottom (entry);
   }
 
   wblock_main_free (wbm);
 
-  entry_update_coord (entry);
-  wbm_scroll_to_bottom (entry);
 }
 
 
