@@ -72,7 +72,7 @@ input_colors_t input_colors;
 #endif
 
 #define should_show_history_button(in) \
-    (in->history.list != NULL && WIDGET (in)->cols > HISTORY_BUTTON_WIDTH * 2 + 1 \
+    (WIDGET (in)->cols > HISTORY_BUTTON_WIDTH * 2 + 1 \
          && WIDGET (in)->owner != NULL)
 
 /*** file scope type declarations ****************************************************************/
@@ -1278,8 +1278,7 @@ input_update (WInput * in, gboolean clear_first)
             in->term_first_shown = 0;
     }
 
-    if (has_history != 0)
-        draw_history_button (in);
+    draw_history_button (in);
 
     if (widget_get_state (w, WST_DISABLED))
         tty_setcolor (DISABLED_COLOR);
