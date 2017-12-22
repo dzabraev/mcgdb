@@ -686,7 +686,28 @@ mcgdb_module_init(void) {
 
 void
 mcgdb_cmd_breakpoint (WEdit * edit) {
-  mcgdb_bp_process_click (edit->filename, edit->buffer.curs_line+1, 1, 1);
+  const char *filename = edit->filename;
+  int line = edit->buffer.curs_line+1;
+  int nbps = count_bps (filename,line);
+
+  if (nbps==0) {
+    mcgdb_create_bp (filename, line);
+  }
+  else {
+    /*delete all bps*/
+    for (GList *l=mcgdb_bp_find_bp_with_location (mcgdb_bps, filename, line);l;
+      l = mcgdb_bp_find_bp_with_location (l->next, filename, line)) 
+    {
+      mcgdb_bp *bp = MCGDB_BP(l);
+      if (bp->wait_status != BP_WAIT_DELETE) {
+        bp->wait_status = BP_WAIT_DELETE;
+        send_pkg_delete_bp (bp);
+      }
+    }
+  }
+
+  edit->force |= REDRAW_PAGE;
+  edit_update_screen (edit);
 }
 
 void
