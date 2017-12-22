@@ -554,6 +554,7 @@ class BpModif(object):
           del self.bpid_to_bp[bpid]
     self.need_delete=[]
     for key,values in self.need_update.items():
+      bp_was_touched = False
       win_id,enabled,silent,ignore_count,temporary,thread,condition,commands,create_loc,number,after_create = values
       bpid = number if number is not None else self.key_to_bpid.get(key)
       if bpid is not None and bpid in self.bpid_to_bp:
@@ -570,6 +571,7 @@ class BpModif(object):
         if temporary is not None:
           kw['temporary']=temporary
         bp=gdb.Breakpoint(**kw)
+        bp_was_touched = True
         self.key_to_bpid[key]=bp.number
         self.bpid_to_bp[bp.number]=bp
         if after_create is not None:
@@ -577,20 +579,25 @@ class BpModif(object):
 
       if enabled is not None and bp.enabled!=enabled:
         bp.enabled=enabled
+        bp_was_touched = True
       if silent is not None and bp.silent!=silent:
         bp.silent=silent
+        bp_was_touched = True
       if ignore_count is not None and bp.ignore_count!=ignore_count:
         bp.ignore_count=ignore_count
+        bp_was_touched = True
       if thread==-1:
         thread=None
       if bp.thread != thread:
         bp.thread=thread
+        bp_was_touched = True
       if bp.condition!=condition:
         try:
           bp.condition=condition
         except gdb.error as e:
           pending_errors[win_id].append(str(e))
-          touch_breakpoint(bp)
+      if not bp_was_touched:
+        touch_breakpoint(bp)
       if bp.commands!=commands:
         gdb.write('WARNING: parameter commands is not supported by front-end.\nYou can set him manually:\ncommands {number}\n{commands}\n'.format(
           number=bp.number,commands=commands))

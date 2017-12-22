@@ -186,6 +186,13 @@ void wblock_unlink (WBlock *wb);
 WBlock * find_closest_by_name (WBlock *wb, const char *name);
 WBlock * find_child_by_name (WBlock *wb, const char *name);
 
+void wblock_set_current (WBlock *wb);
+
+
+void wblock_stop_dlg (WBlock *wb, int ret_value);
+void wblock_stop_dlg_enter (WBlock *wb);
+void wblock_stop_dlg_cancel (WBlock *wb);
+
 
 #include "wblock-checkbox.h"
 #include "wblock-frame.h"

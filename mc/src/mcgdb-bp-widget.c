@@ -5,6 +5,8 @@
 #include "mcgdb-bp.h"
 #include "lib/tty/tty.h"          /* LINES, COLS */
 #include "src/editor/edit-impl.h" /* LINE_STATE_WIDTH*/
+#include "src/keybind-defaults.h" /*wblock_input_map*/
+
 
 #define BP_WIDGET_NAME "bp-widget"
 
@@ -71,6 +73,27 @@ calcpos_new_bp (WbmWidgetEntry *entry) {
   default_calcpos (entry);
 }
 
+static gboolean
+create_bp_key_fn (WBlock *wb, int parm) {
+  int command = keybind_lookup_keymap_command (wblock_input_map, parm);
+  gboolean handled = FALSE;
+
+  switch (command) {
+    case CK_Enter:
+      wblock_stop_dlg_enter (wb);
+      handled = TRUE;
+      break;
+    case CK_Cancel:
+      wblock_stop_dlg_cancel (wb);
+      handled = TRUE;
+      break;
+    default:
+      break;
+  }
+
+  return handled;
+}
+
 static void
 button_bp_new_cb (WBlock *wb, WBlockButtonData * data) {
   ButtonBpNewData * user_data = (ButtonBpNewData *)data->user_data;
@@ -78,6 +101,7 @@ button_bp_new_cb (WBlock *wb, WBlockButtonData * data) {
   int return_val;
   WBlock * wb_create_bp = wblock_empty ();
   WBlock * buttons = wblock_empty ();
+  WBlock * createloc_input;
   WBlockMain *wbm = wblock_main_new ();
   WbmWidgetEntry *entry = wblock_get_entry (wb);
 
@@ -85,13 +109,10 @@ button_bp_new_cb (WBlock *wb, WBlockButtonData * data) {
   gboolean temporary = FALSE;
 
 
-  wblock_add_widget (wb_create_bp, wblock_label_new (
-    g_strdup ("Location:"), TRUE
-  ));
 
-  wblock_add_widget (wb_create_bp, wblock_input_new (
-      &location, 1, 1, -1, -1
-  ));
+  wblock_add_widget (wb_create_bp, wblock_label_new (g_strdup ("Location:"), TRUE));
+  createloc_input = wblock_input_new (&location, 1, 1, -1, -1);
+  wblock_add_widget (wb_create_bp, createloc_input);
 
   wblock_add_widget (wb_create_bp, wblock_checkbox_labeled_new (
       strdup ("Temporary "),
@@ -108,6 +129,13 @@ button_bp_new_cb (WBlock *wb, WBlockButtonData * data) {
   calcpos_data_new_bp->data.closest_to_y = TRUE;
   calcpos_data_new_bp->wb = wb;
   wblock_main_add_widget (wbm, wb_create_bp, calcpos_new_bp, calcpos_data_new_bp, TRUE);
+
+  wblock_set_current (createloc_input); /*createloc_input will capture input keys*/
+  wblock_input_disable_enter (createloc_input, TRUE); /*createloc_input ignores enter*/
+  wbm_recalc_position (wbm);
+  wbm_update_coords (wbm); /*calc coordinates for wblock_input_view_toright*/
+  wblock_set_key (wb_create_bp, create_bp_key_fn);
+  wblock_input_view_toright (createloc_input); /*move cursor to right*/
 
   disable_gdb_events_enter();
   return_val = wblock_main_run (wbm);

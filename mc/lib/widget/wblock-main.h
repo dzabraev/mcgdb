@@ -2,7 +2,6 @@
 #define __wblock_main_h__
 
 #define WBMAIN(w) ((WBlockMain *)(w))
-#define WBM_UPDATE_COORDS(wbm) wbm_wblock_draw(wbm,FALSE)
 #define WBM_REDRAW(wbm) wbm_wblock_draw (wbm,TRUE);
 #define WIDGET_ENTRY(l) ((WbmWidgetEntry *)(l->data))
 
@@ -57,6 +56,7 @@ void wblock_main_free (WBlockMain *wbm);
 void wblock_main_save (WBlockMain *wbm);
 
 void wbm_redraw_full (WBlockMain *wbm);
+gboolean wbm_update_coords (WBlockMain *wbm);
 void wbm_recalc_position (WBlockMain *wbm);
 void entry_redraw_full (WbmWidgetEntry * entry);
 void entry_update_coord (WbmWidgetEntry * entry);

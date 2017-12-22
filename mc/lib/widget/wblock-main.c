@@ -174,7 +174,7 @@ void
 wbm_redraw_full (WBlockMain *wbm) {
   gboolean redraw_dialog_stack;
   wbm_normalize_offset (wbm);
-  redraw_dialog_stack = WBM_UPDATE_COORDS (wbm);
+  redraw_dialog_stack = wbm_update_coords (wbm);
   if (redraw_dialog_stack) {
     dialog_change_screen_size ();
   }
@@ -183,6 +183,11 @@ wbm_redraw_full (WBlockMain *wbm) {
   }
   wbm_erase_redraw (wbm);
   wbm_move_cursor (wbm);
+}
+
+gboolean
+wbm_update_coords (WBlockMain *wbm) {
+  return wbm_wblock_draw (wbm,FALSE);
 }
 
 void
@@ -296,6 +301,17 @@ wbm_recalc_position (WBlockMain *wbm) {
   }
 }
 
+static gboolean
+fire_key_event (WBlock *wb, int parm) {
+  WBlock *p = wb;
+  while (p) {
+    if (p->key && WBLOCK_KEY (p, parm))
+      return TRUE;
+    p = p->parent;
+  }
+  return FALSE;
+}
+
 static cb_ret_t
 wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *data) {
   int command;
@@ -315,7 +331,7 @@ wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
       WIDGET (wbm)->y=1;
       WIDGET (wbm)->lines=LINES;
       WIDGET (wbm)->cols=COLS;
-      WBM_UPDATE_COORDS (wbm);
+      wbm_update_coords (wbm);
       wbm_normalize_offset (wbm);
       break;
     case MSG_DRAW:
@@ -324,8 +340,7 @@ wbm_callback (Widget * w, Widget * sender, widget_msg_t msg, int parm, void *dat
     case MSG_KEY:
       if (entry &&
           entry->selected_widget &&
-          entry->selected_widget->key &&
-          WBLOCK_KEY (entry->selected_widget, parm))
+          fire_key_event (entry->selected_widget, parm))
       {
         if (wbm_exists_redraw (wbm)) {
           wbm_redraw_full (wbm);

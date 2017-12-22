@@ -19,6 +19,7 @@ typedef struct WBlockInputData {
   int w_max;
   char **result;
   gboolean readonly;
+  gboolean disable_enter;
 } WBlockInputData;
 
 
@@ -37,6 +38,11 @@ void wblock_input_set_readonly (WBlock *wb, gboolean ro);
 
 WBlock * wblock_input_new (char **initial, int h_min, int h_max, int w_min, int w_max);
 WBlock * wblock_input_integer_new (int *val, gboolean non_negative);
+
+void wblock_input_disable_enter (WBlock *wb, gboolean disable_enter);
+
+void wblock_input_view_toleft (WBlock *wb);
+void wblock_input_view_toright (WBlock *wb);
 
 
 #endif

@@ -404,3 +404,31 @@ find_closest_by_name (WBlock *wb, const char *name) {
   }
   return NULL;
 }
+
+void
+wblock_set_current (WBlock *wb) {
+  WbmWidgetEntry *entry = wblock_get_entry (wb);
+  message_assert (entry!=NULL);
+  entry->selected_widget = wb;
+  entry->wbm->selected_entry = entry;
+}
+
+void
+wblock_stop_dlg (WBlock *wb, int ret_value) {
+  WDialog *h = wblock_get_dialog (wb);
+  h->ret_value = ret_value;
+  dlg_stop (h);
+}
+
+void
+wblock_stop_dlg_enter (WBlock *wb) {
+  wblock_stop_dlg (wb, B_ENTER);
+}
+
+void
+wblock_stop_dlg_cancel (WBlock *wb) {
+  wblock_stop_dlg (wb, B_CANCEL);
+}
+
+
+

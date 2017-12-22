@@ -165,7 +165,7 @@ wblock_input_mouse (WBlock *wb, mouse_msg_t msg, mouse_event_t * event) {
 }
 
 
-static void
+void
 wblock_input_view_toleft (WBlock *wb) {
   WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
   data->offset_x=0;
@@ -173,7 +173,7 @@ wblock_input_view_toleft (WBlock *wb) {
   wb->redraw=TRUE;
 }
 
-static void
+void
 wblock_input_view_toright (WBlock *wb) {
   WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
   int len = wblock_input_current_line (wb)->len;
@@ -436,6 +436,10 @@ wblock_input_key (WBlock *wb, int parm) {
     }
   }
 
+  if (data->disable_enter && command==CK_Enter) {
+    return FALSE;
+  }
+
   switch (command) {
     case CK_Enter:
       wblock_input_enter (wb);
@@ -531,6 +535,8 @@ wblock_input_new (char **initial, int h_min, int h_max, int w_min, int w_max) {
     wblock_input_draw,
     wblock_input_save,
     data);
+  wb->cursor_y = 0;
+  wb->cursor_x = 0;
   return wb;
 }
 
@@ -561,7 +567,7 @@ wblock_input_push_delta (WBlock *wb, WBlockButtonData *data, int delta) {
   char *sval;
   WBlock *wb_input = (WBlock *)data->user_data;
   WBlockInputDataInteger *wdata = (WBlockInputDataInteger *)(wb_input->wdata);
-  gboolean non_negative = (WBlockInputDataInteger *)(wb_input->wdata);
+  gboolean non_negative = wdata->non_negative;
 
   (void) wb;
 
@@ -643,6 +649,11 @@ wblock_input_integer_new (int *val, gboolean non_negative) {
       NULL)));
 
   return wb_main;
+}
 
+void
+wblock_input_disable_enter (WBlock *wb, gboolean disable_enter) {
+  WBlockInputData *data = WBLOCK_INPUT_DATA (wb->wdata);
+  data->disable_enter = disable_enter;
 }
 
