@@ -405,6 +405,13 @@ wblock_input_clear (WBlock *wb) {
   if (len > data->h_min) {
     g_array_remove_range (data->buf, data->h_min, len-data->h_min);
   }
+
+  wb->cursor_y = 0;
+  wb->cursor_x = 0;
+  data->offset_y = 0;
+  data->offset_x = 0;
+
+  wb->redraw = TRUE;
 }
 
 static void
@@ -657,3 +664,23 @@ wblock_input_disable_enter (WBlock *wb, gboolean disable_enter) {
   data->disable_enter = disable_enter;
 }
 
+
+static void
+wblock_input_push_clear (WBlock *wb, WBlockButtonData * data) {
+  WBlock *wb_input = (WBlock *)data->user_data;
+
+  (void) wb;
+
+  wblock_input_clear (wb_input); /*clear text in input field*/
+  wblock_set_current (wb_input);
+}
+
+WBlock *
+wblock_input_clean_button (WBlock *wb_input, char *text) {
+  WBlock *btn = wblock_button_new (
+    text ? text : g_strdup ("[X]"),
+    wblock_input_push_clear,
+    wb_input,
+    NULL);
+  return btn;
+}

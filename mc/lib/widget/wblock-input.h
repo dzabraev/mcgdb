@@ -44,5 +44,7 @@ void wblock_input_disable_enter (WBlock *wb, gboolean disable_enter);
 void wblock_input_view_toleft (WBlock *wb);
 void wblock_input_view_toright (WBlock *wb);
 
+WBlock *wblock_input_clean_button (WBlock *wb_input, char *text);
+
 
 #endif

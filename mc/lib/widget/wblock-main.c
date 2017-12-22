@@ -126,6 +126,7 @@ wbm_normalize_offset (WBlockMain *wbm) {
 static gboolean
 wbm_entry_mouse (WbmWidgetEntry * entry, mouse_msg_t msg, mouse_event_t * event) {
   WBlock *c = wblock_get_widget_yx (entry->wb, event->y, event->x); //most depth widget
+  entry->selected_widget = NULL;
   while (c) {
     if (c->mouse) {
       gboolean res;
@@ -137,13 +138,15 @@ wbm_entry_mouse (WbmWidgetEntry * entry, mouse_msg_t msg, mouse_event_t * event)
       event->x += delta_x;
       event->y += delta_y;
       if (res) {
-        entry->selected_widget = c;
+        if (!entry->selected_widget) {
+          /*may be changed during processing event. We shouldn't override this*/
+          entry->selected_widget = c;
+        }
         return TRUE;
       }
     }
     c = c->parent;
   }
-  entry->selected_widget = NULL;
   return FALSE;
 }
 
@@ -259,7 +262,6 @@ wbm_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
     return;
   }
 
-
   wbm->selected_entry = entry;
 
   event->y+=delta_y;
@@ -290,6 +292,8 @@ wbm_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event) {
   else {
     if (wbm_exists_redraw (wbm))
       wbm_redraw_full (wbm);
+    else
+      wbm_move_cursor (wbm);
   }
 }
 

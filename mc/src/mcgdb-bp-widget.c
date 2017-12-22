@@ -101,7 +101,9 @@ button_bp_new_cb (WBlock *wb, WBlockButtonData * data) {
   int return_val;
   WBlock * wb_create_bp = wblock_empty ();
   WBlock * buttons = wblock_empty ();
-  WBlock * createloc_input;
+  WBlock * createloc_input,
+         * createloc_input_clear_btn,
+         * input_top = wblock_empty();
   WBlockMain *wbm = wblock_main_new ();
   WbmWidgetEntry *entry = wblock_get_entry (wb);
 
@@ -110,16 +112,16 @@ button_bp_new_cb (WBlock *wb, WBlockButtonData * data) {
 
 
 
-  wblock_add_widget (wb_create_bp, wblock_label_new (g_strdup ("Location:"), TRUE));
   createloc_input = wblock_input_new (&location, 1, 1, -1, -1);
-  wblock_add_widget (wb_create_bp, createloc_input);
+  createloc_input_clear_btn = wblock_input_clean_button (createloc_input, NULL);
+  wblock_add_widget (input_top, layout_inline (createloc_input_clear_btn));
+  wblock_add_widget (input_top, layout_inline (createloc_input));
+  wblock_add_widget (wb_create_bp, input_top);
 
   wblock_add_widget (wb_create_bp, wblock_checkbox_labeled_new (
       strdup ("Temporary "),
       &temporary
   ));
-
-  wblock_add_widget (wb_create_bp, wblock_newline ());
 
   wblock_add_widget (buttons, buttons_save_cancel ());
   wblock_add_widget (wb_create_bp, buttons);
