@@ -1,11 +1,16 @@
 #ifndef __mcgdb_bp_h__
 #define __mcgdb_bp_h__
 
+#include "lib/tty/color.h" /* tty_try_alloc_color_pair2 */
+
+
 extern int mcgdb_bp_color_wait_remove;
 extern int mcgdb_bp_color_wait_update;
 extern int mcgdb_bp_color_normal;
 extern int mcgdb_bp_color_disabled;
 extern int mcgdb_bp_frame_color_wait_delete;
+
+#define BP_ANOTHER_THREAD_COLOR tty_try_alloc_color_pair2 ("black", "white", NULL, FALSE)
 
 extern GList * mcgdb_bps;
 

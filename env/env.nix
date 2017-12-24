@@ -1,4 +1,18 @@
 with import <nixpkgs> { };
+let
+  gdb_dbg = gdb.overrideAttrs (oldAttrs : rec {
+    #separateDebugInfo = true;
+    dontStrip = true;
+    preConfigure = ''
+      export CXXFLAGS='-g3 -O0 -fdebug-prefix-map=..=$out'
+      export CFLAGS=$CXXFLAGS
+    '';
+    postUnpack = ''
+      mkdir -p $out/src
+      cp -r ./$name/* $out/src/
+    '';
+  });
+in
   stdenv.mkDerivation {
     hardeningDisable = ["all"];
     name = "mcgdb-env";
@@ -11,10 +25,11 @@ with import <nixpkgs> { };
       glib
       jansson
       slang
-      gdb
       xterm
       git
       valgrind
+      (callPackage ./pysigset.nix {})
+      gdb
 
       #packages for testing
       (callPackage ./pyte.nix {})

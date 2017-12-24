@@ -289,16 +289,17 @@ mcgdb_bp_color(const char * filename, long line) {
             exists_enable=FALSE,
             exists_disable=FALSE,
             exists_wait_del=FALSE,
-            exists_wait_upd=FALSE;
+            exists_wait_upd=FALSE,
+            exists_another_thread=FALSE;
   if (!filename)
     return -1;
   for(GList *l=mcgdb_bps;l!=NULL;l=l->next) {
     mcgdb_bp * bp = MCGDB_BP(l);
-    if (selected_thread_global_num!=-1 && bp->thread!=-1 && bp->thread!=selected_thread_global_num)
-      continue;
     if (!mcgdb_bp_has_location (bp,filename,line))
       continue;
-    if (bp->wait_status==BP_NOWAIT) {
+    if (selected_thread_global_num!=-1 && bp->thread!=-1 && bp->thread!=selected_thread_global_num)
+      exists_another_thread=TRUE;
+    else if (bp->wait_status==BP_NOWAIT) {
       if (bp->enabled) {
         exists_enable=TRUE;
         if (!bp->condition) {
@@ -333,6 +334,8 @@ mcgdb_bp_color(const char * filename, long line) {
     return mcgdb_bp_color_normal;
   else if (exists_disable)
     return mcgdb_bp_color_disabled;
+  else if (exists_another_thread)
+    return BP_ANOTHER_THREAD_COLOR;
   else
     return -1;
 }

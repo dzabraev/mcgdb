@@ -329,6 +329,10 @@ thread_widget_new (thread_entry_t *t) {
   return wb;
 }
 
+static int
+thread_options_cmp (select_option_t *a, select_option_t *b) {
+  return strcmp(a->short_name, b->short_name);
+}
 
 static GList *
 get_setect_options_for_threads (int initial_id, gboolean add_none) {
@@ -349,6 +353,7 @@ get_setect_options_for_threads (int initial_id, gboolean add_none) {
     short_name = g_strdup_printf ("[#%d %s]",t->global_num, t->name);
     options = g_list_append (options, select_option_new (t->global_num, row, selected, short_name));
   }
+  options = g_list_sort (options, (GCompareFunc) thread_options_cmp);
   return options;
 }
 

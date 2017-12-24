@@ -9,7 +9,7 @@
       repo = "mcgdb";
       owner = "dzabraev";
       rev = "b658752fbd8aa67e7e1b8600a49f831cb3efd1b5";
-      sha256 = "0ybn11bbcpn4crh39xk3h95rq6nbjf46qsnfrwxzjnnh8bq1krcy";
+      sha256 = "154xw4njxbv0dmf98rj6i4vvy2m2wg1711jl5j3942vfpn6rjspq";
     };
 
     nativeBuildInputs = [ pkgconfig ];
