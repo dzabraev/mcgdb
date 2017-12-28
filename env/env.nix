@@ -8,63 +8,27 @@ let
 in
 with import nixpkgs { };
 let
-  python2_dbg = python.overrideAttrs (oldAttrs : rec {
-    dontStrip = true;
-    separateDebugInfo = false;
-
-    postBuild = ''
-      #mkdir -p /home/dza/tmp/python-build
-      cp -r ./* /home/dza/tmp/python-build
-    '';
-
-#    preConfigure = ''
-#      export CFLAGS="$EXTRA_CFLAGS -g3 -O0 -fdebug-prefix-map=$(pwd)=$out/src"
-#    '' + oldAttrs.preConfigure;
-
-    preConfigure = ''
-      export CFLAGS="$CFLAGS -g3 -O0 --save-temps"
-      export EXTRA_CFLAGS="-g3 -O0 "
-    '' + oldAttrs.preConfigure;
-
-
-#    postUnpack = ''
-#      mkdir -p $out/src1
-#      cp -r ./Python-$version/* $out/src/
-#    '';
-
-    configureFlags = oldAttrs.configureFlags ++ [
-      "EXTRA_CFLAGS='-DPy_DEBUG'"
-      "--with-pydebug"
-    ];
-  });
-  my_python2_dbg = stdenv.mkDerivation {
-    src = fetchurl {
-      url = "https://www.python.org/ftp/python/2.7.14/Python-2.7.14.tar.xz";
-      sha256 = "0ym44z3nwp8chfi7snmknkqnl2q9bghzv9p923r8w748i5hvyxx8";
-    };
-    name = python.name;
-    preConfigure = ''
-      export CFLAGS="$CFLAGS -g3 -O0"
-    '';
-    dontStrip = true;
-    separateDebugInfo = false;
-    configureFlags = [
-      "--with-pydebug"
-    ];
-    buildInputs = python.buildInputs;
-    enableParallelBuilding = true;
-  };
+  python2_dbg = callPackage ./python2_dbg.nix {};
   gdb_dbg = (gdb.overrideAttrs (oldAttrs : rec {
-    #separateDebugInfo = true;
     dontStrip = true;
+    hardeningDisable = ["all"];
+
     preConfigure = ''
       export CXXFLAGS="-g3 -O0 -fdebug-prefix-map=$(pwd)=$out/src"
       export CFLAGS=$CXXFLAGS
-    '';
+    '' + (if builtins.hasAttr "preConfigure" oldAttrs then oldAttrs.preConfigure else "");
+
     postUnpack = ''
+      mkdir -p /tmp/tmpsrc
+      cp -r ./$name/* /tmp/tmpsrc/
+    '' + (if builtins.hasAttr "postUnpack" oldAttrs then oldAttrs.postUnpack else "");
+
+    postInstall = ''
       mkdir -p $out/src
-      cp -r ./$name/* $out/src/
-    '';
+      cp -r /tmp/tmpsrc/* $out/src/
+      rm -rf /tmp/tmpsrc
+    '' + (if builtins.hasAttr "postInstall" oldAttrs then oldAttrs.postInstall else "");
+
   })).override {python = python2_dbg;};
 in
   stdenv.mkDerivation {
@@ -84,19 +48,13 @@ in
       git
       valgrind
       (callPackage ./pysigset.nix {})
-      gdb
-      #gdb_dbg
-      
-      #my_python2_dbg
+      gdb_dbg
 
       #packages for testing
       (callPackage ./pyte.nix {})
       pythonPackages.termcolor
       pythonPackages.pexpect
     ];
-#    propagatedBuildInputs = [
-#      python2_dbg
-#    ];
     shellHook = ''
     export PS1='\e[?2004l\[\033[1;32m\][nix-shell:\W]$\[\033[0m\] ' 
     alias grep="grep --color"
