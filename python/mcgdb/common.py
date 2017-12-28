@@ -3,11 +3,7 @@
 import gdb
 import sys,os,select,errno,socket,stat,time
 import signal
-try:
-  import pysigset
-except:
-  #sigset not exists in ubuntu repo; will distribute this package with mcgdb
-  import mcgdb.deps.pysigset as pysigset
+import pysigset
 import json
 import logging
 import threading, subprocess
