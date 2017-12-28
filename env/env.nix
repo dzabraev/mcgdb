@@ -35,7 +35,6 @@ in
     hardeningDisable = ["all"];
     name = "mcgdb-env";
     buildInputs = [
-      python2_dbg
       gcc
       automake
       autoconf
@@ -49,6 +48,7 @@ in
       valgrind
       (callPackage ./pysigset.nix {})
       gdb_dbg
+      #gdb
 
       #packages for testing
       (callPackage ./pyte.nix {})

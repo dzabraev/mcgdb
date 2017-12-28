@@ -437,8 +437,7 @@ def error(msg):
   exec_in_main_pythread (logging.error,(msg,))
 
 
-
-def gdb_stopped_1():
+def gdb_stopped():
   try:
     th=gdb.selected_thread()
     if th==None:
@@ -446,9 +445,6 @@ def gdb_stopped_1():
     return gdb.selected_thread().is_stopped()
   except:
     return True
-
-def gdb_stopped():
-  return exec_in_main_pythread(gdb_stopped_1)
 
 def exec_cmd_in_gdb(cmd):
   try:

@@ -7,8 +7,8 @@ pythonPackages.buildPythonPackage ( rec {
     src = fetchFromGitHub {
       repo = "pyte";
       owner = "selectel";
-      rev = "358dea5b9ea11eeab6c6ed8fb73c220550e17e26";
-      sha256 = "0ybn11bbcpn4crh39xk3h95rq6nbjf46qsnfrwxzjnnh8bq1krcy";
+      rev = "3389949426236022f6bc9fc9e741673b2feba627";
+      sha256 = "0k9n8a1dlmjdiag538bcl2hb2yqn78adrg5kx36dwbm9x4x620xh";
     };
 
     buildInputs =  [ pythonPackages.pytestrunner ];
