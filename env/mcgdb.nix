@@ -18,8 +18,8 @@ let
       src = fetchFromGitHub {
         repo = "mcgdb";
         owner = "dzabraev";
-        rev = "222d5c11521e4bf9621153051b5283f9273884be";
-        sha256 = "0285iwi5zkc1763gd63b6xldjjp6w0w7hqzy86w0rq5fcng5a9as";
+        rev = "7c71f9562aacd8c3e2fc7765644ece0137c14dc6";
+        sha256 = "1qam2nja7gqdly550ls6rjxp8prxgc103anrn6xlnijrwyjf2w82";
       };
 
       nativeBuildInputs = [ pkgconfig ];
@@ -47,7 +47,7 @@ in with (import nixpkgs {});
     });
 
     mips64_mcgdb_drv = (callPackage mcgdb { gdb=mips64_gdb; }).overrideAttrs (oldAttrs: {
-      configureFlags = ({configureFlags=[];} // oldAttrs).configureFlags ++ ["--program-prefix=mips64"];
+      #configureFlags = ({configureFlags=[];} // oldAttrs).configureFlags ++ ["--program-prefix=mips64-"];
       name = "mips64-"+oldAttrs.name;
       postInstall = ''
         mv $out/bin/mcgdb $out/bin/mips64-mcgdb
@@ -73,5 +73,7 @@ in with (import nixpkgs {});
 
 #    mips64_mcgdb_drv = callPackage mips64_mcgdb {mcgdb = mcgdb_drv; mips64_gdb=gdb;};
   in
-    #mcgdb_drv
-    mips64_mcgdb_drv
+    {
+      mcgdb = mcgdb_drv;
+      mips64_mcgdb = mips64_mcgdb_drv;
+    }
