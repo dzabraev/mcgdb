@@ -23,7 +23,7 @@ let
       };
 
       nativeBuildInputs = [ pkgconfig ];
-      buildInputs = [ gdb jansson perl glib slang zip unzip file gettext libX11 libICE
+      propagatedBuildInputs = [ gdb jansson perl glib slang zip unzip file gettext libX11 libICE
       ] ++ stdenv.lib.optionals (!stdenv.isDarwin) [ e2fsprogs gpm ] ++ [
         (callPackage pysigset {})
       ];
@@ -43,35 +43,37 @@ in with (import nixpkgs {});
   let
     mcgdb_drv = callPackage mcgdb {};
     mips64_gdb = gdb.overrideAttrs (oldAttrs: rec {
-      configureFlags = oldAttrs.configureFlags ++ ["--target=mips64"];
+      configureFlags = oldAttrs.configureFlags ++ [
+        "--target=mips64"
+        "--program-prefix=mips64-"
+      ];
     });
 
-    mips64_mcgdb_drv = (callPackage mcgdb { gdb=mips64_gdb; }).overrideAttrs (oldAttrs: {
-      #configureFlags = ({configureFlags=[];} // oldAttrs).configureFlags ++ ["--program-prefix=mips64-"];
-      name = "mips64-"+oldAttrs.name;
-      postInstall = ''
-        mv $out/bin/mcgdb $out/bin/mips64-mcgdb
-        mv $out/bin/mcgdb_mc $out/bin/mips64-mcgdb_mc
-      '';
-    });
+    mips64_mcgdb = {stdenv, mcgdb, mips64_gdb} :
+      stdenv.mkDerivation rec {
+        name = "mips64-"+mcgdb.name;
 
-#    mips64_mcgdb = {stdenv, mcgdb, mips64_gdb} :
-#      stdenv.mkDerivation rec {
-#        name = "mips64-"+mcgdb.name;
-#        dontBuild=true;
-#        src=mcgdb.src;
-#        configureScript="123";
-#        installPhase=''
-#          mkdir -p $out/bin
-#          echo "GDB=$mips64_gdb $mcgdb" > $out/bin/mips64_mcgdb
-#          chmod +x $out/bin/mips64_mcgdb
-#        '';
-#        buildInputs = [
-#          mcgdb mips64_gdb
-#        ];
-#      };
+        buildPhase = "true";
+        unpackPhase = "true";
 
-#    mips64_mcgdb_drv = callPackage mips64_mcgdb {mcgdb = mcgdb_drv; mips64_gdb=gdb;};
+        wrapper=''
+          #!/usr/bin/env bash
+
+          GDB=${mips64_gdb}/bin/gdb ${mcgdb}/bin/mcgdb \$@
+        '';
+
+        installPhase=''
+          mkdir -p $out/bin
+          echo "${wrapper}" > $out/bin/mips64-mcgdb
+          chmod +x $out/bin/mips64-mcgdb
+        '';
+
+        buildInputs = [
+          mcgdb mips64_gdb
+        ];
+      };
+
+    mips64_mcgdb_drv = callPackage mips64_mcgdb {mcgdb = mcgdb_drv; mips64_gdb=gdb;};
   in
     {
       mcgdb = mcgdb_drv;
