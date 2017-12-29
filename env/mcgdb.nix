@@ -36,40 +36,11 @@ let
       configureScript="../configure";
 
       postInstall = ''
-        wrapProgram $out/bin/mcgdb --prefix PYTHONPATH : "$PYTHONPATH"
+        mv $out/bin/mcgdb $out/bin/mcgdb_unwrapped
+        makeWrapper $out/bin/mcgdb_unwrapped $out/bin/mcgdb --prefix PYTHONPATH : "$PYTHONPATH" --set GDB ${gdb}/bin/gdb
       '';
 
   };
-
-  mytest = {stdenv, pysigset, makeWrapper} :
-    stdenv.mkDerivation rec {
-        name = "mytest";
-
-        buildPhase = "true";
-        unpackPhase = "true";
-
-        wrapper=''
-          #!/usr/bin/env python
-
-          import pysigset
-        '';
-
-        #pythonPath = [pysigset];
-
-        installPhase=''
-          mkdir -p $out/bin
-          echo "${wrapper}" > $out/bin/mytest
-          chmod +x $out/bin/mytest
-          wrapProgram $out/bin/mytest --prefix PYTHONPATH : "$PYTHONPATH"
-          #makeWrapper $out/bin/mytest1  $out/bin/mytest
-        '';
-
-        nativeBuildInputs = [ makeWrapper ];
-
-        propagatedBuildInputs = [
-          pysigset
-        ];
-    };
 
   nixpkgs = ((import <nixpkgs> {}).fetchFromGitHub { 
     owner = "NixOS";
@@ -90,23 +61,20 @@ in with (import nixpkgs {});
       ];
     });
 
-    mips64_mcgdb = {stdenv, mcgdb, mips64_gdb} :
+    mips64_mcgdb = {stdenv, mcgdb, mips64_gdb, makeWrapper} :
       stdenv.mkDerivation rec {
         name = "mips64-"+mcgdb.name;
 
         buildPhase = "true";
         unpackPhase = "true";
 
-        wrapper=''
-          #!/usr/bin/env bash
-
-          GDB=${mips64_gdb}/bin/gdb ${mcgdb}/bin/mcgdb \$@
-        '';
+        nativeBuildInputs = [
+          makeWrapper
+        ];
 
         installPhase=''
           mkdir -p $out/bin
-          echo "${wrapper}" > $out/bin/mips64-mcgdb
-          chmod +x $out/bin/mips64-mcgdb
+          makeWrapper ${mcgdb}/bin/mcgdb_unwrapped $out/bin/mips64-mcgdb --set GDB ${mips64_gdb}/bin/mips64-gdb --prefix PYTHONPATH : "$PYTHONPATH"
         '';
 
         propagatedBuildInputs = [
@@ -114,10 +82,9 @@ in with (import nixpkgs {});
         ];
       };
 
-    mips64_mcgdb_drv = callPackage mips64_mcgdb {mcgdb = mcgdb_drv; mips64_gdb=gdb;};
+    mips64_mcgdb_drv = callPackage mips64_mcgdb {mcgdb = mcgdb_drv; inherit mips64_gdb;};
   in
     {
       mcgdb = mcgdb_drv;
       mips64_mcgdb = mips64_mcgdb_drv;
-      mytest = callPackage mytest {pysigset = callPackage pysigset {};};
     }
