@@ -10,7 +10,8 @@ let
       };
     });
   mcgdb = { stdenv, fetchFromGitHub, pkgconfig, glib, gpm, file, e2fsprogs,
-    libX11, libICE, perl, zip, unzip, gettext, slang, gdb, jansson, pythonPackages, fetchurl, callPackage}:
+    libX11, libICE, perl, zip, unzip, gettext, slang, gdb, jansson, pythonPackages, 
+    fetchurl, pysigset, makeWrapper}:
       stdenv.mkDerivation rec {
       name = "mcgdb-${version}";
       version = "1.4";
@@ -22,17 +23,54 @@ let
         sha256 = "1qam2nja7gqdly550ls6rjxp8prxgc103anrn6xlnijrwyjf2w82";
       };
 
-      nativeBuildInputs = [ pkgconfig ];
+      nativeBuildInputs = [ pkgconfig makeWrapper];
       propagatedBuildInputs = [ gdb jansson perl glib slang zip unzip file gettext libX11 libICE
       ] ++ stdenv.lib.optionals (!stdenv.isDarwin) [ e2fsprogs gpm ] ++ [
-        (callPackage pysigset {})
+        pysigset
       ];
 
       preConfigure = ''
         mkdir build && cd build
       '';
+
       configureScript="../configure";
+
+      postInstall = ''
+        wrapProgram $out/bin/mcgdb --prefix PYTHONPATH : "$PYTHONPATH"
+      '';
+
   };
+
+  mytest = {stdenv, pysigset, makeWrapper} :
+    stdenv.mkDerivation rec {
+        name = "mytest";
+
+        buildPhase = "true";
+        unpackPhase = "true";
+
+        wrapper=''
+          #!/usr/bin/env python
+
+          import pysigset
+        '';
+
+        #pythonPath = [pysigset];
+
+        installPhase=''
+          mkdir -p $out/bin
+          echo "${wrapper}" > $out/bin/mytest
+          chmod +x $out/bin/mytest
+          wrapProgram $out/bin/mytest --prefix PYTHONPATH : "$PYTHONPATH"
+          #makeWrapper $out/bin/mytest1  $out/bin/mytest
+        '';
+
+        nativeBuildInputs = [ makeWrapper ];
+
+        propagatedBuildInputs = [
+          pysigset
+        ];
+    };
+
   nixpkgs = ((import <nixpkgs> {}).fetchFromGitHub { 
     owner = "NixOS";
     repo = "nixpkgs-channels";
@@ -41,7 +79,10 @@ let
   });
 in with (import nixpkgs {});
   let
-    mcgdb_drv = callPackage mcgdb {};
+    mcgdb_drv = callPackage mcgdb {
+      pysigset = callPackage pysigset {};
+    };
+
     mips64_gdb = gdb.overrideAttrs (oldAttrs: rec {
       configureFlags = oldAttrs.configureFlags ++ [
         "--target=mips64"
@@ -68,7 +109,7 @@ in with (import nixpkgs {});
           chmod +x $out/bin/mips64-mcgdb
         '';
 
-        buildInputs = [
+        propagatedBuildInputs = [
           mcgdb mips64_gdb
         ];
       };
@@ -78,4 +119,5 @@ in with (import nixpkgs {});
     {
       mcgdb = mcgdb_drv;
       mips64_mcgdb = mips64_mcgdb_drv;
+      mytest = callPackage mytest {pysigset = callPackage pysigset {};};
     }
