@@ -96,32 +96,5 @@ EXTRA_DIST = $(SRC_maintainer) $(SRC_charset)
 
 # end of automated testing
 
-install-exec-hook:
-	$(MAKE) install_mcview
-if USE_INTERNAL_EDIT
-	$(MAKE) install_mcedit
-endif
-if USE_DIFF
-	$(MAKE) install_mcdiff
-endif
 
-#
-# Make relative symlinks, but do the right thing if LN_S is `ln' or `cp'.
-#
-install_mcview:
-	cd $(DESTDIR)$(bindir)/$(binprefix) && rm -f mcgdb_mcview && $(LN_S) mcgdb_mc mcgdb_mcview
 
-install_mcedit:
-	cd $(DESTDIR)$(bindir)/$(binprefix) && rm -f mcgdb_mcedit && $(LN_S) mcgdb_mc mcgdb_mcedit
-
-install_mcdiff:
-	cd $(DESTDIR)$(bindir)/$(binprefix) && rm -f mcgdb_mcdiff && $(LN_S) mcgdb_mc mcgdb_mcdiff
-
-uninstall-hook:
-	rm -f $(DESTDIR)$(bindir)/$(binprefix)/mcgdb_mcview
-if USE_INTERNAL_EDIT
-	rm -f $(DESTDIR)$(bindir)/$(binprefix)/mcgdb_mcedit
-endif
-if USE_DIFF
-	rm -f $(DESTDIR)$(bindir)/$(binprefix)/mcgdb_mcdiff
-endif
