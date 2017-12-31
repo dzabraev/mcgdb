@@ -11,7 +11,7 @@ let
     });
   mcgdb = { stdenv, fetchFromGitHub, pkgconfig, glib, gpm, file, e2fsprogs,
     libX11, libICE, perl, zip, unzip, gettext, slang, gdb, jansson, pythonPackages, 
-    fetchurl, pysigset, makeWrapper}:
+    fetchurl, pysigset, makeWrapper, xterm }:
       stdenv.mkDerivation rec {
       name = "mcgdb-${version}";
       version = "1.4";
@@ -26,7 +26,7 @@ let
       nativeBuildInputs = [ pkgconfig makeWrapper];
       propagatedBuildInputs = [ gdb jansson perl glib slang zip unzip file gettext libX11 libICE
       ] ++ stdenv.lib.optionals (!stdenv.isDarwin) [ e2fsprogs gpm ] ++ [
-        pysigset
+        pysigset xterm
       ];
 
       preConfigure = ''
