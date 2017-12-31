@@ -16,43 +16,10 @@
 
 # INSTALL
 
-## dependencies
-1. `gdb >= 7.12` (compiled with `./configure --with-python` .Type in gdb-shell `(gdb) pi 1+1`, if error occur then your gdb compiled without python)
-2. `mc`
-3. `gnome-terminal`
-4. `libjansson >= 2.9`
-
-### install dependencies
-
-```
-  wget https://ftp.gnu.org/gnu/gdb/gdb-7.12.1.tar.xz  
-  tar xvJf gdb-7.12.tar.xz  
-  cd gdb-7.12  
-  ./configure --with-python=python2  
-  make -j4  
-  checkinstall  
-
-
-  wget http://www.digip.org/jansson/releases/jansson-2.9.tar.gz  
-  tar xzvf jansson-2.9.tar.gz  
-  mv jansson-2.9 libjansson-2.9
-  cd libjansson-2.9  
-  ./configure  
-  make -j4  
-  checkinstall  
-```
-
-## INSTALL from sources
-
-```
-wget https://github.com/dzabraev/mcgdb/releases/download/1.2/mcgdb-1.2.tar.gz
-tar xzvf mcgdb-1.2.tar.gz
-mkdir obj-mcgdb-1.2  
-cd obj-mcgdb-1.2  
-../mcgdb-1.2/configure  
-make -j4  
-checkinstall (or make install)  
-```
+1. install nix package manager https://nixos.org/nix/
+2. wget https://raw.githubusercontent.com/dzabraev/mcgdb/master/env/mcgdb.nix
+3. nix-env -f mcgdb.nix -iA mcgdb
+4. run `$ mcgdb a.out` in your shell
 
 # getting started
 
