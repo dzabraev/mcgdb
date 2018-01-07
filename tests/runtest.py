@@ -19,6 +19,7 @@ ALLTESTS=[
   'variables.expand_change_null_step',
   'variables.incompl_struct',
   'variables.int',
+  'variables.void_star_const',
   'srcwin.common',
 ]
 

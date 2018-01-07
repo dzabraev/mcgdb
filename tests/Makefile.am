@@ -2,6 +2,7 @@ testcases = variables.int \
             variables.wait_change_bug_1 \
             variables.expand_change_null_step \
             variables.incompl_struct \
+            variables.void_star_const \
             srcwin.common \
             srcwin.bps
 

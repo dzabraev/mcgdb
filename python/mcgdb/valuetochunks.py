@@ -290,14 +290,17 @@ def check_chunks(chunks):
 
 
 def is_incomplete_type_ptr(value):
+  type = value.type.strip_typedefs()
   try:
-    voidtype=value.type.target().strip_typedefs().code in (gdb.TYPE_CODE_VOID,)
+    target = type.target().strip_typedefs()
   except RuntimeError:
-    voidtype=False
-  return   voidtype or ( #typedef T1 void; T1 *x
-          value.type.strip_typedefs().code==gdb.TYPE_CODE_PTR and \
-          value.type.strip_typedefs().target().strip_typedefs().code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION) and \
-          len(value.type.strip_typedefs().target().strip_typedefs().fields())==0)
+    #has no target
+    return False
+  voidtype=target.code in (gdb.TYPE_CODE_VOID,) #typedef T1 void; T1 *x
+  return  voidtype or (
+          type.code==gdb.TYPE_CODE_PTR and \
+          target.code in (gdb.TYPE_CODE_STRUCT,gdb.TYPE_CODE_UNION) and \
+          len(target.fields())==0)
 
 class ValueToChunks(BasePath):
   def __init__(self, **kwargs):
@@ -989,7 +992,7 @@ class ValueToChunks(BasePath):
       else:
         is_funct_ptr=False
         pointer_data_chunks = []
-        if not value.is_optimized_out and not re.match('.*void \*$',type_str) and not is_incomplete_type_ptr(value):
+        if not value.is_optimized_out and not is_incomplete_type_ptr(value):
           #все OK
           try:
             deref_type_code = value.dereference().type.strip_typedefs().code
