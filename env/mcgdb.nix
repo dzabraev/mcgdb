@@ -1,17 +1,14 @@
 let
-  pysigset = {pythonPackages , fetchurl}:
-    pythonPackages.buildPythonPackage ( rec {
-      version = "0.3.2";
-      name = "pysigset-${version}";
+  nixpkgs = ((import <nixpkgs> {}).fetchFromGitHub {
+    owner = "NixOS";
+    repo = "nixpkgs";
+    rev = "27459e20209ec7e834b7b1bca5dca4cc5012e162";
+    sha256 = "0xrh94zynp4zflb82bm2j4ymw9f738y1qgdlxl0nplqp64k1sd2f";
+  });
 
-      src = fetchurl {
-        url = "https://pypi.python.org/packages/9f/ce/789466fea28561b0a38f233b74f84701407872a8c636c40f9f3a8bb4debe/pysigset-0.3.2.tar.gz";
-        sha256 = "0ym44z3nwp8chfi7snmknkqnl2q9bghzv9p923r8w748i5hvyxx8";
-      };
-    });
   mcgdb = { stdenv, fetchFromGitHub, pkgconfig, glib, gpm, file, e2fsprogs,
     libX11, libICE, perl, zip, unzip, gettext, slang, gdb, jansson, pythonPackages, 
-    fetchurl, pysigset, makeWrapper, xterm }:
+    fetchurl, makeWrapper, xterm }:
       stdenv.mkDerivation rec {
       name = "mcgdb-${version}";
       version = "1.4";
@@ -19,14 +16,14 @@ let
       src = fetchFromGitHub {
         repo = "mcgdb";
         owner = "dzabraev";
-        rev = "7c71f9562aacd8c3e2fc7765644ece0137c14dc6";
-        sha256 = "1qam2nja7gqdly550ls6rjxp8prxgc103anrn6xlnijrwyjf2w82";
+        rev = "7d7a3b5324ebc0ee59e3851eac7f7df0d6d1299c";
+        sha256 = "0f4cv1di3gvfi814a06w7dg4p8i5jfnbclf347hq8nf5wcj7x4zi";
       };
 
       nativeBuildInputs = [ pkgconfig makeWrapper];
       propagatedBuildInputs = [ gdb jansson perl glib slang zip unzip file gettext libX11 libICE
       ] ++ stdenv.lib.optionals (!stdenv.isDarwin) [ e2fsprogs gpm ] ++ [
-        pysigset xterm
+        pythonPackages.pysigset xterm
       ];
 
       preConfigure = ''
@@ -39,20 +36,10 @@ let
         mv $out/bin/mcgdb $out/bin/mcgdb_unwrapped
         makeWrapper $out/bin/mcgdb_unwrapped $out/bin/mcgdb --prefix PYTHONPATH : "$PYTHONPATH" --set GDB ${gdb}/bin/gdb
       '';
-
   };
-
-  nixpkgs = ((import <nixpkgs> {}).fetchFromGitHub { 
-    owner = "NixOS";
-    repo = "nixpkgs-channels";
-    rev = "ade98dc442ea78e9783d5e26954e64ec4a1b2c94";
-    sha256 = "1ymyzrsv86mpmiik9vbs60c1acyigwnvl1sx5sd282gndzwcjiyr";
-  });
 in with (import nixpkgs {});
   let
-    mcgdb_drv = callPackage mcgdb {
-      pysigset = callPackage pysigset {};
-    };
+    mcgdb_drv = callPackage mcgdb {};
 
     mips64_gdb = gdb.overrideAttrs (oldAttrs: rec {
       configureFlags = oldAttrs.configureFlags ++ [
