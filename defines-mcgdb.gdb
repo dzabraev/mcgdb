@@ -51,4 +51,4 @@ McgdbMain().notify_shellcmd('thread')
 end
 end
 
-
+set history save on
