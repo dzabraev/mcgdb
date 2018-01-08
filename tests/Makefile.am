@@ -4,7 +4,8 @@ testcases = variables.int \
             variables.incompl_struct \
             variables.void_star_const \
             srcwin.common \
-            srcwin.bps
+            srcwin.bps \
+            srcwin.frame-shell-cmd
 
 
 all :

@@ -21,6 +21,7 @@ ALLTESTS=[
   'variables.int',
   'variables.void_star_const',
   'srcwin.common',
+  'srcwin.frame-shell-cmd',
 ]
 
 

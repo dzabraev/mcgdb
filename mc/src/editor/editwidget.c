@@ -988,14 +988,18 @@ edit_mouse_callback (Widget * w, mouse_msg_t msg, mouse_event_t * event)
     /* location of 'Close' and 'Toggle fullscreen' pictograms */
     int close_x, toggle_fullscreen_x;
 
-    if (event->x < LINE_STATE_WIDTH ) {
-      if (msg==MSG_MOUSE_CLICK) {
-        gboolean need_redraw = mcgdb_bp_process_click(edit->filename, event->y + 1 + edit->start_line, w->y+event->y, w->x+event->x);
-        if (need_redraw)
-          edit->force |= REDRAW_PAGE;
-          edit_update_screen (edit);
-      }
-      return;
+    {
+        long clicked_line = event->y + 1 + edit->start_line;
+        long total_lines = edit->buffer.lines+1;
+        if (event->x < LINE_STATE_WIDTH && clicked_line<=total_lines) {
+          if (msg==MSG_MOUSE_CLICK) {
+            gboolean need_redraw = mcgdb_bp_process_click(edit->filename, clicked_line, w->y+event->y, w->x+event->x);
+            if (need_redraw)
+              edit->force |= REDRAW_PAGE;
+              edit_update_screen (edit);
+          }
+          return;
+        }
     }
 
     close_x = (w->cols - 1) - dx - 1;

@@ -66,6 +66,9 @@ class SrcWin(BaseWin):
   def shellcmd_down(self,pkg):
     self.update_current_frame()
 
+  def shellcmd_frame(self,pkg):
+    self.update_current_frame()
+
   def mcgdbevt_frame(self,pkg):
     self.update_current_frame()
 
