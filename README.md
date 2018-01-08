@@ -14,7 +14,7 @@ You can add and delete breakpoints by produce clicks on columns with line number
 # INSTALL
 
 1. install nix package manager https://nixos.org/nix/
-2. wget https://raw.githubusercontent.com/dzabraev/mcgdb/master/env/mcgdb.nix
+2. wget https://github.com/dzabraev/mcgdb/releases/download/v1.4-beta/mcgdb.nix
 3. `nix-env -f mcgdb.nix -iA mcgdb`
 4. run `$ mcgdb a.out` in your shell
 
