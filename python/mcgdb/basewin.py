@@ -90,7 +90,7 @@ class CommonPackages(CommunicationMixin):
         continue
       pid,lwp,tid = thread.ptid
       threads.append({
-        'name'        : thread.name,
+        'name'        : thread.name or "",
         'num'         : thread.num,
         'global_num'  : thread.global_num,
         'pid'         : pid,
