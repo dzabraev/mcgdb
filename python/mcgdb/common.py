@@ -124,7 +124,7 @@ import mcgdb.gdb2 as gdb2
 
 class MCGDB_VERSION(object):
   major=1
-  minor=1
+  minor=4
 
 class Index(object):
   def __init__(self):

@@ -2935,7 +2935,7 @@ ac_config_headers="$ac_config_headers config.h"
 
 
 
-am__api_version='1.14'
+am__api_version='1.15'
 
 # Find a good install program.  We prefer a C program (faster),
 # so one script is as good as another.  But avoid the broken or
@@ -3107,8 +3107,8 @@ test "$program_suffix" != NONE &&
 ac_script='s/[\\$]/&&/g;s/;s,x,x,$//'
 program_transform_name=`$as_echo "$program_transform_name" | sed "$ac_script"`
 
-# expand $ac_aux_dir to an absolute path
-am_aux_dir=`cd $ac_aux_dir && pwd`
+# Expand $ac_aux_dir to an absolute path.
+am_aux_dir=`cd "$ac_aux_dir" && pwd`
 
 if test x"${MISSING+set}" != xset; then
   case $am_aux_dir in
@@ -3127,7 +3127,7 @@ else
 $as_echo "$as_me: WARNING: 'missing' script is too old or missing" >&2;}
 fi
 
-if test x"${install_sh}" != xset; then
+if test x"${install_sh+set}" != xset; then
   case $am_aux_dir in
   *\ * | *\	*)
     install_sh="\${SHELL} '$am_aux_dir/install-sh'" ;;
@@ -3456,8 +3456,8 @@ MAKEINFO=${MAKEINFO-"${am_missing_run}makeinfo"}
 # <http://lists.gnu.org/archive/html/automake/2012-07/msg00014.html>
 mkdir_p='$(MKDIR_P)'
 
-# We need awk for the "check" target.  The system "awk" is bad on
-# some platforms.
+# We need awk for the "check" target (and possibly the TAP driver).  The
+# system "awk" is bad on some platforms.
 # Always define AMTAR for backward compatibility.  Yes, it's still used
 # in the wild :-(  We should find a proper way to deprecate it ...
 AMTAR='$${TAR-tar}'
@@ -3514,6 +3514,7 @@ END
     as_fn_error $? "Your 'rm' program is bad, sorry." "$LINENO" 5
   fi
 fi
+
 # Check whether --enable-silent-rules was given.
 if test "${enable_silent_rules+set}" = set; then :
   enableval=$enable_silent_rules;
@@ -15686,8 +15687,8 @@ fi
     if test x$enable_tests != xno; then
 
 pkg_failed=no
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for CHECK" >&5
-$as_echo_n "checking for CHECK... " >&6; }
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for check >= 0.9.8" >&5
+$as_echo_n "checking for check >= 0.9.8... " >&6; }
 
 if test -n "$CHECK_CFLAGS"; then
     pkg_cv_CHECK_CFLAGS="$CHECK_CFLAGS"
@@ -15727,7 +15728,7 @@ fi
 
 
 if test $pkg_failed = yes; then
-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 
 if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
@@ -15746,7 +15747,7 @@ fi
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: 'Check' utility not found. Check your environment" >&5
 $as_echo "$as_me: WARNING: 'Check' utility not found. Check your environment" >&2;}
 elif test $pkg_failed = untried; then
-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: 'Check' utility not found. Check your environment" >&5
 $as_echo "$as_me: WARNING: 'Check' utility not found. Check your environment" >&2;}
@@ -15796,8 +15797,8 @@ fi
     glib_found=no
 
 pkg_failed=no
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for GLIB" >&5
-$as_echo_n "checking for GLIB... " >&6; }
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for glib-2.0 >= 2.26" >&5
+$as_echo_n "checking for glib-2.0 >= 2.26... " >&6; }
 
 if test -n "$GLIB_CFLAGS"; then
     pkg_cv_GLIB_CFLAGS="$GLIB_CFLAGS"
@@ -15837,7 +15838,7 @@ fi
 
 
 if test $pkg_failed = yes; then
-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 
 if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
@@ -15855,7 +15856,7 @@ fi
 
 	:
 elif test $pkg_failed = untried; then
-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 	:
 else
@@ -15877,8 +15878,8 @@ fi
     found_gmodule=no
 
 pkg_failed=no
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for GMODULE" >&5
-$as_echo_n "checking for GMODULE... " >&6; }
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for gmodule-no-export-2.0 >= 2.26" >&5
+$as_echo_n "checking for gmodule-no-export-2.0 >= 2.26... " >&6; }
 
 if test -n "$GMODULE_CFLAGS"; then
     pkg_cv_GMODULE_CFLAGS="$GMODULE_CFLAGS"
@@ -15918,7 +15919,7 @@ fi
 
 
 if test $pkg_failed = yes; then
-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 
 if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
@@ -15936,7 +15937,7 @@ fi
 
 	:
 elif test $pkg_failed = untried; then
-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 	:
 else
@@ -15951,8 +15952,8 @@ fi
     else
 
 pkg_failed=no
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for GMODULE" >&5
-$as_echo_n "checking for GMODULE... " >&6; }
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for gmodule-2.0 >= 2.26" >&5
+$as_echo_n "checking for gmodule-2.0 >= 2.26... " >&6; }
 
 if test -n "$GMODULE_CFLAGS"; then
     pkg_cv_GMODULE_CFLAGS="$GMODULE_CFLAGS"
@@ -15992,7 +15993,7 @@ fi
 
 
 if test $pkg_failed = yes; then
-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 
 if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
@@ -16010,7 +16011,7 @@ fi
 
 	:
 elif test $pkg_failed = untried; then
-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 	:
 else
@@ -16424,8 +16425,8 @@ fi
         found_slang=no
 
 pkg_failed=no
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for SLANG" >&5
-$as_echo_n "checking for SLANG... " >&6; }
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for slang >= 2.0" >&5
+$as_echo_n "checking for slang >= 2.0... " >&6; }
 
 if test -n "$SLANG_CFLAGS"; then
     pkg_cv_SLANG_CFLAGS="$SLANG_CFLAGS"
@@ -16465,7 +16466,7 @@ fi
 
 
 if test $pkg_failed = yes; then
-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 
 if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
@@ -16483,7 +16484,7 @@ fi
 
 	:
 elif test $pkg_failed = untried; then
-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 	:
 else
@@ -19472,8 +19473,8 @@ done
 
 
 pkg_failed=no
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for JANSSON" >&5
-$as_echo_n "checking for JANSSON... " >&6; }
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for jansson" >&5
+$as_echo_n "checking for jansson... " >&6; }
 
 if test -n "$JANSSON_CFLAGS"; then
     pkg_cv_JANSSON_CFLAGS="$JANSSON_CFLAGS"
@@ -19513,7 +19514,7 @@ fi
 
 
 if test $pkg_failed = yes; then
-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 
 if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
@@ -19532,7 +19533,7 @@ fi
 	as_fn_error $? "Couldn't find jansson library" "$LINENO" 5
 
 elif test $pkg_failed = untried; then
-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 	as_fn_error $? "Couldn't find jansson library" "$LINENO" 5
 
@@ -27715,8 +27716,8 @@ fi
     if test "$enable_vfs" != "no" -a x"$enable_vfs_sftp" != x"no"; then
 
 pkg_failed=no
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for LIBSSH" >&5
-$as_echo_n "checking for LIBSSH... " >&6; }
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for libssh2 >= 1.2.5" >&5
+$as_echo_n "checking for libssh2 >= 1.2.5... " >&6; }
 
 if test -n "$LIBSSH_CFLAGS"; then
     pkg_cv_LIBSSH_CFLAGS="$LIBSSH_CFLAGS"
@@ -27756,7 +27757,7 @@ fi
 
 
 if test $pkg_failed = yes; then
-   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 
 if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
@@ -27774,7 +27775,7 @@ fi
 
 	:
 elif test $pkg_failed = untried; then
-     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 	:
 else

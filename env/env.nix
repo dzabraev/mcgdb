@@ -1,9 +1,9 @@
 let
   nixpkgs = ((import <nixpkgs> {}).fetchFromGitHub { 
     owner = "NixOS";
-    repo = "nixpkgs-channels";
-    rev = "ade98dc442ea78e9783d5e26954e64ec4a1b2c94";
-    sha256 = "1ymyzrsv86mpmiik9vbs60c1acyigwnvl1sx5sd282gndzwcjiyr";
+    repo = "nixpkgs";
+    rev = "70e9b60b3302e646b3d1109bb444db99f5bdea40";
+    sha256 = "1045y2rilaxvrcv6fig55fk3l5kp4nqcp40wjdjwr92mgnh9052k";
   });
 in
 with import nixpkgs { };
@@ -49,6 +49,10 @@ in
       (callPackage ./pysigset.nix {})
       gdb_dbg
       #gdb
+      #pythonPackages.pybfd
+      python27Packages.pyelftools
+      pythonPackages.jupyter
+      ncurses
 
       #packages for testing
       (callPackage ./pyte.nix {})
@@ -56,7 +60,7 @@ in
       pythonPackages.pexpect
     ];
     shellHook = ''
-    export PS1='\e[?2004l\[\033[1;32m\][nix-shell:\W]$\[\033[0m\] ' 
-    alias grep="grep --color"
+      export PS1='\e[?2004l\[\033[1;32m\][nix-shell:\W]$\[\033[0m\] '
+      alias grep="grep --color"
     '';
   }
