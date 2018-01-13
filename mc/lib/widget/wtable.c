@@ -926,10 +926,7 @@ update_chunk (cell_data_t * data, json_t * json_data) {
     data->onclick_data = cell_data->onclick_data;
     message_assert (json_is_object(data->onclick_data));
   }
-  //update_prop(data,cell_data,json_data,str);
-  //update_prop(data,cell_data,json_data,proposed_text,free);
   update_prop(data,cell_data,json_data,selected);
-  //update_prop(data,cell_data,json_data,onclick_data);
   update_prop(data,cell_data,json_data,onclick_user_input);
   update_prop(data,cell_data,json_data,name);
   cell_data_makecolor(data);
@@ -1126,22 +1123,9 @@ get_most_depth_node_with_yx (GNode *node, int y, int x) {
 
 
 static void
-wait_change_success(void *data) {
-  wcArgs *args = (wcArgs *)data;
-  if (args->str)
-    free (args->str);
-  drop_childs(args->node,args->tab);
-  json_decref (CHUNK(args->node)->onclick_data);
-  args->tab->redraw|=REDRAW_TAB;
-  args->tab->rowsize_changed=TRUE;
-  CHUNK(args->node)->row->rowsize_changed=TRUE;
-}
-
-static void
 wait_change_error(struct wcArgs *data) {
   wcArgs *args = (wcArgs *)data;
-  if (args->str)
-    free (args->str); /*free Wait change string*/
+  g_free (CHUNK(args->node)->str); /*free Wait change string*/
   CHUNK(args->node)->str = args->str;
   CHUNK(args->node)->onclick_data = args->onclick_data;
   CHUNK(args->node)->color = args->color;
@@ -1201,7 +1185,7 @@ process_cell_tree_mouse_callbacks (Table *tab, GNode *root, int y, int x) {
         CHUNK(node)->row->rowsize_changed=TRUE;
         pair = g_new(cbPair,1);
         pair->err  = wait_change_error;
-        pair->succ = wait_change_success;
+        pair->succ = NULL;
         pair->args = (void *)wc_args;
         callback_id = data_ptr_register((void *)pair);
         json_object_set_new (msg_obj, "callback_id", json_integer (callback_id));

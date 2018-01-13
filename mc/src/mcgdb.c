@@ -352,9 +352,10 @@ check_action_from_gdb(struct gdb_action * act) {
     type = myjson_int(pkg,"type");
     message_assert (type==CALLBACK_SUCCESS || type==CALLBACK_ERROR);
     cb = (type==CALLBACK_SUCCESS) ? pair->succ : pair->err;
-    cb (pair->args);
-    free (pair->args);
-    free (pair);
+    if (cb)
+      cb (pair->args);
+    g_free (pair->args);
+    g_free (pair);
     act->command=MCGDB_NONE;
     act->pkg=NULL;
   }
