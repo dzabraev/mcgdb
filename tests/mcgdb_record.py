@@ -2,16 +2,13 @@
 #coding=utf8
 import  pexpect,os,socket,subprocess,json,signal,select,\
         argparse,re,sys,pickle,time,pprint,imp,pysigset,\
-        signal,termcolor
+        signal,termcolor,json
 
 import pexpect.fdpexpect
 
-import distutils.spawn
-which = distutils.spawn.find_executable
-
 from abc import abstractmethod, ABCMeta
 
-from common import Gdb,FNULL
+from common import Gdb,FNULL, which
 from runtest import is_valid_file
 
 class UnknownControlSequence(Exception): pass
@@ -118,13 +115,16 @@ class XtermSpawn(object):
     self.psock,self.pport = open_sock()
     exec_args = self.get_exec_args()
     environ = self.get_environ()
+    env_fname = '.environ'
+    with open(env_fname,'wb') as f:
+      f.write(json.dumps(environ))
     cmd='''{XTERM} -e "sh -c \\"{PYTHON} {IOSTUB} --executable={EXECUTABLE} {EXEC_ARGS} {ENVIRON} --xport={XPORT} --pport={PPORT}\\""'''.format(
       XTERM=self.xterm,
       PYTHON=PYTHON,
       IOSTUB=IOSTUB,
       EXECUTABLE=self.get_executable(),
       EXEC_ARGS = '' if not exec_args  else '''--args '{}' '''.format(exec_args),
-      ENVIRON = '' if not environ  else '--env {}'.format(','.join(map(lambda x:'{}:{}'.format(x[0],x[1]),environ.iteritems()))),
+      ENVIRON = '' if not environ  else '--env %s' % env_fname,
       XPORT=self.xport,
       PPORT=self.pport,
     )
@@ -142,7 +142,8 @@ class XtermSpawn(object):
     return None
 
   def get_environ(self):
-    env = {'TERM':'xterm'}
+    env = dict(os.environ)
+    env['TERM']='xterm'
     env.update(self.env)
     return env
 
@@ -269,8 +270,12 @@ class XtermGdb(XtermSpawn,Gdb):
           break
         current+=char
 
-def open_window(xterm,gdb,journal,name,print_tokens=False):
-  executable,args = split_first(gdb.open_window_cmd(name),' ')
+def open_window(xterm,gdb,journal,name,print_tokens=False,valgrind=None):
+  if valgrind==None:
+    executable,args = split_first(gdb.open_window_cmd(name),' ')
+  else:
+    executable=which('valgrind')
+    args = '--log-file=%s' % valgrind + ' ' + gdb.open_window_cmd(name)
   return XtermMcgdbWin(xterm,executable,args,journal,name,print_tokens=print_tokens)
 
 class Journal(object):
@@ -359,11 +364,11 @@ def main():
   parser.add_argument('--valgrind',nargs='?',const=os.path.abspath(os.path.join(os.path.dirname(__file__),'valgrind-')))
   parser.add_argument('--coredump',nargs='?',const=os.path.abspath(os.path.dirname(__file__)))
   args = parser.parse_args()
-  ENV={}
+  ENV=dict(os.environ)
   if args.coverage:
     ENV['COVERAGE']=args.coverage
   if args.valgrind:
-    ENV['VALGRIND']=args.valgrind
+    print 'save valgrind log to: %s' % args.valgrind
   if args.coredump:
     ENV['COREDUMP']=args.coredump
   xterm = distutils.spawn.find_executable(args.xterm)
@@ -392,7 +397,8 @@ def main():
   win_names = list(set(win_names))
   print 'type Ctrl+C for stop recording'
   gdb=XtermGdb(xterm=xterm,journal=journal,name='gdb',executable=args.mcgdb,env=ENV)
-  wins = dict(gdb=gdb,**{name:open_window(xterm,gdb,journal,name,print_tokens=args.print_tokens) for name in win_names})
+  wins = dict(gdb=gdb,**{name:open_window(xterm,gdb,journal,name,
+      print_tokens=args.print_tokens,valgrind=args.valgrind) for name in win_names})
   entities=dict(map(lambda x:(x.get_feed_fd(),x), wins.values()))
   rlist=list(entities.keys())
   program_fds=list(map(lambda x:x.get_program_fd(), wins.values()))
@@ -432,7 +438,8 @@ def main():
         for fd in ready:
           if fd in rlist:
             print termcolor.colored('WARNING: interaction with program detected while reproduce actions','red')
-          os.read(fd,1024) #clear buffer
+          rd=os.read(fd,1024) #clear buffer
+          print 'ignore input: %s' % repr(rd)
           #entities[fd].read(1024) #clear buffer
     print 'replay end. you can tocuh widnows.'
 

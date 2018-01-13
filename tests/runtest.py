@@ -31,7 +31,7 @@ def do_cmd(cmd,check=True):
   return fn(cmd, shell=True)
 
 
-def run_std_test(mcgdb,delay,logfile='logfile.log',wait=False,regexes='regexes.py'):
+def run_std_test(mcgdb,delay,logfile='logfile.log',wait=False,regexes='regexes.py',print_records=False):
   has_regexes=os.path.exists(regexes)
   if has_regexes:
     regexes = os.path.abspath(regexes)
@@ -40,11 +40,13 @@ def run_std_test(mcgdb,delay,logfile='logfile.log',wait=False,regexes='regexes.p
   do_cmd("unxz --keep --force {record_orig_py_xz}".format(
     record_orig_py_xz = os.path.abspath('record.orig.play.xz'),
   ))
-  cmd="mcgdb_play.py {record_orig} --delay={delay} --output={record_new} --mcgdb={mcgdb}".format(
+  cmd="mcgdb_play.py {record_orig} --delay={delay} --output={record_new} --mcgdb={mcgdb} {print_records}".format(
     record_orig=os.path.abspath('record.orig.py'),
     record_new=os.path.abspath('record.new.play'),
     delay=delay,
-    mcgdb=mcgdb)
+    mcgdb=mcgdb,
+    print_records='--print_records' if print_records else '',
+  )
   if wait:
     cmd+=' --wait=record.orig.play'
     if has_regexes:
@@ -74,6 +76,7 @@ def main():
   parser.add_argument('--output',default='mcgdb.sum')
   parser.add_argument('--delay',type=float,default=2)
   parser.add_argument('--wait',action='store_false')
+  parser.add_argument('--print_records',help='print records',action='store_true')
   parser.add_argument('--mcgdb',help='path to mcgdb',
     default=os.path.join(os.path.dirname(os.getcwd()),'mcgdb'),
     type=lambda x: is_valid_file(parser, x),
@@ -104,10 +107,16 @@ def main():
     print 'TESTING %s' % testname
     cwd=os.getcwd()
     os.chdir(testdir)
+    kw=dict(mcgdb=args.mcgdb,
+          delay=args.delay,
+          wait=args.wait,
+          print_records=args.print_records,
+    )
+    kw.update(kwargs[testname])
     if os.path.exists('runtest.py'):
-      status,msg = imp.load_source(testname,'runtest.py').runtest(mcgdb=args.mcgdb,delay=args.delay,**kwargs[testname])
+      status,msg = imp.load_source(testname,'runtest.py').runtest(**kw)
     else:
-      status,msg=run_std_test(mcgdb=args.mcgdb,delay=args.delay,wait=args.wait,**kwargs[testname])
+      status,msg=run_std_test(**kw)
     os.chdir(cwd)
     print '%s %s' % (stat_color(status),msg)
     output.write('%s %s\n' % (status,msg))

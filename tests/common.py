@@ -4,8 +4,13 @@
 import pexpect, subprocess, time, os, socket, sys, re, select, pty, struct, fcntl, termios
 import atexit
 import pyte
+import distutils.spawn
 
+
+which = distutils.spawn.find_executable
 FNULL = open(os.devnull, 'w')
+
+class ExecutableNotFound(Exception): pass
 
 def cleanup__init__(func):
   def decorated(self,*args,**kwargs):
@@ -24,7 +29,7 @@ def cleanup__close__(func):
   return decorated
 
 class McgdbWin(object):
-  def __init__(self,cmd,cols=80,lines=24,env={}):
+  def __init__(self,cmd,cols=80,lines=24,env={},valgrind=None):
     self.cols=cols
     self.lines=lines
     self.screen = pyte.Screen(cols, lines)
@@ -32,13 +37,24 @@ class McgdbWin(object):
     self.stream.use_utf8=False
     self.p_pid, self.master_fd = pty.fork()
     if self.p_pid == 0: #Child
-      args=cmd.split()
-      efile=args[0]
-      ENV=dict(TERM="xterm", COLUMNS=str(cols), LINES=str(lines))
+      if valgrind is not None:
+        args=['valgrind','--log-file=%s' % valgrind] + cmd.split()
+        efile=which('valgrind')
+      else:
+        args=cmd.split()
+        efile=args[0]
+      ENV=dict(os.environ)
+      ENV.update(dict(
+        TERM="xterm",
+        COLUMNS=str(cols),
+        LINES=str(lines),
+        LANG='C',
+      ))
       ENV.update(env)
       os.execve(efile,args,ENV)
     else:
       self.master_file = os.fdopen(self.master_fd,'wb',0)
+      self.pid = self.p_pid
 
   def feeding(self,timeout=5):
     t0=time.time()
@@ -75,11 +91,10 @@ class McgdbWin(object):
 class Gdb(object):
   @cleanup__init__
   def __init__(self,executable,args='',env={}):
-    self.ENV={
-      'WIN_LIST':'',
-    }
-    self.executable = executable
+    self.ENV=dict(os.environ)
+    self.ENV.setdefault('WIN_LIST', '')
     self.ENV.update(env)
+    self.executable = executable
     self.exec_args=args
     self.spawn()
     atexit.register(self.close)
@@ -98,9 +113,12 @@ class Gdb(object):
     exec_cmd = self.program.match.groups()[0]
     return exec_cmd
 
-  def open_win(self,name,env={}):
+  def open_win(self,name,env={},valgrind=None):
     #name in aux, asm, src
-    return McgdbWin(self.open_window_cmd(name),env=env)
+    kw={}
+    if valgrind:
+      kw['valgrind'] = valgrind+name+'.vlg'
+    return McgdbWin(self.open_window_cmd(name),env=env,**kw)
 
   def kill(self):
     if hasattr(self,'program'):

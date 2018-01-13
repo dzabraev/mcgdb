@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 #coding=utf8
 
-import pty,sys,os,select,socket,fcntl,termios,time,errno,signal,argparse,json,struct
+import  pty,sys,os,select,socket,fcntl,termios,\
+        time,errno,signal,argparse,json,struct,\
+        json
 
 
 def do_child(executable,args,env):
@@ -168,16 +170,17 @@ def stub():
   parser.add_argument("--xfname", help="same as --xport but redirect to file", type=str)
 
   parser.add_argument("--executable", help="path to prog to execute")
-  parser.add_argument("--args", help="path to prog to execute")
-  parser.add_argument("--env", help="environment variables VAR1:VALUE1,VAR2:VALUE2")
+  parser.add_argument("--args", help="args for executable")
+  parser.add_argument("--env", help="JSON file with python dict with environment variables")
   args = parser.parse_args()
 
   pid,fd = pty.fork()
   if pid==0:
-    env={}
     if args.env is not None:
-      for name,value in map(lambda x : x.split(':'), args.env.split(',')):
-        env[name]=value
+      with open(args.env) as f:
+        env=json.loads(f.read())
+    else:
+      env={}
     exec_args = args.args.split(' ') if args.args else []
     do_child(args.executable,exec_args,env)
   else:

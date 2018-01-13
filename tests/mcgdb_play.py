@@ -52,6 +52,10 @@ def play():
   parser.add_argument('--delay',type=float,default=1,help='amount of seconds')
   parser.add_argument('--regexes',help='read regexes from given file and store them into output')
   parser.add_argument('--wait',help='specify .play file',type=lambda x: is_valid_file(parser, x))
+  parser.add_argument('--print_records',help='print records',action='store_true')
+  parser.add_argument('--valgrind',help='path to file where valgrind log will be stored')
+  parser.add_argument('--logging',help='path to file where mcgdb log will be stored')
+  parser.add_argument('--wait_key',help='wait until you press any key then and runs test. You can attach gdb and press some key.',action='store_true')
   parser.add_argument('--mcgdb',help='path to mcgdb',
     default=os.path.join(os.path.dirname(os.getcwd()),'mcgdb'),
     type=lambda x: is_valid_file(parser, x),
@@ -77,8 +81,12 @@ def play():
     regexes=[]
     overlay_regexes=[]
 
-  gdb=Gdb(executable=mcgdb)
-  wins_with_name = collections.OrderedDict([(name,gdb.open_win(name)) for name in module_records.windows])
+  env={}
+  if args.logging:
+    env['DEBUG'] = args.logging
+  gdb=Gdb(executable=mcgdb,env=env)
+
+  wins_with_name = collections.OrderedDict([(name,gdb.open_win(name, valgrind=args.valgrind)) for name in module_records.windows])
   if args.wait:
     wait_journal = read_journal(args.wait)
     wait_status={}
@@ -91,53 +99,66 @@ def play():
   record_cnt=0
   record_total = len(journal)
   output = open(args.output,'wb')
-  for record_idx,(record,wait_record) in enumerate(zip(journal,wait_journal)):
-    record_cnt+=1
-    print '{: 5d}/{: 5d}\r'.format(record_cnt,record_total),
-    sys.stdout.flush()
-    name=record['name']
-    action_num = record['action_num']
-    if 'stream' in record:
-      entities[name].send(record['stream'])
-    elif 'sig' in record:
-      sig=record['sig']
-      if sig==signal.SIGWINCH:
-        wins_with_name[name].resize(cols=record['col'],rows=record['row'])
-    if args.wait:
-      done={}
-      for name in wins_with_name.keys():
-        win=entities[name]
-        done[name] = compare(win,name,journal_play,wait_journal,record_idx,regexes,overlay_regexes)
-    #collect window output
-    t0 = time.time()
-    while True:
-      if args.wait and all(done.values()):
-        break
-      d = t0 - time.time() + delay
-      if d<=0:
-        break
-      ready,[],[] = select.select(rlist,[],[],d)
-      for fd in ready:
-        name=fd_to_name[fd]
-        win=fd_to_win[fd]
-        win.recvfeed()
-        if args.wait:
-          done[name] = compare(win,name,journal_play,wait_journal,record_idx,regexes,overlay_regexes)
-    screenshots=[]
+
+  if args.wait_key:
     for name,win in wins_with_name.iteritems():
-      cols=win.screen.columns
-      rows=win.screen.lines
-      screenshots.append({
-          'buffer':copy_buffer(win.screen.buffer,cols,rows),
-          'cols':cols,
-          'rows':rows,
-          'name':name,
+      print 'name=%s PID=%s' % (name,win.pid)
+    raw_input('enter any key')
+
+  try:
+    for record_idx,(record,wait_record) in enumerate(zip(journal,wait_journal)):
+      record_cnt+=1
+      print '{: 5d}/{: 5d}\r'.format(record_cnt,record_total),
+      if args.print_records:
+        print record
+      sys.stdout.flush()
+      name=record['name']
+      action_num = record['action_num']
+      if 'stream' in record:
+        entities[name].send(record['stream'])
+      elif 'sig' in record:
+        sig=record['sig']
+        if sig==signal.SIGWINCH:
+          wins_with_name[name].resize(cols=record['col'],rows=record['row'])
+      if args.wait:
+        done={}
+        for name in wins_with_name.keys():
+          win=entities[name]
+          done[name] = compare(win,name,journal_play,wait_journal,record_idx,regexes,overlay_regexes)
+      #collect window output
+      t0 = time.time()
+      while True:
+        if args.wait and all(done.values()):
+          break
+        d = t0 - time.time() + delay
+        if d<=0:
+          break
+        ready,[],[] = select.select(rlist,[],[],d)
+        for fd in ready:
+          name=fd_to_name[fd]
+          win=fd_to_win[fd]
+          win.recvfeed()
+          if args.wait:
+            done[name] = compare(win,name,journal_play,wait_journal,record_idx,regexes,overlay_regexes)
+      screenshots=[]
+      for name,win in wins_with_name.iteritems():
+        cols=win.screen.columns
+        rows=win.screen.lines
+        screenshots.append({
+            'buffer':copy_buffer(win.screen.buffer,cols,rows),
+            'cols':cols,
+            'rows':rows,
+            'name':name,
+        })
+      journal_play.append({
+        'action_num':action_num,
+        'screenshots':screenshots,
+        'record':record,
       })
-    journal_play.append({
-      'action_num':action_num,
-      'screenshots':screenshots,
-      'record':record,
-    })
+  except Exception:
+    print '\nerror while test execution'
+    output.write(pickle.dumps({'journal_play':journal_play}))
+    raise
   print ''
   output.write(pickle.dumps({'journal_play':journal_play}))
 
