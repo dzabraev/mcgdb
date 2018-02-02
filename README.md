@@ -5,7 +5,7 @@ Tui fornt-end for debugger `gdb` based on midnight commander.
   
 ![](https://github.com/dzabraev/mcgdb/blob/master/doc/img/mcgdb-title.png?raw=true "")
   
-Two windows is shown in this picture. Upper left window has started `gdb` and right window has started src window.
+Two windows are shown in this picture. Upper left window has started `gdb` and right window has started src window.
 Black mark with red text in line 543 illustrates breakpoint. The current execution position is marked with color
 like breakpoint.
 
