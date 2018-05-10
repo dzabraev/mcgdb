@@ -15,13 +15,13 @@ def stat_color(status):
   return termcolor.colored(status,colors.get(status))
 
 ALLTESTS=[
-  'variables.wait_change_bug_1',
-  'variables.expand_change_null_step',
-  'variables.incompl_struct',
-  'variables.int',
-  'variables.void_star_const',
-  'srcwin.common',
-  'srcwin.frame-shell-cmd',
+  'variables_wait_change_bug_1',
+  'variables_expand_change_null_step',
+  'variables_incompl_struct',
+  'variables_int',
+  'variables_void_star_const',
+  'srcwin_common',
+  'srcwin_frame-shell-cmd',
 ]
 
 
@@ -31,7 +31,8 @@ def do_cmd(cmd,check=True):
   return fn(cmd, shell=True)
 
 
-def run_std_test(mcgdb,delay,logfile='logfile.log',wait=False,regexes='regexes.py',print_records=False):
+def run_std_test(mcgdb, delay, logfile='logfile.log', wait=False,
+                 regexes='regexes.py', print_records=False):
   has_regexes=os.path.exists(regexes)
   if has_regexes:
     regexes = os.path.abspath(regexes)
