@@ -161,14 +161,22 @@ def print_screenshot(stdscr,sshot,y,x,redmark=(-1,-1), special_color=None):
     elif rx==col+1:
       stdscr.addch(y,x+col+1,' ',redpair)
 
-  for row in range(rows):
-    for col in range(cols):
+  for col in range(cols):
+    for row in range(rows):
       char = buffer[row][col]
       if (row,col) in sp_coords:
         attr=get_color(sp_bg,sp_fg)
       else:
         attr=make_attr(char)
-      stdscr.addch(y+row+1,col+x+1,charmap.get(char.data,char.data.encode('utf8')),attr)
+      stdscr.addch(y+row+1,
+                   x+col+1,
+                   charmap.get(char.data,char.data.encode('utf8')),
+                   attr)
+    # On Fedora
+    # without refresh() curses prints same character at the same place,
+    # ignoring y, x position. For ex, if we try to print qqq, it prints
+    # exactly one q.
+
 
 
 def make_attr(char):
